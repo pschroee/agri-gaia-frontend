@@ -200,3 +200,13 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
     }
     return items;
 }
+
+/** Number of entries a reader sees: messages, notices, agent answers and each tool call in them. */
+export function countEntries(items: TranscriptItem[]): number {
+    let n = 0;
+    for (const it of items) {
+        n += 1;
+        if (it.kind === 'agent') for (const p of it.parts) if (p.type === 'steps') n += p.steps.length;
+    }
+    return n;
+}
