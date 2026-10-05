@@ -32,5 +32,10 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   is the pure reducer in `src/agent/queue.ts`, fed by `GET /chats/{id}` (`queue`) and the SSE event `queue`.
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
+- **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
+  npm: `docker run --rm -v "$PWD":/app -w /app node:20-alpine npm install --package-lock-only`. A lock from npm 11
+  left out peer dependencies (`@testing-library/dom` …) that npm 10 requires, and `npm ci` in the Docker build failed
+  with EUSAGE (2026-10-05). Dev dependencies must also support Node 20 (Vitest 5 needs Node 22; Vitest 4 is used).
+  Check with `docker build` (build args `VITE_PORTAINER_VERSION`, `PROJECT_BASE_URL`, `KEYCLOAK_REALM_NAME`).
 - `npm run lint` runs `eslint --fix` over all files; to check without touching upstream files run
   `npx eslint 'src/agent/**/*.{ts,tsx}'`. `npm run build` leaves `dist/`, which is not ignored: delete it.
