@@ -80,7 +80,8 @@ export function splitMessage(text: string, sources: MessageSource[] | undefined)
     return parts;
 }
 
-function textOf(content: PiMessage['content']): string {
+/** Plain text of a message's content (text blocks joined by blank lines). */
+export function textOf(content: PiMessage['content']): string {
     if (typeof content === 'string') return content;
     if (!Array.isArray(content)) return '';
     return content

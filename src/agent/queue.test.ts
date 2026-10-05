@@ -14,9 +14,10 @@ import {
     queueRows,
     queueStatusText,
     removeErrorText,
+    settleDelivered,
 } from './queue';
 import type { QueueState } from './queue';
-import type { QueueEntry } from './types';
+import type { QueueEntry, StoredMessage } from './types';
 
 const entry = (id: string, text: string, extra: Partial<QueueEntry> = {}): QueueEntry => ({
     id,
@@ -41,6 +42,7 @@ describe('queueReducer', () => {
         const s = queueReducer(emptyQueue, {
             type: 'event',
             event: { entries: null as unknown as QueueEntry[], change: 'delivered' },
+            lastSeq: 0,
         });
         expect(s.entries).toEqual([]);
     });
@@ -50,9 +52,14 @@ describe('queueReducer', () => {
         s = queueReducer(s, {
             type: 'event',
             event: { entries: [entry('q1', 'a'), entry('q2', 'b')], change: 'queued' },
+            lastSeq: 0,
         });
         expect(s.entries.map((e) => e.id)).toEqual(['q1', 'q2']);
-        s = queueReducer(s, { type: 'event', event: { entries: [], change: 'delivered', ids: ['q1', 'q2'] } });
+        s = queueReducer(s, {
+            type: 'event',
+            event: { entries: [], change: 'delivered', ids: ['q1', 'q2'] },
+            lastSeq: 0,
+        });
         expect(s.entries).toEqual([]);
     });
 
@@ -89,13 +96,13 @@ describe('queueReducer', () => {
     it('forgets removals of entries that are no longer open', () => {
         let s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q1', 'a')] });
         s = queueReducer(s, { type: 'remove_start', id: 'q1' });
-        s = queueReducer(s, { type: 'event', event: { entries: [], change: 'delivered', ids: ['q1'] } });
+        s = queueReducer(s, { type: 'event', event: { entries: [], change: 'delivered', ids: ['q1'] }, lastSeq: 0 });
         expect(s.removing).toEqual([]);
     });
 
     it('resets to the empty queue', () => {
         const s = queueReducer(
-            { entries: [entry('q1', 'a')], local: [{ key: 'k', text: 't' }], removing: ['q1'] },
+            { entries: [entry('q1', 'a')], local: [{ key: 'k', text: 't' }], removing: ['q1'], delivered: [] },
             { type: 'reset' },
         );
         expect(s).toEqual(emptyQueue);
@@ -115,6 +122,7 @@ describe('queueRows', () => {
         ],
         local: [{ key: 'k1', text: 'pending' }],
         removing: ['q2'],
+        delivered: [],
     };
 
     it('lists gateway entries in order, then the unconfirmed ones', () => {
@@ -167,7 +175,7 @@ describe('held state and texts', () => {
     });
 
     it('explains the state in the header', () => {
-        expect(queueStatusText(running)).toBe('goes to the agent when the current run ends');
+        expect(queueStatusText(running)).toBe('goes to the agent after its current step');
         expect(queueStatusText({ ...idleHeld, hold_reason: 'abort' })).toBe(
             'paused after the abort, goes along with your next message',
         );
@@ -185,5 +193,128 @@ describe('held state and texts', () => {
         expect(removeErrorText(409, 'conflict')).toBe('Already handed to the agent.');
         expect(removeErrorText(404, 'not found')).toBe('This entry no longer exists.');
         expect(removeErrorText(500, 'boom')).toBe('Removing failed: boom');
+    });
+});
+
+const userMsg = (seq: number, text: string, extra: Partial<StoredMessage> = {}): StoredMessage => ({
+    seq,
+    role: 'user',
+    created_at: '2026-10-05T10:01:00Z',
+    message: { role: 'user', content: [{ type: 'text', text }] },
+    ...extra,
+});
+
+describe('delivered entries (steered in, not yet read by the agent)', () => {
+    const queued = queueReducer(emptyQueue, {
+        type: 'event',
+        event: { entries: [entry('q1', 'Also check the night images.')], change: 'queued', ids: ['q1'] },
+        lastSeq: 7,
+    });
+    const delivered = queueReducer(queued, {
+        type: 'event',
+        event: { entries: [], change: 'delivered', ids: ['q1'], text: 'Also check the night images.' },
+        lastSeq: 7,
+    });
+
+    it('keeps a delivered entry visible as "delivered" without a remove action', () => {
+        expect(delivered.entries).toEqual([]);
+        expect(delivered.delivered).toHaveLength(1);
+        expect(delivered.delivered[0].afterSeq).toBe(7);
+        const rows = queueRows(delivered, running);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ key: 'q1', state: 'delivered', text: 'Also check the night images.' });
+        expect(rows[0].id).toBeUndefined();
+    });
+
+    it('lists delivered entries before the open ones', () => {
+        const s = queueReducer(delivered, {
+            type: 'event',
+            event: { entries: [entry('q2', 'Then train.')], change: 'queued', ids: ['q2'] },
+            lastSeq: 7,
+        });
+        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q1:delivered', 'q2:waiting']);
+    });
+
+    it('falls back to the delivered text when the entries were not known', () => {
+        const s = queueReducer(emptyQueue, {
+            type: 'event',
+            event: { entries: [], change: 'delivered', ids: ['q9'], text: 'From another tab.' },
+            lastSeq: 3,
+        });
+        expect(queueRows(s, running)).toEqual([
+            { key: 'delivered-q9', text: 'From another tab.', attachments: [], system: false, state: 'delivered' },
+        ]);
+    });
+
+    it('ignores a second delivered event for the same ids', () => {
+        const s = queueReducer(delivered, {
+            type: 'event',
+            event: { entries: [], change: 'delivered', ids: ['q1'], text: 'x' },
+            lastSeq: 9,
+        });
+        expect(s.delivered).toHaveLength(1);
+    });
+
+    it('stays while the transcript has only older user messages', () => {
+        const s = queueReducer(delivered, { type: 'messages', messages: [userMsg(5, 'Also check the night images.')] });
+        expect(s.delivered).toHaveLength(1);
+    });
+
+    it('stays when a later user message does not carry the text', () => {
+        const s = queueReducer(delivered, { type: 'messages', messages: [userMsg(8, 'Something else.')] });
+        expect(s.delivered).toHaveLength(1);
+    });
+
+    it('disappears once the user message is in the transcript', () => {
+        const s = queueReducer(delivered, {
+            type: 'messages',
+            messages: [userMsg(5, 'old'), userMsg(8, 'First message.\n\nAlso check the   night images.')],
+        });
+        expect(s.delivered).toEqual([]);
+        expect(queueRows(s, running)).toEqual([]);
+    });
+
+    it('disappears on a later user message of a queue turn even if pi changed the text', () => {
+        const s = queueReducer(delivered, {
+            type: 'messages',
+            messages: [userMsg(8, 'rewritten by a template', { trigger: 'queue' })],
+        });
+        expect(s.delivered).toEqual([]);
+    });
+
+    it('settles each delivery with its own user message', () => {
+        let s = queueReducer(delivered, {
+            type: 'event',
+            event: { entries: [entry('q2', 'Then train.')], change: 'queued', ids: ['q2'] },
+            lastSeq: 7,
+        });
+        s = queueReducer(s, {
+            type: 'event',
+            event: { entries: [], change: 'delivered', ids: ['q2'], text: 'Then train.' },
+            lastSeq: 7,
+        });
+        s = settleDelivered(s, [userMsg(8, 'Also check the night images.')]);
+        expect(s.delivered.map((d) => d.ids)).toEqual([['q2']]);
+        s = settleDelivered(s, [userMsg(8, 'Also check the night images.'), userMsg(10, 'Then train.')]);
+        expect(s.delivered).toEqual([]);
+    });
+
+    it('drops the delivery when the entries are restored (not taken up by pi)', () => {
+        const s = queueReducer(delivered, {
+            type: 'event',
+            event: { entries: [entry('q1', 'Also check the night images.')], change: 'restored', ids: ['q1'] },
+            lastSeq: 7,
+        });
+        expect(s.delivered).toEqual([]);
+        expect(queueRows(s, running).map((r) => r.state)).toEqual(['waiting']);
+    });
+
+    it('drops everything when the chat ends', () => {
+        const s = queueReducer(delivered, { type: 'event', event: { entries: [], change: 'dropped' }, lastSeq: 7 });
+        expect(s.delivered).toEqual([]);
+    });
+
+    it('says the agent reads it after the current step', () => {
+        expect(queueStatusText(running, true)).toBe('waiting for the agent, will be read after the current step');
     });
 });
