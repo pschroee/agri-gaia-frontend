@@ -31,6 +31,8 @@ type Props = {
     onEffort: (level: string) => Promise<void>;
     /** "/model x" in the input did not fit the context: open the same prompt (a new object per attempt). */
     tooLargeRequest?: { details: ContextTooLarge };
+    /** Further chat settings in the same row, after the thinking level (e.g. the subagent limit). */
+    extra?: ReactNode;
 };
 
 const triggerSx = {
@@ -94,7 +96,15 @@ function Trigger({
  * are those pi reports for the model. When the context does not fit the new model, a prompt offers to compact first;
  * the gateway then switches by itself (pending_model, shown next to the pickers until done).
  */
-export default function ModelEffortPicker({ chat, models, dense = false, onModel, onEffort, tooLargeRequest }: Props) {
+export default function ModelEffortPicker({
+    chat,
+    models,
+    dense = false,
+    onModel,
+    onEffort,
+    tooLargeRequest,
+    extra,
+}: Props) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const [tooLarge, setTooLarge] = useState<ContextTooLarge>();
@@ -169,6 +179,7 @@ export default function ModelEffortPicker({ chat, models, dense = false, onModel
                 maxWidth={dense ? 120 : 160}
                 onClick={(e) => setEffortAnchor(e.currentTarget)}
             />
+            {extra}
             {busy && <CircularProgress size={12} sx={{ ml: 0.5 }} aria-label="Switching" />}
             {state.pending && (
                 <Typography
