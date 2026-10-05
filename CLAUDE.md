@@ -26,5 +26,11 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
 - Render check without backend: run `npx vite` with `VITE_AGENT_ENABLED=true` and intercept requests in Playwright
   (serve a fake `keycloak-js` module for `/node_modules/.vite/deps/keycloak-js.js`, answer `api.<base>` and
   `/agent/api/**` with JSON). No mock code lives in the repository.
+- **Queue:** while the agent works, the input stays usable and a sent message is queued by the gateway
+  (`queued: true`). `QueueList` shows the open entries above the input, removable until delivered (409 afterwards);
+  after an abort (`queue_held`) they wait for the next message or "Send now" (`POST …/queue/send`). The state logic
+  is the pure reducer in `src/agent/queue.ts`, fed by `GET /chats/{id}` (`queue`) and the SSE event `queue`.
+- **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
+  config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - `npm run lint` runs `eslint --fix` over all files; to check without touching upstream files run
   `npx eslint 'src/agent/**/*.{ts,tsx}'`. `npm run build` leaves `dist/`, which is not ignored: delete it.
