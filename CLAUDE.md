@@ -35,6 +35,13 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   entries therefore stay in the list ("with the agent", greyed) until a later stored user message carries their text
   or has `trigger: "queue"`; `restored` reopens them, `dropped` clears them. A page reload in that window loses them
   (the gateway's queue no longer lists delivered entries).
+- **Auto-scroll:** `useStickToBottom` (`src/agent/useStickToBottom.ts`) keeps the transcript of `ChatView` at its end
+  while the user is within 32 px of the bottom. A ResizeObserver on the scrolling box and its content triggers it, so
+  growing step lists and streamed text follow too, not only new messages. Only scrolling **up** releases the view
+  (growing content never does); then a "Jump to latest · n new" button appears, n counted with `countEntries`
+  (messages plus each tool call). Opening a chat (ChatView is keyed by chat id) and sending jump to the end. The
+  decision logic is the pure `stickReducer`, unit-tested; measuring in a render check must wait for a painted frame
+  (rAF, then `setTimeout`), because a measurement inside rAF runs before that frame's ResizeObserver.
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
