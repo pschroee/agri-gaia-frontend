@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -20,17 +20,24 @@ import { AgentApiError, agentApi } from '../api';
 import { DEFAULT_DELEGATION_HOURS, DELEGATION_TEMPLATES, delegationFrom } from '../delegationTemplates';
 import { variantLabel } from '../format';
 import { browserLanguage } from '../language';
-import type { Model, Variant, VariantId } from '../types';
+import { allowedLevels, effortAfterCreate, effortLabel, hasLevelChoice, levelsByModel, priceHint } from '../modelChoice';
+import type { Chat, Model, Variant, VariantId } from '../types';
 import { blockSx } from './tokens';
 
 type Props = { open: boolean; onClose: () => void; initialMessage?: string };
 
-/** New chat: model, variant (MCP, CLI, REST API), delegation template with expiry, title and first message. */
+/**
+ * New chat: model and thinking level, variant (MCP, CLI, REST API), delegation template with expiry, title and first
+ * message. The gateway takes no thinking level when creating; a chosen one is set right after, before the first
+ * message goes out. Levels come from the user's other chats with that model (the model list carries none).
+ */
 export default function NewChatDialog({ open, onClose, initialMessage }: Props) {
-    const { addChat } = useAgent();
+    const { addChat, chats } = useAgent();
     const [models, setModels] = useState<Model[]>([]);
     const [variants, setVariants] = useState<Variant[]>([]);
     const [model, setModel] = useState('');
+    /** '' = the model's default. */
+    const [effort, setEffort] = useState('');
     const [variant, setVariant] = useState<VariantId | ''>('');
     const [templateId, setTemplateId] = useState('none');
     const [hours, setHours] = useState(DEFAULT_DELEGATION_HOURS);
@@ -39,10 +46,21 @@ export default function NewChatDialog({ open, onClose, initialMessage }: Props) 
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const template = DELEGATION_TEMPLATES.find((t) => t.id === templateId);
+    // chat created in an earlier attempt whose first message failed: a retry only sends
+    const created = useRef<Chat>();
+    const known = useMemo(() => levelsByModel(chats), [chats]);
+    const levels = allowedLevels(model, undefined, known);
+    const levelChoice = hasLevelChoice(levels);
+
+    // a level the newly chosen model does not report falls back to the default
+    useEffect(() => {
+        if (effort && !levels.includes(effort)) setEffort('');
+    }, [effort, levels]);
 
     useEffect(() => {
         if (!open) return;
         setError(undefined);
+        created.current = undefined;
         setMessage(initialMessage ?? '');
         Promise.all([agentApi.models(), agentApi.variants()])
             .then(([m, v]) => {
@@ -57,23 +75,44 @@ export default function NewChatDialog({ open, onClose, initialMessage }: Props) 
     const submit = async () => {
         setBusy(true);
         setError(undefined);
+        const first = message.trim();
+        // with a level to set, the first message waits until the level is in place
+        const deferMessage = !!effort && !!first;
+        let chat = created.current;
         try {
-            const chat = await agentApi.createChat({
-                model: model || undefined,
-                variant: variant || undefined,
-                title: title.trim() || undefined,
-                message: message.trim() || undefined,
-                delegation: delegationFrom(template, hours),
-                language: browserLanguage(),
-            });
-            addChat(chat);
+            if (!chat) {
+                chat = await agentApi.createChat({
+                    model: model || undefined,
+                    variant: variant || undefined,
+                    title: title.trim() || undefined,
+                    message: deferMessage ? undefined : first || undefined,
+                    delegation: delegationFrom(template, hours),
+                    language: browserLanguage(),
+                });
+                created.current = chat;
+                addChat(chat);
+                const level = effortAfterCreate(effort, chat);
+                if (level) {
+                    try {
+                        chat = await agentApi.setEffort(chat.id, level);
+                        created.current = chat;
+                        addChat(chat);
+                    } catch {
+                        // not fatal: the input row shows the level pi actually uses
+                    }
+                }
+            }
+            if (deferMessage) await agentApi.sendMessage(chat.id, first);
+            created.current = undefined;
             setTitle('');
             setMessage('');
             onClose();
         } catch (e) {
-            if (e instanceof AgentApiError && e.status === 503)
+            const text = e instanceof Error ? e.message : String(e);
+            if (chat) setError(`The chat was created, but the first message was not sent: ${text}`);
+            else if (e instanceof AgentApiError && e.status === 503)
                 setError('No free agent slot right now, please wait a moment.');
-            else setError(e instanceof Error ? e.message : String(e));
+            else setError(text);
         } finally {
             setBusy(false);
         }
@@ -86,16 +125,47 @@ export default function NewChatDialog({ open, onClose, initialMessage }: Props) 
             <DialogTitle>New chat</DialogTitle>
             <DialogContent>
                 <Box sx={{ display: 'grid', gap: 2.5, pt: 1 }}>
-                    <TextField select label="Model" value={model} onChange={(e) => setModel(e.target.value)} fullWidth>
-                        {models.map((m) => (
-                            <MenuItem key={m.id} value={m.id}>
-                                {m.name}
-                                <Typography component="span" sx={{ ml: 1, color: 'text.secondary', fontSize: 13 }}>
-                                    {m.id}
-                                </Typography>
-                            </MenuItem>
-                        ))}
-                    </TextField>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 180px', gap: 2 }}>
+                        <TextField
+                            select
+                            label="Model"
+                            value={model}
+                            onChange={(e) => setModel(e.target.value)}
+                            fullWidth
+                            disabled={!!created.current}
+                            helperText={(() => {
+                                const m = models.find((x) => x.id === model);
+                                return (m && priceHint(m)) || ' ';
+                            })()}
+                        >
+                            {models.map((m) => (
+                                <MenuItem key={m.id} value={m.id}>
+                                    {m.name}
+                                    <Typography component="span" sx={{ ml: 1, color: 'text.secondary', fontSize: 13 }}>
+                                        {m.id}
+                                    </Typography>
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                        <TextField
+                            select
+                            label="Thinking level"
+                            value={effort}
+                            onChange={(e) => setEffort(e.target.value)}
+                            fullWidth
+                            disabled={!levelChoice || !!created.current}
+                            helperText={levelChoice ? ' ' : 'Known once a chat has used this model.'}
+                            SelectProps={{ displayEmpty: true }}
+                            InputLabelProps={{ shrink: true }}
+                        >
+                            <MenuItem value="">Model default</MenuItem>
+                            {levels.map((l) => (
+                                <MenuItem key={l} value={l}>
+                                    {effortLabel(l)}
+                                </MenuItem>
+                            ))}
+                        </TextField>
+                    </Box>
                     <TextField
                         select
                         label="Connection"
@@ -168,7 +238,7 @@ export default function NewChatDialog({ open, onClose, initialMessage }: Props) 
             <DialogActions>
                 <Button onClick={onClose}>Cancel</Button>
                 <Button variant="contained" disabled={busy} onClick={() => void submit()}>
-                    {busy ? 'Creating …' : 'Create chat'}
+                    {busy ? 'Creating …' : created.current ? 'Send first message' : 'Create chat'}
                 </Button>
             </DialogActions>
         </Dialog>
