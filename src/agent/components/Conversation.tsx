@@ -7,34 +7,12 @@ import { useEffect, useMemo, useRef } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { buildTranscript, TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import Markdown from './Markdown';
 import StepList from './StepList';
-import { agentColors } from './tokens';
-
-function Avatar() {
-    return (
-        <Box
-            sx={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                flex: 'none',
-                display: 'grid',
-                placeItems: 'center',
-                bgcolor: agentColors.greenTint,
-                border: `1px solid ${agentColors.greenLine}`,
-                color: agentColors.green,
-            }}
-        >
-            <AutoAwesomeIcon sx={{ fontSize: 15 }} />
-        </Box>
-    );
-}
 
 function UserBubble({ text, dense }: { text: string; dense: boolean }) {
     return (
@@ -60,9 +38,8 @@ function UserBubble({ text, dense }: { text: string; dense: boolean }) {
 
 function AgentBlock({ item, dense }: { item: Extract<TranscriptItem, { kind: 'agent' }>; dense: boolean }) {
     return (
-        <Box sx={{ display: 'flex', gap: dense ? 1 : 1.5, minWidth: 0 }}>
-            <Avatar />
-            <Box sx={{ flex: 1, minWidth: 0, fontSize: dense ? 13.5 : 14.5, lineHeight: 1.6, pt: '3px' }}>
+        <Box sx={{ display: 'flex', minWidth: 0 }}>
+            <Box sx={{ flex: 1, minWidth: 0, fontSize: dense ? 13.5 : 14.5, lineHeight: 1.6 }}>
                 {item.parts.map((p, i) =>
                     p.type === 'text' ? (
                         <Box key={i} sx={{ mb: 1 }}>
