@@ -17,9 +17,11 @@ import SyncIcon from '@mui/icons-material/Sync';
 
 import { useAgent } from '../AgentContext';
 import { formatRelativeDay } from '../format';
+import { runSince, runStateOf } from '../runState';
 import ActivityView from './ActivityView';
 import ChatView from './ChatView';
 import NewChatDialog from './NewChatDialog';
+import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
 import { agentColors } from './tokens';
 import { FOOTER_HEIGHT } from './AgentContextPanel';
@@ -47,6 +49,7 @@ function History({ onNew }: { onNew: () => void }) {
             )}
             {chats.map((c) => {
                 const on = c.id === selectedChatId;
+                const state = runStateOf(c);
                 return (
                     <Box
                         key={c.id}
@@ -78,10 +81,20 @@ function History({ onNew }: { onNew: () => void }) {
                         >
                             {c.title || 'Untitled chat'}
                         </Box>
-                        <Box sx={{ fontSize: 11, color: 'text.disabled', mt: 0.25, display: 'flex', gap: 1 }}>
+                        <Box
+                            sx={{
+                                fontSize: 11,
+                                color: 'text.disabled',
+                                mt: 0.25,
+                                display: 'flex',
+                                alignItems: 'center',
+                                flexWrap: 'wrap',
+                                columnGap: 1,
+                            }}
+                        >
                             <span>{formatRelativeDay(c.updated_at)}</span>
-                            {c.running && <span style={{ color: agentColors.green }}>working</span>}
-                            {c.pending_approvals > 0 && (
+                            {state && <RunStateChip state={state} since={runSince(c)} short />}
+                            {c.pending_approvals > 0 && state !== 'waiting' && (
                                 <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
                             )}
                         </Box>

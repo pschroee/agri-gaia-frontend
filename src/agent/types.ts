@@ -191,6 +191,25 @@ export type CreateChatRequest = {
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };
 
+/** Phase of resuming a dormant chat in a fresh sandbox (SSE "resume", API.md), in this order. */
+export type ResumePhase = 'acquire' | 'session' | 'settings' | 'workspace' | 'inputs' | 'ready' | 'failed';
+
+/**
+ * Step of resuming a dormant chat: per phase first status "running", then "done", "warning" (continued despite a
+ * problem, detail names it) or "error". "ready" ends it (ms = total), "failed" too (detail = reason).
+ */
+export type ResumeStep = {
+    /** ID of this resume. */
+    id: string;
+    phase: ResumePhase;
+    status: 'running' | 'done' | 'warning' | 'error';
+    detail?: string;
+    size?: number;
+    files?: number;
+    at: string;
+    ms?: number;
+};
+
 export type SendResult = { ok: boolean; resumed: boolean; queued?: boolean; queue_id?: string };
 
 export type PiEvent = { type: string; [key: string]: unknown };
@@ -202,6 +221,7 @@ export type ServerEvent =
     | { kind: 'socket_call'; data: SocketCall }
     | { kind: 'tool_execution'; data: ToolExecution }
     | { kind: 'queue'; data: QueueEvent }
+    | { kind: 'resume'; data: ResumeStep }
     | { kind: 'auto_held'; data: { reason: 'wake_limit' | 'auto_turns'; limit: number; count: number } }
     | { kind: 'error'; data: { message: string } }
     | { kind: string; data: unknown };

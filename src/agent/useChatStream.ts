@@ -9,7 +9,20 @@ import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
 import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
 import type { QueueRow } from './queue';
-import type { Approval, Chat, QueueEvent, ServerEvent, SocketCall, StoredMessage, ToolExecution } from './types';
+import { applyResumeStep, closeResumes } from './resume';
+import type { ResumeView } from './resume';
+import { pendingSettled } from './runState';
+import type { PendingSend } from './runState';
+import type {
+    Approval,
+    Chat,
+    QueueEvent,
+    ResumeStep,
+    ServerEvent,
+    SocketCall,
+    StoredMessage,
+    ToolExecution,
+} from './types';
 
 export type ChatStream = {
     chat?: Chat;
@@ -27,6 +40,10 @@ export type ChatStream = {
     live?: LiveMessage;
     /** Thinking blocks measured while streaming, by thinkingKey (pi stores no timing). */
     thinkingTimes: Record<string, ThinkingTime>;
+    /** Resumes of a dormant chat seen live in this view (SSE "resume"), in order. */
+    resumes: ResumeView[];
+    /** Sent outside the queue, not stored yet (e.g. while a dormant chat resumes). */
+    pending?: PendingSend;
     loading: boolean;
     error?: string;
     connected: boolean;
@@ -37,7 +54,10 @@ export type ChatStream = {
     unqueue: (id: string) => Promise<void>;
     /** Delivers held entries now (after an abort or with an idle chat). */
     sendQueueNow: () => Promise<void>;
+    /** Stops the running turn; queued entries are held afterwards. Throws AgentApiError. */
     abort: () => Promise<void>;
+    /** Lets the chat rest (409 with an open approval or while running). Throws AgentApiError. */
+    suspend: () => Promise<void>;
     decide: (approval: Approval, approve: boolean) => Promise<void>;
 };
 
@@ -67,6 +87,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [connected, setConnected] = useState(false);
     const [queueState, dispatchQueue] = useReducer(queueReducer, emptyQueue);
     const [queueError, setQueueError] = useState<string>();
+    const [resumes, setResumes] = useState<ResumeView[]>([]);
+    const [pending, setPending] = useState<PendingSend>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
     const pendingClear = useRef<'ended' | 'all'>();
     const chatRef = useRef<Chat>();
@@ -83,6 +105,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             // in the same render as the stored messages, so the answer is not shown twice
             if (clearLive) dispatchLive({ type: 'clear', onlyEnded: clearLive === 'ended' });
             messagesRef.current = d.messages ?? [];
+            setPending((p) => (p && pendingSettled(p, d.messages ?? []) ? undefined : p));
             setApprovals(d.approvals ?? []);
             setSocketCalls(d.socket_calls ?? []);
             dispatchQueue({ type: 'loaded', entries: d.queue ?? [] });
@@ -124,6 +147,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setError(undefined);
         dispatchQueue({ type: 'reset' });
         setQueueError(undefined);
+        setResumes([]);
+        setPending(undefined);
         if (!chatId) return;
 
         let stopped = false;
@@ -153,6 +178,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'pi': {
                         const d = ev.data as { type: string; message?: { role?: string }; [k: string]: unknown };
                         dispatchLive({ type: 'pi', event: d, now: Date.now() });
+                        setResumes(closeResumes);
                         if (d.type === 'message_end') scheduleReload(d.message?.role === 'assistant' ? 'ended' : undefined);
                         if (
                             d.type === 'tool_execution_start' ||
@@ -180,6 +206,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         // delivered: handed to pi; the user message is stored once pi reads it (message_end
                         // triggers the reload that settles the entries)
                         if (q.change === 'delivered') scheduleReload();
+                        break;
+                    }
+                    case 'resume': {
+                        const step = ev.data as ResumeStep;
+                        setResumes((l) => applyResumeStep(l, step, lastSeq(messagesRef.current)));
                         break;
                     }
                     case 'tool_execution':
@@ -216,8 +247,12 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             const guessQueued = expectQueued(chatRef.current);
             const key = `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text } });
+            // shown greyed in the transcript until its user message is stored; resuming a dormant chat takes seconds
+            else setPending({ key, text, afterSeq: lastSeq(messagesRef.current) });
+            const dropPending = () => setPending((p) => (p?.key === key ? undefined : p));
             try {
                 const r = await agentApi.sendMessage(chatId, text);
+                if (r.queued) dropPending();
                 if (r.queued) {
                     // the SSE event "queue" carries the entry; fetch anyway in case the stream is reconnecting,
                     // and keep the optimistic row until then so it does not flicker
@@ -227,6 +262,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         // the SSE event or the next reload brings the entry
                     }
                 }
+            } catch (e) {
+                // the input field gets the text back
+                dropPending();
+                throw e;
             } finally {
                 dispatchQueue({ type: 'local_drop', key });
             }
@@ -272,6 +311,13 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const abort = useCallback(async () => {
         if (!chatId) return;
         setChat(await agentApi.abort(chatId));
+        // the queue is held now (queue_held); the reload brings the aborted answer
+        scheduleReload('all');
+    }, [chatId, scheduleReload]);
+
+    const suspend = useCallback(async () => {
+        if (!chatId) return;
+        setChat(await agentApi.suspend(chatId));
     }, [chatId]);
 
     const decide = useCallback(async (approval: Approval, approve: boolean) => {
@@ -290,6 +336,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         liveText,
         live: liveState.message,
         thinkingTimes: liveState.times,
+        resumes,
+        pending,
         loading,
         error,
         connected,
@@ -298,6 +346,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         unqueue,
         sendQueueNow,
         abort,
+        suspend,
         decide,
     };
 }

@@ -22,6 +22,8 @@ type AgentState = {
     selectChat: (id: string | undefined) => void;
     /** Adds a newly created chat and selects it. */
     addChat: (chat: Chat) => void;
+    /** Replaces a known chat with a newer state (from the open chat's stream), so lists and header follow live. */
+    updateChat: (chat: Chat) => void;
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
 };
@@ -132,6 +134,16 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         [selectChat],
     );
 
+    const updateChat = useCallback((chat: Chat) => {
+        setChats((list) => {
+            const i = list.findIndex((c) => c.id === chat.id);
+            if (i < 0 || list[i] === chat) return list;
+            const next = list.slice();
+            next[i] = chat;
+            return next;
+        });
+    }, []);
+
     const setPanelOpen = useCallback((open: boolean) => {
         setPanelOpenState(open);
         store(PANEL_KEY, String(open));
@@ -149,6 +161,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectedChatId,
             selectChat,
             addChat,
+            updateChat,
             panelOpen,
             setPanelOpen,
         }),
@@ -163,6 +176,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectedChatId,
             selectChat,
             addChat,
+            updateChat,
             panelOpen,
             setPanelOpen,
         ],

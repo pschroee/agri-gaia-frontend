@@ -71,6 +71,8 @@ export const agentApi = {
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
     sendMessage: (id: string, text: string) => post<SendResult>(`chats/${enc(id)}/messages`, { text }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
+    /** Lets the chat rest: saves the session and releases the sandbox (409 with an open approval or while running). */
+    suspend: (id: string) => post<Chat>(`chats/${enc(id)}/suspend`),
     queue: (id: string) => request<QueueEntry[]>(`chats/${enc(id)}/queue`),
     /** Removes an entry as long as it has not been delivered (409 afterwards, 404 when unknown). */
     unqueue: (id: string, queueId: string) =>
