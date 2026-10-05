@@ -9,6 +9,7 @@ import type {
     CreateChatRequest,
     Me,
     Model,
+    QueueEntry,
     SendResult,
     ToolExecution,
     Variant,
@@ -70,6 +71,12 @@ export const agentApi = {
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
     sendMessage: (id: string, text: string) => post<SendResult>(`chats/${enc(id)}/messages`, { text }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
+    queue: (id: string) => request<QueueEntry[]>(`chats/${enc(id)}/queue`),
+    /** Removes an entry as long as it has not been delivered (409 afterwards, 404 when unknown). */
+    unqueue: (id: string, queueId: string) =>
+        request<{ ok: boolean }>(`chats/${enc(id)}/queue/${enc(queueId)}`, { method: 'DELETE' }),
+    /** Delivers held entries now (409 while the agent works, 400 when nothing is queued). */
+    flushQueue: (id: string) => post<SendResult>(`chats/${enc(id)}/queue/send`),
     toolExecutions: (id: string) =>
         request<{ executions: ToolExecution[] }>(`chats/${enc(id)}/tool_executions`).then((r) =>
             Array.isArray(r?.executions) ? r.executions : [],

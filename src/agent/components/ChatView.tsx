@@ -12,6 +12,7 @@ import ApprovalCard from './ApprovalCard';
 import ChatInput from './ChatInput';
 import Conversation from './Conversation';
 import DelegationStrip from './DelegationStrip';
+import QueueList from './QueueList';
 
 type Props = {
     chatId: string;
@@ -24,7 +25,7 @@ type Props = {
 
 /**
  * One chat: delegation strip with blocked calls on top, the conversation and pending approvals in the
- * middle (scrolls), the input field at the bottom.
+ * middle (scrolls), queued messages and the input field at the bottom.
  */
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
     const stream = useChatStream(chatId);
@@ -80,6 +81,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     pb: dense ? 1.25 : 0,
                 }}
             >
+                <QueueList
+                    chat={stream.chat}
+                    rows={stream.queue}
+                    error={stream.queueError}
+                    onRemove={stream.unqueue}
+                    onSendNow={stream.sendQueueNow}
+                />
                 <ChatInput
                     onSend={stream.send}
                     onAbort={stream.abort}

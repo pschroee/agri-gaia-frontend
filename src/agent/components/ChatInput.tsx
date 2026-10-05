@@ -17,13 +17,17 @@ import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 type Props = {
     onSend: (text: string) => Promise<void>;
     onAbort?: () => Promise<void>;
+    /** The agent works: the input stays usable, sending queues the message. */
     running?: boolean;
     disabled?: boolean;
     placeholder?: string;
     hint?: string;
 };
 
-/** Message field with send (Enter) and stop button, and a hint line below. */
+/**
+ * Message field with send (Enter) and stop button, and a hint line below. While the agent works, sending is
+ * not blocked: the gateway queues the message and the queue above the field shows it.
+ */
 export default function ChatInput({ onSend, onAbort, running, disabled, placeholder, hint }: Props) {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
@@ -34,10 +38,12 @@ export default function ChatInput({ onSend, onAbort, running, disabled, placehol
         if (!t || busy) return;
         setBusy(true);
         setError(undefined);
+        // cleared right away (the message shows in the history or the queue); restored when sending fails
+        setText('');
         try {
             await onSend(t);
-            setText('');
         } catch (e) {
+            setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
             setError(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(false);
@@ -60,7 +66,7 @@ export default function ChatInput({ onSend, onAbort, running, disabled, placehol
                 maxRows={6}
                 value={text}
                 disabled={disabled}
-                placeholder={placeholder ?? 'Ask the agent …'}
+                placeholder={running ? 'Queue another message …' : placeholder ?? 'Ask the agent …'}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
                 sx={{ bgcolor: '#fff', '& .MuiInputBase-input': { fontSize: 14 } }}
@@ -74,14 +80,20 @@ export default function ChatInput({ onSend, onAbort, running, disabled, placehol
                                     </IconButton>
                                 </Tooltip>
                             )}
-                            <Tooltip title="Send (Enter)">
+                            <Tooltip
+                                title={
+                                    running
+                                        ? 'Queue message (goes to the agent when the current run ends)'
+                                        : 'Send (Enter)'
+                                }
+                            >
                                 <span>
                                     <IconButton
                                         size="small"
                                         color="primary"
                                         disabled={disabled || busy || !text.trim()}
                                         onClick={() => void send()}
-                                        aria-label="Send"
+                                        aria-label={running ? 'Queue message' : 'Send'}
                                     >
                                         <SendIcon fontSize="small" />
                                     </IconButton>

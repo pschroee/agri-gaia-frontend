@@ -2,10 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
-import { agentApi, eventsUrl } from './api';
-import type { Approval, Chat, ServerEvent, SocketCall, StoredMessage, ToolExecution } from './types';
+import { AgentApiError, agentApi, eventsUrl } from './api';
+import { emptyQueue, expectQueued, queueReducer, queueRows, removeErrorText } from './queue';
+import type { QueueRow } from './queue';
+import type { Approval, Chat, QueueEvent, ServerEvent, SocketCall, StoredMessage, ToolExecution } from './types';
 
 export type ChatStream = {
     chat?: Chat;
@@ -13,13 +15,22 @@ export type ChatStream = {
     approvals: Approval[];
     socketCalls: SocketCall[];
     executions: ToolExecution[];
+    /** Queued messages (gateway entries, then the ones still being sent). */
+    queue: QueueRow[];
+    /** Last failure of a queue action (removing, sending now); cleared by the next one. */
+    queueError?: string;
     /** Text of the answer that is being streamed right now (not yet stored). */
     liveText: string;
     loading: boolean;
     error?: string;
     connected: boolean;
     reload: () => Promise<void>;
+    /** Sends a message; while the agent works the gateway queues it. */
     send: (text: string) => Promise<void>;
+    /** Removes a queued entry that has not been delivered yet. */
+    unqueue: (id: string) => Promise<void>;
+    /** Delivers held entries now (after an abort or with an idle chat). */
+    sendQueueNow: () => Promise<void>;
     abort: () => Promise<void>;
     decide: (approval: Approval, approve: boolean) => Promise<void>;
 };
@@ -48,7 +59,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>();
     const [connected, setConnected] = useState(false);
+    const [queueState, dispatchQueue] = useReducer(queueReducer, emptyQueue);
+    const [queueError, setQueueError] = useState<string>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
+    const chatRef = useRef<Chat>();
+    chatRef.current = chat;
 
     const load = useCallback(async () => {
         if (!chatId) return;
@@ -58,6 +73,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             setMessages(d.messages ?? []);
             setApprovals(d.approvals ?? []);
             setSocketCalls(d.socket_calls ?? []);
+            dispatchQueue({ type: 'loaded', entries: d.queue ?? [] });
             setError(undefined);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
@@ -89,6 +105,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setExecutions([]);
         setLiveText('');
         setError(undefined);
+        dispatchQueue({ type: 'reset' });
+        setQueueError(undefined);
         if (!chatId) return;
 
         let stopped = false;
@@ -143,6 +161,13 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'socket_call':
                         setSocketCalls((l) => upsert(l, ev.data as SocketCall, (c) => c.id));
                         break;
+                    case 'queue': {
+                        const q = ev.data as QueueEvent;
+                        dispatchQueue({ type: 'event', event: q });
+                        // delivered: the entries became a user message of the next turn
+                        if (q.change === 'delivered') scheduleReload();
+                        break;
+                    }
                     case 'tool_execution':
                         setExecutions((l) => upsert(l, ev.data as ToolExecution, (e) => e.id));
                         break;
@@ -174,11 +199,58 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const send = useCallback(
         async (text: string) => {
             if (!chatId) return;
-            await agentApi.sendMessage(chatId, text);
+            const guessQueued = expectQueued(chatRef.current);
+            const key = `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text } });
+            try {
+                const r = await agentApi.sendMessage(chatId, text);
+                if (r.queued) {
+                    // the SSE event "queue" carries the entry; fetch anyway in case the stream is reconnecting,
+                    // and keep the optimistic row until then so it does not flicker
+                    try {
+                        dispatchQueue({ type: 'loaded', entries: await agentApi.queue(chatId) });
+                    } catch {
+                        // the SSE event or the next reload brings the entry
+                    }
+                }
+            } finally {
+                dispatchQueue({ type: 'local_drop', key });
+            }
             scheduleReload();
         },
         [chatId, scheduleReload],
     );
+
+    const unqueue = useCallback(
+        async (id: string) => {
+            if (!chatId) return;
+            setQueueError(undefined);
+            dispatchQueue({ type: 'remove_start', id });
+            try {
+                await agentApi.unqueue(chatId, id);
+                dispatchQueue({ type: 'remove_done', id, ok: true });
+            } catch (e) {
+                const status = e instanceof AgentApiError ? e.status : undefined;
+                // 404: the entry is gone anyway
+                dispatchQueue({ type: 'remove_done', id, ok: status === 404 });
+                setQueueError(removeErrorText(status, e instanceof Error ? e.message : String(e)));
+            }
+        },
+        [chatId],
+    );
+
+    const sendQueueNow = useCallback(async () => {
+        if (!chatId) return;
+        setQueueError(undefined);
+        try {
+            await agentApi.flushQueue(chatId);
+        } catch (e) {
+            setQueueError(`Sending failed: ${e instanceof Error ? e.message : String(e)}`);
+        }
+        scheduleReload();
+    }, [chatId, scheduleReload]);
+
+    const queue = useMemo(() => queueRows(queueState, chat), [queueState, chat]);
 
     const abort = useCallback(async () => {
         if (!chatId) return;
@@ -196,12 +268,16 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         approvals,
         socketCalls,
         executions,
+        queue,
+        queueError,
         liveText,
         loading,
         error,
         connected,
         reload: load,
         send,
+        unqueue,
+        sendQueueNow,
         abort,
         decide,
     };

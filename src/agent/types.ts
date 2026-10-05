@@ -45,7 +45,37 @@ export type Chat = {
     artifact_count: number;
     pending_approvals: number;
     resuming?: boolean;
+    /** Queued messages not yet delivered. */
     queued?: number;
+    /** Queued entries are not sent on their own (after an abort, for a dormant chat, above a turn limit). */
+    queue_held?: boolean;
+    /** Why the queue is held (only for an active chat with queue_held). */
+    hold_reason?: HoldReason;
+};
+
+export type HoldReason = 'abort' | 'wake_limit' | 'auto_turns';
+
+/**
+ * Message queued by the gateway while the agent works. kind "system": a note of the gateway (note
+ * "background" or "sandbox", refs the tasks concerned), not from the user.
+ */
+export type QueueEntry = {
+    id: string;
+    chat_id: string;
+    text: string;
+    attachments: string[];
+    created_at: string;
+    kind: 'user' | 'system';
+    note?: string;
+    refs?: string[];
+};
+
+/** SSE event "queue": new state of the queue after a change. */
+export type QueueEvent = {
+    entries: QueueEntry[];
+    change: 'queued' | 'removed' | 'delivered' | 'restored' | 'dropped';
+    ids?: string[];
+    text?: string;
 };
 
 export type TextContent = { type: 'text'; text: string };
@@ -144,6 +174,8 @@ export type ChatDetail = {
     messages: StoredMessage[];
     approvals: Approval[];
     socket_calls: SocketCall[];
+    /** Open entries of the queue. */
+    queue?: QueueEntry[];
 };
 
 export type CreateChatRequest = {
@@ -158,7 +190,7 @@ export type CreateChatRequest = {
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };
 
-export type SendResult = { ok: boolean; resumed: boolean; queued?: boolean };
+export type SendResult = { ok: boolean; resumed: boolean; queued?: boolean; queue_id?: string };
 
 export type PiEvent = { type: string; [key: string]: unknown };
 
@@ -168,5 +200,7 @@ export type ServerEvent =
     | { kind: 'approval'; data: Approval }
     | { kind: 'socket_call'; data: SocketCall }
     | { kind: 'tool_execution'; data: ToolExecution }
+    | { kind: 'queue'; data: QueueEvent }
+    | { kind: 'auto_held'; data: { reason: 'wake_limit' | 'auto_turns'; limit: number; count: number } }
     | { kind: 'error'; data: { message: string } }
     | { kind: string; data: unknown };
