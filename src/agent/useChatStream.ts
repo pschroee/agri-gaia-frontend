@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, eventsUrl } from './api';
-import { emptyQueue, expectQueued, queueReducer, queueRows, removeErrorText } from './queue';
+import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
 import type { QueueRow } from './queue';
 import type { Approval, Chat, QueueEvent, ServerEvent, SocketCall, StoredMessage, ToolExecution } from './types';
 
@@ -64,6 +64,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
     const chatRef = useRef<Chat>();
     chatRef.current = chat;
+    const messagesRef = useRef<StoredMessage[]>([]);
+    messagesRef.current = messages;
 
     const load = useCallback(async () => {
         if (!chatId) return;
@@ -71,9 +73,12 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             const d = await agentApi.chat(chatId);
             setChat(d.chat);
             setMessages(d.messages ?? []);
+            messagesRef.current = d.messages ?? [];
             setApprovals(d.approvals ?? []);
             setSocketCalls(d.socket_calls ?? []);
             dispatchQueue({ type: 'loaded', entries: d.queue ?? [] });
+            // delivered entries stay visible until their user message is stored
+            dispatchQueue({ type: 'messages', messages: d.messages ?? [] });
             setError(undefined);
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
@@ -163,8 +168,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         break;
                     case 'queue': {
                         const q = ev.data as QueueEvent;
-                        dispatchQueue({ type: 'event', event: q });
-                        // delivered: the entries became a user message of the next turn
+                        dispatchQueue({ type: 'event', event: q, lastSeq: lastSeq(messagesRef.current) });
+                        // delivered: handed to pi; the user message is stored once pi reads it (message_end
+                        // triggers the reload that settles the entries)
                         if (q.change === 'delivered') scheduleReload();
                         break;
                     }
