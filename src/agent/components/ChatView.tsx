@@ -2,13 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ReactNode, useCallback, useMemo } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
+import { useAgentOptional } from '../AgentContext';
+import { resumeRunning } from '../resume';
+import { runSince, runStateOf } from '../runState';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
 
 import { useChatStream } from '../useChatStream';
@@ -18,6 +21,7 @@ import ChatInput from './ChatInput';
 import Conversation from './Conversation';
 import DelegationStrip from './DelegationStrip';
 import QueueList from './QueueList';
+import RunStatus from './RunStatus';
 
 type Props = {
     chatId: string;
@@ -32,11 +36,19 @@ type Props = {
  * One chat: delegation strip with blocked calls on top, the conversation and pending approvals in the
  * middle (scrolls), queued messages and the input field at the bottom. The middle follows the end of the
  * transcript while the user is there; after scrolling up, a "Jump to latest" button counts the new entries.
+ * Above the input, the run status shows what the agent does and offers "Stop" and "Let it rest".
  */
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
     const stream = useChatStream(chatId);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
+    const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
+    const since = runSince(chat, messages);
+    // the open chat's live state goes to the chat list and the panel header
+    const updateChat = useAgentOptional()?.updateChat;
+    useEffect(() => {
+        if (chat && updateChat) updateChat(chat);
+    }, [chat, updateChat]);
     const items = useMemo(
         () =>
             buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running, thinkingTimes }),
@@ -46,7 +58,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
         const parts = liveParts(live);
         return parts.length ? countEntries([{ kind: 'agent', key: 'live', parts }]) : 0;
     }, [live]);
-    const count = countEntries(items) + pending.length + liveCount;
+    const count =
+        countEntries(items) + pending.length + liveCount + stream.resumes.length + (stream.pending ? 1 : 0);
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
     // After sending, the own message and the answer are what the user wants to see.
     const onSend = useCallback(
@@ -138,9 +151,11 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     onRemove={stream.unqueue}
                     onSendNow={stream.sendQueueNow}
                 />
+                {runState && (
+                    <RunStatus state={runState} since={since} onAbort={stream.abort} onSuspend={stream.suspend} />
+                )}
                 <ChatInput
                     onSend={onSend}
-                    onAbort={stream.abort}
                     running={stream.chat?.running}
                     placeholder={placeholder}
                 />

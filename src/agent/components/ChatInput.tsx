@@ -11,12 +11,10 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import SendIcon from '@mui/icons-material/Send';
-import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 
 type Props = {
     onSend: (text: string) => Promise<void>;
-    onAbort?: () => Promise<void>;
     /** The agent works: the input stays usable, sending queues the message. */
     running?: boolean;
     disabled?: boolean;
@@ -25,10 +23,10 @@ type Props = {
 };
 
 /**
- * Message field with send (Enter) and stop button, and a hint line below. While the agent works, sending is
- * not blocked: the gateway queues the message and the queue above the field shows it.
+ * Message field with send (Enter) and a hint line below. While the agent works, sending is not blocked: the
+ * gateway queues the message and the queue above the field shows it. Stopping lives in the run status above.
  */
-export default function ChatInput({ onSend, onAbort, running, disabled, placeholder, hint }: Props) {
+export default function ChatInput({ onSend, running, disabled, placeholder, hint }: Props) {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
@@ -73,13 +71,6 @@ export default function ChatInput({ onSend, onAbort, running, disabled, placehol
                 InputProps={{
                     endAdornment: (
                         <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 1.5 }}>
-                            {running && onAbort && (
-                                <Tooltip title="Stop the agent">
-                                    <IconButton size="small" onClick={() => void onAbort()} aria-label="Stop">
-                                        <StopCircleOutlinedIcon fontSize="small" />
-                                    </IconButton>
-                                </Tooltip>
-                            )}
                             <Tooltip
                                 title={
                                     running

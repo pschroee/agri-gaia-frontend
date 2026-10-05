@@ -20,8 +20,10 @@ import CloseIcon from '@mui/icons-material/Close';
 
 import { useAgent } from '../AgentContext';
 import { sectionOf } from '../format';
+import { runSince, runStateOf } from '../runState';
 import ChatView from './ChatView';
 import NewChatDialog from './NewChatDialog';
+import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
 import { agentColors } from './tokens';
 
@@ -38,6 +40,11 @@ function ChatSelector({ onNew }: { onNew: () => void }) {
                 value={selectedChatId && chats.some((c) => c.id === selectedChatId) ? selectedChatId : ''}
                 onChange={(e) => selectChat(String(e.target.value))}
                 displayEmpty
+                // the state of the selected chat shows in the panel header
+                renderValue={(id) => {
+                    const c = chats.find((x) => x.id === id);
+                    return c ? c.title || 'Untitled chat' : chats.length ? '' : 'No chats yet';
+                }}
                 sx={{ flex: 1, minWidth: 0, bgcolor: '#fff', fontSize: 13, '& .MuiSelect-select': { py: 0.75 } }}
                 inputProps={{ 'aria-label': 'Chat' }}
             >
@@ -46,18 +53,26 @@ function ChatSelector({ onNew }: { onNew: () => void }) {
                         No chats yet
                     </MenuItem>
                 )}
-                {chats.slice(0, 20).map((c) => (
-                    <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13 }}>
-                        <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {c.title || 'Untitled chat'}
-                        </Box>
-                        {c.pending_approvals > 0 && (
-                            <Box component="span" sx={{ ml: 1, color: agentColors.amberText, fontSize: 12 }}>
-                                · {c.pending_approvals} waiting
+                {chats.slice(0, 20).map((c) => {
+                    const state = runStateOf(c);
+                    return (
+                        <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13, gap: 1 }}>
+                            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
+                                {c.title || 'Untitled chat'}
                             </Box>
-                        )}
-                    </MenuItem>
-                ))}
+                            {state && state !== 'idle' && (
+                                <Box component="span" sx={{ ml: 'auto', flex: 'none', display: 'inline-flex' }}>
+                                    <RunStateChip state={state} short />
+                                </Box>
+                            )}
+                            {c.pending_approvals > 0 && state !== 'waiting' && (
+                                <Box component="span" sx={{ color: agentColors.amberText, fontSize: 12, flex: 'none' }}>
+                                    · {c.pending_approvals} waiting
+                                </Box>
+                            )}
+                        </MenuItem>
+                    );
+                })}
             </Select>
             <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onNew} sx={{ flex: 'none' }}>
                 New chat
@@ -74,6 +89,9 @@ export default function AgentContextPanel() {
     const { status, panelOpen, setPanelOpen, selectedChatId, chatsLoaded, chats } = useAgent();
     const [newOpen, setNewOpen] = useState(false);
     const section = sectionOf(useLocation().pathname);
+    // live through updateChat of the open ChatView
+    const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
+    const selectedState = runStateOf(selected);
 
     return (
         <Drawer
@@ -104,6 +122,11 @@ export default function AgentContextPanel() {
             >
                 <AutoAwesomeIcon sx={{ fontSize: 20, color: agentColors.green }} />
                 <Typography sx={{ fontSize: 16, fontWeight: 500, color: agentColors.green }}>Agent</Typography>
+                {selectedState && (
+                    <Box sx={{ flex: 'none', display: 'inline-flex' }}>
+                        <RunStateChip state={selectedState} since={runSince(selected)} short framed />
+                    </Box>
+                )}
                 {section && (
                     <Box
                         sx={{
@@ -116,9 +139,14 @@ export default function AgentContextPanel() {
                             px: 1.25,
                             py: '2px',
                             whiteSpace: 'nowrap',
+                            // gives way to the run state chip
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
                         }}
+                        title={`Context: ${section}`}
                     >
-                        Context: {section}
+                        {selectedState ? section : `Context: ${section}`}
                     </Box>
                 )}
                 <Tooltip title="Close">
