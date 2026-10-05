@@ -42,6 +42,16 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   (messages plus each tool call). Opening a chat (ChatView is keyed by chat id) and sending jump to the end. The
   decision logic is the pure `stickReducer`, unit-tested; measuring in a render check must wait for a painted frame
   (rAF, then `setTimeout`), because a measurement inside rAF runs before that frame's ResizeObserver.
+- **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
+  `message_update` with `thinking_start|delta|end`) show as a collapsed muted line "Thinking · 4.2 s" between text and
+  tool steps (`ThinkingBlock`), live as "Thinking … n s". The live message is assembled by the pure reducer
+  `src/agent/live.ts` (text, thinking and tool calls by `contentIndex`); `liveParts` and `buildTranscript` turn live and
+  stored messages into the same parts. **pi stores no timing per block:** the duration is measured only while the block
+  streams, kept in memory by `timestamp:contentIndex`, and handed to the stored message; after a page reload, or for
+  blocks never seen live, the header shows "Thinking" without a duration. Open state per block lives in
+  `Conversation`, so it survives the switch from live to stored. "Always show thinking" (switch inside an expanded
+  block) is stored per gateway user in `localStorage` (`agentAlwaysShowThinking:<sub>`, try/catch, memory fallback);
+  switching it resets the per-block choices.
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
