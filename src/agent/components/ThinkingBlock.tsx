@@ -2,8 +2,6 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from 'react';
-
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -16,18 +14,7 @@ import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 import { thinkingLabel } from '../format';
 import type { ThinkingPart } from '../transcript';
 import { useAlwaysShowThinking } from '../thinkingPref';
-
-/** Re-renders every half second while active (for the running timer of live thinking). */
-function useNow(active: boolean): number {
-    const [now, setNow] = useState(() => Date.now());
-    useEffect(() => {
-        if (!active) return undefined;
-        setNow(Date.now());
-        const t = setInterval(() => setNow(Date.now()), 500);
-        return () => clearInterval(t);
-    }, [active]);
-    return now;
-}
+import { useNow } from '../useNow';
 
 type Props = {
     part: ThinkingPart;

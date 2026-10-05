@@ -31,10 +31,11 @@ export type ThinkingPart = {
 
 export type AgentPart = { type: 'text'; text: string } | ThinkingPart | { type: 'steps'; steps: Step[] };
 
+/** seq: the stored message the item comes from (the first one for an agent block; missing for the live one). */
 export type TranscriptItem =
-    | { kind: 'user'; key: string; text: string }
-    | { kind: 'notice'; key: string; text: string; label?: string }
-    | { kind: 'agent'; key: string; parts: AgentPart[]; error?: string };
+    | { kind: 'user'; key: string; seq?: number; text: string }
+    | { kind: 'notice'; key: string; seq?: number; text: string; label?: string }
+    | { kind: 'agent'; key: string; seq?: number; parts: AgentPart[]; error?: string };
 
 /** Head of the attachments block the gateway appends to a user message (internal/chat/manager.go). */
 const ATTACHMENTS_HEAD = '[Attachments in /workspace/inputs/]';
@@ -188,23 +189,29 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             const i = text.lastIndexOf(ATTACHMENTS_HEAD);
             if (i >= 0) text = text.slice(0, i).trim();
             if (m.origin === 'system' && !m.sources?.length) {
-                items.push({ kind: 'notice', key: `n${m.seq}`, text });
+                items.push({ kind: 'notice', key: `n${m.seq}`, seq: m.seq, text });
                 continue;
             }
             if (m.origin !== 'system' && m.origin !== 'mixed') {
-                items.push({ kind: 'user', key: `u${m.seq}`, text });
+                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, text });
                 continue;
             }
             splitMessage(text, m.sources).forEach((p, i) => {
                 if (p.kind === 'system')
-                    items.push({ kind: 'notice', key: `n${m.seq}-${i}`, text: p.text, label: noteLabel(p.source) });
-                else items.push({ kind: 'user', key: `u${m.seq}-${i}`, text: p.text });
+                    items.push({
+                        kind: 'notice',
+                        key: `n${m.seq}-${i}`,
+                        seq: m.seq,
+                        text: p.text,
+                        label: noteLabel(p.source),
+                    });
+                else items.push({ kind: 'user', key: `u${m.seq}-${i}`, seq: m.seq, text: p.text });
             });
             continue;
         }
         if (msg.role !== 'assistant') continue;
         if (!agent) {
-            agent = { kind: 'agent', key: `a${m.seq}`, parts: [] };
+            agent = { kind: 'agent', key: `a${m.seq}`, seq: m.seq, parts: [] };
             items.push(agent);
         }
         const cur = agent;
