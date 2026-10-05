@@ -45,6 +45,30 @@ export type Variant = { id: VariantId; label: string; tools: string[] };
 
 export type Tokens = { input: number; output: number; cache_read: number; total: number };
 
+/**
+ * Context usage according to pi (gateway API.md). tokens and percent are null right after a compaction until the
+ * next answer measures again. From threshold_tokens (window minus reserve_tokens) on, pi compacts automatically.
+ */
+export type ContextUsage = {
+    tokens: number | null;
+    window: number;
+    percent: number | null;
+    threshold_tokens: number;
+    reserve_tokens: number;
+    keep_recent_tokens: number;
+    updated_at: string;
+};
+
+/** Token usage of an assistant message as pi stores it; cost.total is pi's flat price. */
+export type Usage = {
+    input?: number;
+    output?: number;
+    cacheRead?: number;
+    cacheWrite?: number;
+    totalTokens?: number;
+    cost?: { total?: number };
+};
+
 /** Rule of a delegation: action on resource; without ids only for calls without an object. */
 export type DelegationRule = { action: string; resource: string; ids?: string[] };
 
@@ -79,7 +103,18 @@ export type Chat = {
     created_at: string;
     updated_at: string;
     tokens: Tokens;
+    /** US dollars by tariff, from the calls recorded at the LLM proxy (incl. subagents and compactions). */
     cost: number;
+    /** Share of cost outside the main session's answers (subagents, compaction, direct calls). */
+    cost_other?: number;
+    /** Model calls recorded at the LLM proxy. */
+    llm_calls?: number;
+    /** Last known context usage (also for a dormant chat). */
+    context?: ContextUsage;
+    /** Automatic compaction is on. */
+    auto_compact?: boolean;
+    /** Compactions so far. */
+    compactions?: number;
     artifact_count: number;
     pending_approvals: number;
     resuming?: boolean;
@@ -132,12 +167,22 @@ export type PiMessage = {
     errorMessage?: string;
     stopReason?: string;
     timestamp?: number;
+    usage?: Usage;
+    model?: string;
+    /** Compaction entries (role "compaction"): why, and the size before and after. */
+    reason?: string;
+    tokensBefore?: number;
+    estimatedTokensAfter?: number;
 };
 
 export type StoredMessage = {
     seq: number;
     role: string;
     message: PiMessage;
+    /** US dollars by tariff at the time of the answer (answers only); authoritative over usage.cost. */
+    cost?: number;
+    /** The answer fell into peak hours. */
+    peak?: boolean;
     created_at: string;
     turn_id?: number;
     trigger?: 'user' | 'queue' | 'wake';

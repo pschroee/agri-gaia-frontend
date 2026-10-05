@@ -6,6 +6,8 @@ import { isBlocked } from './format';
 import { hasThinkingText, thinkingDuration, thinkingKey } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
 import type { Approval, ContentBlock, MessageSource, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
+import { answerUsage } from './usage';
+import type { AnswerUsage } from './usage';
 
 export type StepStatus = 'running' | 'done' | 'error' | 'waiting' | 'blocked' | 'stopped';
 
@@ -35,7 +37,16 @@ export type AgentPart = { type: 'text'; text: string } | ThinkingPart | { type: 
 export type TranscriptItem =
     | { kind: 'user'; key: string; seq?: number; text: string }
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string }
-    | { kind: 'agent'; key: string; seq?: number; parts: AgentPart[]; error?: string };
+    | { kind: 'agent'; key: string; seq?: number; parts: AgentPart[]; error?: string; usage?: AnswerUsage }
+    | {
+          kind: 'compaction';
+          key: string;
+          seq?: number;
+          reason?: string;
+          tokensBefore?: number;
+          tokensAfter?: number;
+          cost?: number;
+      };
 
 /** Head of the attachments block the gateway appends to a user message (internal/chat/manager.go). */
 const ATTACHMENTS_HEAD = '[Attachments in /workspace/inputs/]';
@@ -170,6 +181,8 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
 
     const items: TranscriptItem[] = [];
     let agent: Extract<TranscriptItem, { kind: 'agent' }> | undefined;
+    // stored messages of each agent block, for its tokens and cost
+    const answerRows = new Map<Extract<TranscriptItem, { kind: 'agent' }>, StoredMessage[]>();
 
     const stepFor = (id: string, name: string, args: unknown): Step => {
         const res = results.get(id);
@@ -209,11 +222,26 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             });
             continue;
         }
+        if (msg.role === 'compaction') {
+            agent = undefined;
+            items.push({
+                kind: 'compaction',
+                key: `c${m.seq}`,
+                seq: m.seq,
+                reason: msg.reason,
+                tokensBefore: msg.tokensBefore,
+                tokensAfter: msg.estimatedTokensAfter,
+                cost: m.cost,
+            });
+            continue;
+        }
         if (msg.role !== 'assistant') continue;
         if (!agent) {
             agent = { kind: 'agent', key: `a${m.seq}`, seq: m.seq, parts: [] };
             items.push(agent);
+            answerRows.set(agent, []);
         }
+        answerRows.get(agent)?.push(m);
         const cur = agent;
         const blocks = Array.isArray(msg.content) ? msg.content : [];
         blocks.forEach((b, idx) => {
@@ -230,6 +258,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
         });
         if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
     }
+    for (const [item, rows] of answerRows) item.usage = answerUsage(rows);
     return items;
 }
 
