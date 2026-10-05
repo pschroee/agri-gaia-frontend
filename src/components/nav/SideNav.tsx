@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -41,6 +42,7 @@ import StoreIcon from '@mui/icons-material/Store';
 import ApiOutlinedIcon from '@mui/icons-material/ApiOutlined';
 import PeopleIcon from '@mui/icons-material/People';
 import SpeedIcon from '@mui/icons-material/Speed';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 import { useNavigate } from 'react-router-dom';
 import { createSubdomainUrl, openInNewTab } from '../../util';
@@ -48,6 +50,8 @@ import { SideNavClosedWidth, SideNavOpenWidth, SideNavWidthContext } from '../..
 import { httpGet } from '../../api';
 import { URLS_BASIC_AUTH_PATH } from '../../endpoints';
 import useKeycloak from '../../contexts/KeycloakContext';
+import { agentEnabled } from '../../agent/api';
+import { AGENT_ROUTE } from '../../agent/components/AgentLayer';
 
 interface IListItem {
     text: string;
@@ -55,6 +59,7 @@ interface IListItem {
     icon: ReactNode;
     external?: boolean;
     disabled?: boolean;
+    accent?: boolean;
 }
 
 export default function SideNav() {
@@ -67,7 +72,9 @@ export default function SideNav() {
 
     useEffect(() => {
         // Find SideNav item matching current location's pathname and set its link as the currently active one.
-        setActiveItemLink(internalLinks.find((item: IListItem) => item.link === window.location.pathname)?.link);
+        setActiveItemLink(
+            [...agentLinks, ...internalLinks].find((item: IListItem) => item.link === window.location.pathname)?.link,
+        );
         fetchFusekiBasicAuthUrl();
     }, [window.location.pathname, keycloak]);
 
@@ -76,6 +83,11 @@ export default function SideNav() {
             .then(({ url }) => setFusekiBasicAuthUrl(url))
             .catch((error) => console.error(error));
     };
+
+    // Entry of the AI agent, on top and in the primary colour like in the design prototype.
+    const agentLinks: Array<IListItem> = agentEnabled
+        ? [{ text: 'Agent', link: AGENT_ROUTE, icon: <AutoAwesomeIcon />, accent: true }]
+        : [];
 
     const internalLinks: Array<IListItem> = [
         {
@@ -208,7 +220,7 @@ export default function SideNav() {
     }
 
     function renderListItem(item: IListItem) {
-        const { text, disabled, icon, external } = item;
+        const { text, disabled, icon, external, accent } = item;
         const isActive = item.link === activeItemLink;
         const backgroundColor = isActive ? 'rgba(0,0,0,0.07)' : undefined;
         return (
@@ -218,11 +230,16 @@ export default function SideNav() {
                 onClick={() => handleLinkOnClick(item)}
                 style={{ backgroundColor, borderRadius: '10px' }}
             >
-                <ListItemIcon sx={{ marginTop: '4px', marginBottom: '4px' }}>
+                <ListItemIcon
+                    sx={{ marginTop: '4px', marginBottom: '4px', color: accent ? 'primary.main' : undefined }}
+                >
                     {icon ? icon : <QuestionMarkIcon />}
                 </ListItemIcon>
 
-                <ListItemText primary={isOpen ? text : ' '} />
+                <ListItemText
+                    primary={isOpen ? text : ' '}
+                    primaryTypographyProps={accent ? { color: 'primary', fontWeight: 500 } : undefined}
+                />
                 {external && isOpen && (
                     <ListItemIcon>
                         <OpenInNewOutlinedIcon />
@@ -245,6 +262,12 @@ export default function SideNav() {
         >
             <Toolbar />
             <Box sx={{ padding: '5px' }} mb={4}>
+                {agentLinks.length > 0 && (
+                    <>
+                        <List>{agentLinks.map((item) => renderListItem(item))}</List>
+                        <Divider />
+                    </>
+                )}
                 <List>{internalLinks.map((item) => renderListItem(item))}</List>
                 <Divider />
                 <List>{externalLinks.map((item) => renderListItem(item))}</List>

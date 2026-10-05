@@ -1,0 +1,110 @@
+// SPDX-FileCopyrightText: 2026 Philipp Schröer
+//
+// SPDX-License-Identifier: MIT
+
+import type {
+    Approval,
+    Chat,
+    ChatDetail,
+    CreateChatRequest,
+    Me,
+    Model,
+    SendResult,
+    ToolExecution,
+    Variant,
+} from './types';
+
+/** The agent gateway is served on the platform host under /agent/ (Traefik strips the prefix). */
+export const AGENT_BASE = '/agent';
+const API = `${AGENT_BASE}/api`;
+
+export const agentEnabled = import.meta.env.VITE_AGENT_ENABLED === 'true';
+
+export class AgentApiError extends Error {
+    readonly status: number;
+    readonly code?: string;
+    constructor(status: number, message: string, code?: string) {
+        super(message);
+        this.name = 'AgentApiError';
+        this.status = status;
+        this.code = code;
+    }
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+    const res = await fetch(`${API}/${path}`, {
+        ...init,
+        credentials: 'same-origin',
+        headers: {
+            Accept: 'application/json',
+            ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+            ...init?.headers,
+        },
+    });
+    if (!res.ok) {
+        let message = `${res.status} ${res.statusText}`;
+        let code: string | undefined;
+        try {
+            const body = (await res.json()) as { error?: string; code?: string };
+            if (body?.error) message = body.error;
+            code = body?.code;
+        } catch {
+            // response without JSON body
+        }
+        throw new AgentApiError(res.status, message, code);
+    }
+    return (await res.json()) as T;
+}
+
+const post = <T>(path: string, body?: unknown) =>
+    request<T>(path, { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) });
+
+const enc = encodeURIComponent;
+
+export const agentApi = {
+    me: () => request<Me>('me'),
+    models: () => request<Model[]>('models'),
+    variants: () => request<Variant[]>('variants'),
+    chats: () => request<Chat[]>('chats'),
+    chat: (id: string) => request<ChatDetail>(`chats/${enc(id)}`),
+    createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
+    sendMessage: (id: string, text: string) => post<SendResult>(`chats/${enc(id)}/messages`, { text }),
+    abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
+    toolExecutions: (id: string) =>
+        request<{ executions: ToolExecution[] }>(`chats/${enc(id)}/tool_executions`).then((r) =>
+            Array.isArray(r?.executions) ? r.executions : [],
+        ),
+    pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
+    decide: (id: string, approve: boolean) => post<Approval>(`approvals/${enc(id)}`, { approve }),
+};
+
+export const eventsUrl = (chatId: string) => `${API}/chats/${enc(chatId)}/events`;
+
+/** Login at the gateway, used visibly when the silent login failed (the gateway returns to /agent/). */
+export const interactiveLoginUrl = () => `${AGENT_BASE}/oidc/login?return=${enc(`${AGENT_BASE}/`)}`;
+
+/**
+ * Silent login: the gateway runs the authorization code flow against the platform's Keycloak with
+ * prompt=none, which reuses the platform session. A hidden same-origin iframe carries the redirects;
+ * the gateway sets its session cookie (path /agent/) and redirects back to /agent/, which fires `load`.
+ */
+export function silentLogin(timeoutMs = 10000): Promise<void> {
+    return new Promise((resolve) => {
+        const frame = document.createElement('iframe');
+        frame.style.display = 'none';
+        frame.setAttribute('aria-hidden', 'true');
+        frame.title = 'Agent sign-in';
+        let done = false;
+        const finish = () => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            frame.remove();
+            resolve();
+        };
+        const timer = setTimeout(finish, timeoutMs);
+        frame.addEventListener('load', finish);
+        frame.src = `${AGENT_BASE}/oidc/login?prompt=none&return=${enc(`${AGENT_BASE}/`)}`;
+        document.body.appendChild(frame);
+    });
+}
