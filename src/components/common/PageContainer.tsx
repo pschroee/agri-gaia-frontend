@@ -23,12 +23,8 @@ import useKeycloak from '../../contexts/KeycloakContext';
 import { httpGet } from '../../api';
 import { USERS_PING } from '../../endpoints';
 import { SideNavWidthContext, SideNavClosedWidth, SideNavOpenWidth } from '../../contexts/SideNavWidthContext';
-import AgentPanel, {
-    AgentPanelWidth,
-    agentEnabled,
-    loadAgentPanelOpen,
-    storeAgentPanelOpen,
-} from '../agent/AgentPanel';
+import { agentEnabled } from '../../agent/api';
+import AgentLayer, { AgentProviderIfEnabled, useAgentPanelMargin } from '../../agent/components/AgentLayer';
 interface IPageContainerProps {
     children?: React.ReactNode;
     maxWidth?: string;
@@ -39,12 +35,6 @@ export default function PageContainer(props: IPageContainerProps) {
 
     const [sideNavOpen, setSideNavOpen] = useState(true);
     const [sideNavWidth, setSideNavWidth] = useState(SideNavOpenWidth);
-    const [agentPanelOpen, setAgentPanelOpen] = useState(() => agentEnabled && loadAgentPanelOpen());
-
-    const toggleAgentPanel = () => {
-        storeAgentPanelOpen(!agentPanelOpen);
-        setAgentPanelOpen(!agentPanelOpen);
-    };
 
     const toggleSideNavState = () => {
         if (sideNavOpen) {
@@ -77,31 +67,30 @@ export default function PageContainer(props: IPageContainerProps) {
             {keycloak?.authenticated ? (
                 <>
                     <SideNavWidthContext.Provider value={{ isOpen: sideNavOpen, width: sideNavWidth }}>
-                        <AppBar
-                            toggleSideNav={toggleSideNavState}
-                            toggleAgentPanel={agentEnabled ? toggleAgentPanel : undefined}
-                        />
-                        <SideNav />
-                        <Box
-                            component="main"
-                            sx={{
-                                height: '100%',
-                                flexGrow: 1,
-                                p: 3,
-                                ml: `${sideNavWidth}px`,
-                                mr: agentPanelOpen ? `${AgentPanelWidth}px` : 0,
-                            }}
-                        >
-                            <Toolbar />
-                            {props.children}
-                        </Box>
-                        {agentEnabled && (
-                            <AgentPanel open={agentPanelOpen} onClose={() => toggleAgentPanel()} />
-                        )}
-                        <Footer />
+                        <AgentProviderIfEnabled>
+                            <AppBar toggleSideNav={toggleSideNavState} />
+                            <SideNav />
+                            <Main sideNavWidth={sideNavWidth}>{props.children}</Main>
+                            {agentEnabled && <AgentLayer />}
+                            <Footer />
+                        </AgentProviderIfEnabled>
                     </SideNavWidthContext.Provider>
                 </>
             ) : null}
         </>
+    );
+}
+
+// Main content; it makes room for the agent context panel while that is open.
+function Main({ sideNavWidth, children }: { sideNavWidth: number; children?: React.ReactNode }) {
+    const agentMargin = useAgentPanelMargin();
+    return (
+        <Box
+            component="main"
+            sx={{ height: '100%', flexGrow: 1, p: 3, ml: `${sideNavWidth}px`, mr: `${agentMargin}px` }}
+        >
+            <Toolbar />
+            {children}
+        </Box>
     );
 }

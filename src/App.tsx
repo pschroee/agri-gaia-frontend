@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -38,6 +39,9 @@ import { TasksProvider } from './contexts/TasksContext';
 import OpenData from './pages/OpenData';
 import EDCDebug from './pages/EDCDebug';
 import Licenses from './pages/Licenses';
+import AgentPage from './agent/components/AgentPage';
+import { AGENT_ROUTE } from './agent/components/AgentLayer';
+import { agentEnabled } from './agent/api';
 
 const AppRoutes = () => (
     <Routes>
@@ -60,6 +64,7 @@ const AppRoutes = () => (
         <Route path="/integrated-services" element={<IntegratedServices />} />
         <Route path="/network" element={<Network />} />
         <Route path="/licenses" element={<Licenses />} />
+        {agentEnabled && <Route path={AGENT_ROUTE} element={<AgentPage />} />}
     </Routes>
 );
 
