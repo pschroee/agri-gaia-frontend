@@ -5,7 +5,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, silentLogin } from './api';
-import type { Chat, Me } from './types';
+import type { Chat, Me, Model } from './types';
 
 export type SessionStatus = 'checking' | 'ready' | 'signed-out' | 'error';
 
@@ -17,6 +17,8 @@ type AgentState = {
     retrySignIn: () => void;
     chats: Chat[];
     chatsLoaded: boolean;
+    /** Selectable models of the gateway (loaded once after sign-in; empty until then or on failure). */
+    models: Model[];
     refreshChats: () => Promise<void>;
     selectedChatId?: string;
     selectChat: (id: string | undefined) => void;
@@ -60,6 +62,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [error, setError] = useState<string>();
     const [chats, setChats] = useState<Chat[]>([]);
     const [chatsLoaded, setChatsLoaded] = useState(false);
+    const [models, setModels] = useState<Model[]>([]);
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
     const [panelOpen, setPanelOpenState] = useState(() => load(PANEL_KEY) === 'true');
     const checking = useRef(false);
@@ -111,6 +114,16 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         return () => clearInterval(t);
     }, [status, refreshChats]);
 
+    useEffect(() => {
+        if (status !== 'ready') return;
+        agentApi
+            .models()
+            .then((m) => setModels(Array.isArray(m) ? m : []))
+            .catch(() => {
+                // without the list the pickers show model ids
+            });
+    }, [status]);
+
     // Fall back to the newest chat when the remembered one is gone.
     useEffect(() => {
         if (!chatsLoaded) return;
@@ -157,6 +170,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             retrySignIn: () => void check(true),
             chats,
             chatsLoaded,
+            models,
             refreshChats,
             selectedChatId,
             selectChat,
@@ -172,6 +186,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             check,
             chats,
             chatsLoaded,
+            models,
             refreshChats,
             selectedChatId,
             selectChat,

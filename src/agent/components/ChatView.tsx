@@ -18,6 +18,7 @@ import { useChatStream } from '../useChatStream';
 import { useStickToBottom } from '../useStickToBottom';
 import ApprovalCard from './ApprovalCard';
 import ChatInput from './ChatInput';
+import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
 import DelegationStrip from './DelegationStrip';
 import QueueList from './QueueList';
@@ -45,7 +46,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
     const since = runSince(chat, messages);
     // the open chat's live state goes to the chat list and the panel header
-    const updateChat = useAgentOptional()?.updateChat;
+    const agent = useAgentOptional();
+    const updateChat = agent?.updateChat;
     useEffect(() => {
         if (chat && updateChat) updateChat(chat);
     }, [chat, updateChat]);
@@ -158,6 +160,16 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     onSend={onSend}
                     running={stream.chat?.running}
                     placeholder={placeholder}
+                    dense={dense}
+                    toolbar={
+                        <ModelEffortPicker
+                            chat={stream.chat}
+                            models={agent?.models ?? []}
+                            dense={dense}
+                            onModel={stream.setModel}
+                            onEffort={stream.setEffort}
+                        />
+                    }
                 />
             </Box>
         </Box>

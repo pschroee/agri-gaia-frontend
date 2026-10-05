@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { KeyboardEvent, useState } from 'react';
+import { KeyboardEvent, ReactNode, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -20,13 +20,17 @@ type Props = {
     disabled?: boolean;
     placeholder?: string;
     hint?: string;
+    /** Controls in the row below the field (model and thinking level); the hint then moves to the right. */
+    toolbar?: ReactNode;
+    /** Narrow layout: with a toolbar, the hint shrinks to its icon with a tooltip. */
+    dense?: boolean;
 };
 
 /**
  * Message field with send (Enter) and a hint line below. While the agent works, sending is not blocked: the
  * gateway queues the message and the queue above the field shows it. Stopping lives in the run status above.
  */
-export default function ChatInput({ onSend, running, disabled, placeholder, hint }: Props) {
+export default function ChatInput({ onSend, running, disabled, placeholder, hint, toolbar, dense }: Props) {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
@@ -94,15 +98,34 @@ export default function ChatInput({ onSend, running, disabled, placeholder, hint
                     ),
                 }}
             />
-            {error ? (
-                <Typography sx={{ fontSize: 11.5, color: 'error.main' }}>{error}</Typography>
-            ) : (
-                <Typography
-                    sx={{ fontSize: 11, color: 'text.secondary', display: 'flex', alignItems: 'center', gap: 0.5 }}
-                >
-                    <LockOutlinedIcon sx={{ fontSize: 12 }} />
-                    {hint ?? 'Write actions need your approval.'}
-                </Typography>
+            {error && <Typography sx={{ fontSize: 11.5, color: 'error.main' }}>{error}</Typography>}
+            {(toolbar || !error) && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: toolbar ? -0.5 : 0 }}>
+                    {toolbar && <Box sx={{ flex: '1 1 auto', minWidth: 0, ml: -0.75 }}>{toolbar}</Box>}
+                    {toolbar && dense ? (
+                        <Tooltip title={hint ?? 'Write actions need your approval.'}>
+                            <LockOutlinedIcon
+                                aria-label={hint ?? 'Write actions need your approval.'}
+                                sx={{ fontSize: 14, color: 'text.secondary', flex: 'none' }}
+                            />
+                        </Tooltip>
+                    ) : (
+                        <Typography
+                            sx={{
+                                fontSize: 11,
+                                color: 'text.secondary',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                                flex: toolbar ? 'none' : undefined,
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            <LockOutlinedIcon sx={{ fontSize: 12 }} />
+                            {hint ?? 'Write actions need your approval.'}
+                        </Typography>
+                    )}
+                </Box>
             )}
         </Box>
     );
