@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { MouseEvent, ReactNode, useState } from 'react';
+import { MouseEvent, ReactNode, useEffect, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -29,6 +29,8 @@ type Props = {
     dense?: boolean;
     onModel: (model: string, compactFirst?: boolean) => Promise<void>;
     onEffort: (level: string) => Promise<void>;
+    /** "/model x" in the input did not fit the context: open the same prompt (a new object per attempt). */
+    tooLargeRequest?: { details: ContextTooLarge };
 };
 
 const triggerSx = {
@@ -92,12 +94,17 @@ function Trigger({
  * are those pi reports for the model. When the context does not fit the new model, a prompt offers to compact first;
  * the gateway then switches by itself (pending_model, shown next to the pickers until done).
  */
-export default function ModelEffortPicker({ chat, models, dense = false, onModel, onEffort }: Props) {
+export default function ModelEffortPicker({ chat, models, dense = false, onModel, onEffort, tooLargeRequest }: Props) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const [tooLarge, setTooLarge] = useState<ContextTooLarge>();
     const [modelAnchor, setModelAnchor] = useState<HTMLElement | null>(null);
     const [effortAnchor, setEffortAnchor] = useState<HTMLElement | null>(null);
+    useEffect(() => {
+        if (!tooLargeRequest) return;
+        setError(undefined);
+        setTooLarge(tooLargeRequest.details);
+    }, [tooLargeRequest]);
     const state = pickerState(chat, busy);
     const name = (id: string) => modelName(models, id);
     // the chat's own model stays selectable even when the gateway no longer lists it

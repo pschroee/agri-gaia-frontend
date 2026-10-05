@@ -10,7 +10,11 @@ import Typography from '@mui/material/Typography';
 import Tooltip from '@mui/material/Tooltip';
 import CompressIcon from '@mui/icons-material/Compress';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import TerminalIcon from '@mui/icons-material/Terminal';
 
+import { noticeAnchor } from '../commands';
+import type { CommandNotice } from '../commands';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
 import { useAlwaysShowThinking } from '../thinkingPref';
@@ -165,6 +169,39 @@ function CompactionLine({
     );
 }
 
+/** Result of a built-in slash command: the command as typed and what it did (or why it did not work). */
+function CommandLine({ notice }: { notice: CommandNotice }) {
+    const error = notice.tone === 'error';
+    return (
+        <Box
+            data-testid="agent-command-notice"
+            data-tone={notice.tone}
+            role={error ? 'alert' : 'status'}
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 0.75,
+                fontSize: 12,
+                color: error ? 'error.main' : 'text.secondary',
+                px: 0.5,
+                minWidth: 0,
+            }}
+        >
+            {error ? (
+                <ErrorOutlineIcon sx={{ fontSize: 14, mt: '2px' }} />
+            ) : (
+                <TerminalIcon sx={{ fontSize: 14, mt: '2px' }} />
+            )}
+            <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                <Box component="code" sx={{ fontFamily: 'monospace', fontSize: 11.5, color: 'text.primary', mr: 0.75 }}>
+                    {notice.command}
+                </Box>
+                {notice.text}
+            </Box>
+        </Box>
+    );
+}
+
 function Notice({ text, label }: { text: string; label?: string }) {
     const first = label ?? text.split('\n').find((l) => l.trim() && !l.startsWith('[')) ?? text.split('\n')[0];
     return (
@@ -229,6 +266,17 @@ export default function Conversation({
         return { after, end };
     }, [items, resumes]);
     const resuming = resumeRunning(resumes);
+    // command notes sit before the first message stored after the command ran; nothing stored since: at the end
+    const notes = useMemo(() => {
+        const before = new Map<number, CommandNotice[]>();
+        const end: CommandNotice[] = [];
+        for (const n of stream.commandNotices) {
+            const i = noticeAnchor(items, n.afterSeq);
+            if (i < 0) end.push(n);
+            else before.set(i, [...(before.get(i) ?? []), n]);
+        }
+        return { before, end };
+    }, [items, stream.commandNotices]);
 
     if (stream.loading && items.length === 0) {
         return (
@@ -240,13 +288,14 @@ export default function Conversation({
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 1.5 : 1.75 }}>
-            {items.length === 0 && !hasLive && !pending && resumes.length === 0 && (
+            {items.length === 0 && !hasLive && !pending && resumes.length === 0 && notes.end.length === 0 && (
                 <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
                     No messages yet. Describe what you want to do.
                 </Typography>
             )}
             {items.map((it, i) => (
                 <Fragment key={it.key}>
+                    {notes.before.get(i)?.map((n) => <CommandLine key={n.key} notice={n} />)}
                     {it.kind === 'user' ? (
                         <UserBubble text={it.text} dense={dense} />
                     ) : it.kind === 'notice' ? (
@@ -268,6 +317,9 @@ export default function Conversation({
             )}
             {placed.end.map((r) => (
                 <ResumeBlock key={`resume-${r.id}`} resume={r} />
+            ))}
+            {notes.end.map((n) => (
+                <CommandLine key={n.key} notice={n} />
             ))}
             {hasLive && (
                 <AgentBlock item={{ kind: 'agent', key: 'live', parts: liveP }} dense={dense} thinking={thinking} />
