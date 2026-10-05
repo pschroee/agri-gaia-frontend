@@ -59,6 +59,10 @@ export type ChatStream = {
     /** Lets the chat rest (409 with an open approval or while running). Throws AgentApiError. */
     suspend: () => Promise<void>;
     decide: (approval: Approval, approve: boolean) => Promise<void>;
+    /** Switches the model; with compactFirst after a compaction (pending_model until then). Throws AgentApiError. */
+    setModel: (model: string, compactFirst?: boolean) => Promise<void>;
+    /** Sets the thinking level. Throws AgentApiError. */
+    setEffort: (level: string) => Promise<void>;
 };
 
 function upsert<T>(list: T[], item: T, key: (x: T) => string | number): T[] {
@@ -320,6 +324,22 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setChat(await agentApi.suspend(chatId));
     }, [chatId]);
 
+    const setModel = useCallback(
+        async (model: string, compactFirst = false) => {
+            if (!chatId) return;
+            setChat(await agentApi.setModel(chatId, model, compactFirst));
+        },
+        [chatId],
+    );
+
+    const setEffort = useCallback(
+        async (level: string) => {
+            if (!chatId) return;
+            setChat(await agentApi.setEffort(chatId, level));
+        },
+        [chatId],
+    );
+
     const decide = useCallback(async (approval: Approval, approve: boolean) => {
         const a = await agentApi.decide(approval.id, approve);
         setApprovals((l) => upsert(l, a, (x) => x.id));
@@ -348,5 +368,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         abort,
         suspend,
         decide,
+        setModel,
+        setEffort,
     };
 }
