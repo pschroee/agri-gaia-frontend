@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import type { DelegationRule, SocketCall } from './types';
+import type { DelegationRule, SocketCall, Variant } from './types';
 
 /** Effect class of a platform call, as in the prototype (read, write, compute, irreversible). */
 export type Effect = 'read' | 'write' | 'compute' | 'irreversible';
@@ -13,6 +13,19 @@ export const EFFECT_LABEL: Record<Effect, string> = {
     compute: 'Compute',
     irreversible: 'Irreversible',
 };
+
+/** English labels for the gateway's connection variants; the gateway describes them in German. */
+const VARIANT_LABEL: Record<string, string> = {
+    cli: 'Command line (bash, artifacts, subagents)',
+    mcp: 'MCP (MCP tools only, read/write/ls, no bash)',
+    api: 'REST API (platform_http only, no bash, no file tools)',
+    beide: 'MCP and command line',
+};
+
+/** Label of a connection variant; unknown ids keep the gateway's text. */
+export function variantLabel(v: Pick<Variant, 'id' | 'label'>): string {
+    return VARIANT_LABEL[v.id] ?? v.label;
+}
 
 /** Splits the detail of a platform call ("METHOD /path?query") into method and path. */
 export function splitCall(detail: string): { method: string; path: string } {
