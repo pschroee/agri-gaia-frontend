@@ -295,6 +295,20 @@ export type ResumeStep = {
 
 export type SendResult = { ok: boolean; resumed: boolean; queued?: boolean; queue_id?: string };
 
+/** Slash command (GET /chats/{id}/commands); `name` without the leading slash. */
+export type Command = {
+    name: string;
+    description?: string;
+    /** builtin: the gateway's own (/compact, /autocompact, /rename, /model, /effort); the others come from pi. */
+    source: 'builtin' | 'extension' | 'prompt' | 'skill';
+    /** Argument hint, e.g. "[instructions]" or "on|off". */
+    args?: string;
+    /** Possible arguments for completion (/model, /effort). */
+    options?: CommandOption[];
+};
+
+export type CommandOption = { value: string; label?: string; current?: boolean };
+
 export type PiEvent = { type: string; [key: string]: unknown };
 
 export type ServerEvent =

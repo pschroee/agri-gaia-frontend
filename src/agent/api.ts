@@ -6,6 +6,7 @@ import type {
     Approval,
     Chat,
     ChatDetail,
+    Command,
     CreateChatRequest,
     Me,
     Model,
@@ -75,6 +76,13 @@ export const agentApi = {
     chat: (id: string) => request<ChatDetail>(`chats/${enc(id)}`),
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
     sendMessage: (id: string, text: string) => post<SendResult>(`chats/${enc(id)}/messages`, { text }),
+    /** Slash commands: the gateway's built-in ones and pi's (extensions, prompt templates, skills). */
+    commands: (id: string) => request<Command[]>(`chats/${enc(id)}/commands`),
+    /**
+     * Runs a slash command ("/compact focus on code"); 409 for /compact while the agent works. Commands that are
+     * not built in go to pi as a message (pi expands skills and templates), queued while the agent works.
+     */
+    runCommand: (id: string, command: string) => post<SendResult>(`chats/${enc(id)}/commands`, { command }),
     /**
      * Switches the model (409 while the agent works; 409 code "context_too_large" when the context does not fit,
      * then compactFirst: compacts and switches afterwards, pending_model until then).
