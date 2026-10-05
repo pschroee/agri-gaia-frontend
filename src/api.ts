@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -184,4 +185,7 @@ const HttpError = (
     };
 };
 
-export { PROJECT_BASE_URL, httpGet, httpPost, httpPut, httpPatch, httpUpload, httpDelete };
+// URL of the agent gateway web UI; embed=true asks for the compact layout used in the side panel.
+const agentUrl = (embed = false) => `https://agent.${PROJECT_BASE_URL}/${embed ? '?embed=1' : ''}`;
+
+export { PROJECT_BASE_URL, agentUrl, httpGet, httpPost, httpPut, httpPatch, httpUpload, httpDelete };

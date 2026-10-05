@@ -6,6 +6,7 @@
 # SPDX-FileContributor: Maik Fruhner
 # SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 # SPDX-FileContributor: Tobias Wamhof
+# SPDX-FileContributor: Philipp Schröer
 #
 # SPDX-License-Identifier: MIT
 
@@ -14,6 +15,7 @@ FROM node:20-alpine
 ARG PROJECT_BASE_URL
 ARG KEYCLOAK_REALM_NAME
 ARG VITE_PORTAINER_VERSION
+ARG VITE_AGENT_ENABLED=false
 
 RUN test -n "$VITE_PORTAINER_VERSION"
 

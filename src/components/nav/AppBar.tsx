@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -16,13 +17,22 @@ import Box from '@mui/material/Box';
 import Toolbar from '@mui/material/Toolbar';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 
 import { useNavigate } from 'react-router-dom';
 import LogoutButton from './LogoutButton';
 import HSOSLogo from './HSOSLogo';
 import AgriGaiaLogo from './AgriGaiaLogo';
 
-export default function MyAppBar({ toggleSideNav }: { toggleSideNav: () => void }) {
+export default function MyAppBar({
+    toggleSideNav,
+    toggleAgentPanel,
+}: {
+    toggleSideNav: () => void;
+    toggleAgentPanel?: () => void;
+}) {
     const navigate = useNavigate();
 
     return (
@@ -37,6 +47,13 @@ export default function MyAppBar({ toggleSideNav }: { toggleSideNav: () => void 
                             </Typography>
                         </Button>
                     </Box>
+                    {toggleAgentPanel && (
+                        <Tooltip title="AI Agent">
+                            <IconButton color="inherit" onClick={toggleAgentPanel} aria-label="AI Agent">
+                                <SmartToyOutlinedIcon />
+                            </IconButton>
+                        </Tooltip>
+                    )}
                     <HSOSLogo />
                     <LogoutButton />
                 </Toolbar>
