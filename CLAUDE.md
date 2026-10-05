@@ -30,6 +30,11 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   (`queued: true`). `QueueList` shows the open entries above the input, removable until delivered (409 afterwards);
   after an abort (`queue_held`) they wait for the next message or "Send now" (`POST …/queue/send`). The state logic
   is the pure reducer in `src/agent/queue.ts`, fed by `GET /chats/{id}` (`queue`) and the SSE event `queue`.
+  The gateway steers user entries into pi right away (SSE `queue` with `change: "delivered"` milliseconds after
+  `queued`), but pi reads them only after its current step, and the user message is stored only then. Delivered
+  entries therefore stay in the list ("with the agent", greyed) until a later stored user message carries their text
+  or has `trigger: "queue"`; `restored` reopens them, `dropped` clears them. A page reload in that window loses them
+  (the gateway's queue no longer lists delivered entries).
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
