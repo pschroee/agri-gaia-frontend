@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { isBlocked } from './format';
-import type { Approval, ContentBlock, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
+import type { Approval, ContentBlock, MessageSource, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
 
 export type StepStatus = 'running' | 'done' | 'error' | 'waiting' | 'blocked' | 'stopped';
 
@@ -20,10 +20,64 @@ export type AgentPart = { type: 'text'; text: string } | { type: 'steps'; steps:
 
 export type TranscriptItem =
     | { kind: 'user'; key: string; text: string }
-    | { kind: 'notice'; key: string; text: string }
+    | { kind: 'notice'; key: string; text: string; label?: string }
     | { kind: 'agent'; key: string; parts: AgentPart[]; error?: string };
 
 const ATTACHMENTS_HEAD = '[Anhänge unter /workspace/inputs/]';
+
+/** Fixed head of every gateway note inside a user message (agent gateway, internal/chat/origin.go). */
+const SYSTEM_HEADER = '[Meldung des Orchestrators, nicht vom Nutzer]';
+
+/** English one-liner for a gateway note with a known type; the German text stays in the tooltip. */
+export function noteLabel(src: MessageSource): string | undefined {
+    const refs = src.refs ?? [];
+    switch (src.type) {
+        case 'language':
+            return `preferred browser language passed to the agent${refs[0] ? `: ${refs[0]}` : ''}`;
+        case 'sandbox':
+            return `background tasks ended with the previous sandbox${refs.length ? `: ${refs.join(', ')}` : ''}`;
+        case 'background':
+            return `background task${refs[0] ? ` ${refs[0]}` : ''} ended`;
+        default:
+            return undefined;
+    }
+}
+
+type Part = { kind: 'user'; text: string } | { kind: 'system'; text: string; source: MessageSource };
+
+/**
+ * Splits a user message along the parts the gateway names (sources): each note starts with SYSTEM_HEADER and
+ * either ends at its fence (marker) or at the end of its single line; the rest is user text. Without sources
+ * the message is taken as a whole, as before.
+ */
+export function splitMessage(text: string, sources: MessageSource[] | undefined): Part[] {
+    if (!sources?.some((s) => s.kind === 'system')) return text ? [{ kind: 'user', text }] : [];
+    const parts: Part[] = [];
+    let cursor = 0;
+    const pushUser = (s: string) => {
+        const t = s.trim();
+        if (t) parts.push({ kind: 'user', text: t });
+    };
+    for (const src of sources) {
+        if (src.kind !== 'system') continue;
+        const start = text.indexOf(SYSTEM_HEADER, cursor);
+        if (start < 0) continue;
+        let end: number;
+        if (src.marker) {
+            const close = `\n${src.marker}>>>`;
+            const ci = text.indexOf(close, start);
+            end = ci < 0 ? text.length : ci + close.length;
+        } else {
+            const nl = text.indexOf('\n', start + SYSTEM_HEADER.length + 1);
+            end = nl < 0 ? text.length : nl;
+        }
+        pushUser(text.slice(cursor, start));
+        parts.push({ kind: 'system', text: text.slice(start, end), source: src });
+        cursor = end;
+    }
+    pushUser(text.slice(cursor));
+    return parts;
+}
 
 function textOf(content: PiMessage['content']): string {
     if (typeof content === 'string') return content;
@@ -109,8 +163,19 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             let text = textOf(msg.content);
             const i = text.lastIndexOf(ATTACHMENTS_HEAD);
             if (i >= 0) text = text.slice(0, i).trim();
-            if (m.origin === 'system') items.push({ kind: 'notice', key: `n${m.seq}`, text });
-            else items.push({ kind: 'user', key: `u${m.seq}`, text });
+            if (m.origin === 'system' && !m.sources?.length) {
+                items.push({ kind: 'notice', key: `n${m.seq}`, text });
+                continue;
+            }
+            if (m.origin !== 'system' && m.origin !== 'mixed') {
+                items.push({ kind: 'user', key: `u${m.seq}`, text });
+                continue;
+            }
+            splitMessage(text, m.sources).forEach((p, i) => {
+                if (p.kind === 'system')
+                    items.push({ kind: 'notice', key: `n${m.seq}-${i}`, text: p.text, label: noteLabel(p.source) });
+                else items.push({ kind: 'user', key: `u${m.seq}-${i}`, text: p.text });
+            });
             continue;
         }
         if (msg.role !== 'assistant') continue;
