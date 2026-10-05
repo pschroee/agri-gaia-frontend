@@ -36,6 +36,8 @@ export type Chat = {
     internet: boolean;
     delegation?: Delegation;
     owner?: string;
+    /** Preferred language of the browser given at creation (BCP 47); absent without one. */
+    language?: string;
     created_at: string;
     updated_at: string;
     tokens: Tokens;
@@ -138,6 +140,8 @@ export type CreateChatRequest = {
     title?: string;
     message?: string;
     delegation?: Delegation;
+    /** Preferred language of the browser (BCP 47, navigator.language); the agent uses it only when a message shows no clear language. */
+    language?: string;
 };
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };
