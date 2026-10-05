@@ -185,7 +185,8 @@ const HttpError = (
     };
 };
 
-// URL of the agent gateway web UI; embed=true asks for the compact layout used in the side panel.
-const agentUrl = (embed = false) => `https://agent.${PROJECT_BASE_URL}/${embed ? '?embed=1' : ''}`;
+// URL of the agent gateway web UI, served by the platform under /agent/ on the same host;
+// embed=true asks for the compact layout used in the side panel.
+const agentUrl = (embed = false) => `/agent/${embed ? '?embed=1' : ''}`;
 
 export { PROJECT_BASE_URL, agentUrl, httpGet, httpPost, httpPut, httpPatch, httpUpload, httpDelete };
