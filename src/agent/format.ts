@@ -14,12 +14,12 @@ export const EFFECT_LABEL: Record<Effect, string> = {
     irreversible: 'Irreversible',
 };
 
-/** English labels for the gateway's connection variants; the gateway describes them in German. */
+/** Labels for the gateway's connection variants, more descriptive than the gateway's own. */
 const VARIANT_LABEL: Record<string, string> = {
     cli: 'Command line (bash, artifacts, subagents)',
     mcp: 'MCP (MCP tools only, read/write/ls, no bash)',
     api: 'REST API (platform_http only, no bash, no file tools)',
-    beide: 'MCP and command line',
+    both: 'MCP and command line',
 };
 
 /** Label of a connection variant; unknown ids keep the gateway's text. */
@@ -71,22 +71,22 @@ export const OUTCOME_LABEL: Record<Outcome, string> = {
 
 export function outcomeOf(result: string): Outcome {
     const r = result.toLowerCase();
-    if (r.startsWith('übergriff abgewiesen')) return 'blocked';
-    if (r.includes('übergriff, nur protokolliert')) return 'logged';
+    if (r.startsWith('violation blocked')) return 'blocked';
+    if (r.includes('violation, logged only')) return 'logged';
     if (r.startsWith('rejected')) return 'rejected';
-    if (r.startsWith('abgewiesen') || r.startsWith('nicht eingerichtet')) return 'refused';
+    if (r.startsWith('refused') || r.startsWith('not configured')) return 'refused';
     if (r.startsWith('ok')) return 'ok';
     return 'error';
 }
 
-/** Reason after the colon of a refused or blocked call (gateway text, German). */
+/** Reason after the colon of a refused or blocked call (gateway text). */
 export function outcomeReason(result: string): string | undefined {
     const i = result.indexOf(':');
     return i >= 0 ? result.slice(i + 1).trim() : undefined;
 }
 
 export const isPlatformCall = (c: SocketCall) => c.op === 'platform';
-export const isBlocked = (c: SocketCall) => /übergriff/i.test(c.result ?? '');
+export const isBlocked = (c: SocketCall) => /violation/i.test(c.result ?? '');
 
 /** Platform section for the context chip, derived from the route. */
 export function sectionOf(pathname: string): string | undefined {

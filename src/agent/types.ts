@@ -5,7 +5,7 @@
 // Subset of the agent gateway API types (agri-gaia-agent-gateway, API.md and web/src/api/types.ts),
 // limited to what the platform UI shows.
 
-export type VariantId = 'cli' | 'mcp' | 'api' | 'beide';
+export type VariantId = 'cli' | 'mcp' | 'api' | 'both';
 
 export type Model = { id: string; provider: string; model: string; name: string; default: boolean };
 
@@ -107,8 +107,8 @@ export type Approval = {
 
 /**
  * Entry of the socket log. For platform calls: op "platform", detail "METHOD path", result "ok 200",
- * "error 404", "rejected" (by the user), "übergriff abgewiesen: …" (blocked by the delegation) or
- * "abgewiesen: …" (refused by the gateway).
+ * "error 404", "rejected" (by the user), "violation blocked: …" (blocked by the delegation) or
+ * "refused: …" (refused by the gateway).
  */
 export type SocketCall = {
     id: number;

@@ -23,12 +23,13 @@ export type TranscriptItem =
     | { kind: 'notice'; key: string; text: string; label?: string }
     | { kind: 'agent'; key: string; parts: AgentPart[]; error?: string };
 
-const ATTACHMENTS_HEAD = '[Anhänge unter /workspace/inputs/]';
+/** Head of the attachments block the gateway appends to a user message (internal/chat/manager.go). */
+const ATTACHMENTS_HEAD = '[Attachments in /workspace/inputs/]';
 
 /** Fixed head of every gateway note inside a user message (agent gateway, internal/chat/origin.go). */
-const SYSTEM_HEADER = '[Meldung des Orchestrators, nicht vom Nutzer]';
+const SYSTEM_HEADER = '[Note from the orchestrator, not from the user]';
 
-/** English one-liner for a gateway note with a known type; the German text stays in the tooltip. */
+/** English one-liner for a gateway note with a known type; the gateway's text stays in the tooltip. */
 export function noteLabel(src: MessageSource): string | undefined {
     const refs = src.refs ?? [];
     switch (src.type) {

@@ -96,7 +96,7 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
 }
 
 /**
- * Pending approvals of a chat as one card, like the prototype's "Vorschläge" block: each request with
+ * Pending approvals of a chat as one card, like the prototype's "Suggestions" block: each request with
  * APPROVE / REJECT, and APPROVE ALL when there is more than one.
  */
 export default function ApprovalCard({
