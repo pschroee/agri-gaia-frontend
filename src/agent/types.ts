@@ -7,7 +7,39 @@
 
 export type VariantId = 'cli' | 'mcp' | 'api' | 'both';
 
-export type Model = { id: string; provider: string; model: string; name: string; default: boolean };
+/** Prices in US dollars per 1 M tokens (for DeepSeek the peak tariff, see Tariff). */
+export type Pricing = {
+    input: number;
+    output: number;
+    cache_read: number;
+    cache_write: number;
+    currency: 'USD';
+    note?: string;
+};
+
+/** Tariff with peak hours (UTC); outside them offpeak_factor applies to the prices in Pricing. */
+export type Tariff = {
+    peak_windows_utc: { days: string; from: string; to: string }[];
+    offpeak_factor: number;
+    note?: string;
+};
+
+export type Model = {
+    id: string;
+    provider: string;
+    model: string;
+    name: string;
+    default: boolean;
+    pricing?: Pricing;
+    tariff?: Tariff;
+    /** Is the peak tariff in effect right now? */
+    peak_now?: boolean;
+    /** Context window in tokens (0 or missing: unknown). */
+    context_window?: number;
+};
+
+/** Details of a refused model switch (409 "context_too_large"): limit = context window minus reserve. */
+export type ContextTooLarge = { model: string; tokens: number; window: number; limit: number };
 
 export type Variant = { id: VariantId; label: string; tools: string[] };
 
@@ -34,6 +66,12 @@ export type Chat = {
     running: boolean;
     running_since?: string;
     internet: boolean;
+    /** pi's thinking level (effort); missing until the gateway has read it. */
+    thinking_level?: string;
+    /** Thinking levels pi reports for the chat's model; missing or empty while unknown. */
+    thinking_levels?: string[];
+    /** Model the chat switches to after the running compaction. */
+    pending_model?: string;
     delegation?: Delegation;
     owner?: string;
     /** Preferred language of the browser given at creation (BCP 47); absent without one. */

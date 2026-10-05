@@ -24,11 +24,14 @@ export const agentEnabled = import.meta.env.VITE_AGENT_ENABLED === 'true';
 export class AgentApiError extends Error {
     readonly status: number;
     readonly code?: string;
-    constructor(status: number, message: string, code?: string) {
+    /** Machine-readable details, e.g. ContextTooLarge with code "context_too_large". */
+    readonly details?: unknown;
+    constructor(status: number, message: string, code?: string, details?: unknown) {
         super(message);
         this.name = 'AgentApiError';
         this.status = status;
         this.code = code;
+        this.details = details;
     }
 }
 
@@ -45,14 +48,16 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     if (!res.ok) {
         let message = `${res.status} ${res.statusText}`;
         let code: string | undefined;
+        let details: unknown;
         try {
-            const body = (await res.json()) as { error?: string; code?: string };
+            const body = (await res.json()) as { error?: string; code?: string; details?: unknown };
             if (body?.error) message = body.error;
             code = body?.code;
+            details = body?.details;
         } catch {
             // response without JSON body
         }
-        throw new AgentApiError(res.status, message, code);
+        throw new AgentApiError(res.status, message, code, details);
     }
     return (await res.json()) as T;
 }
@@ -70,6 +75,14 @@ export const agentApi = {
     chat: (id: string) => request<ChatDetail>(`chats/${enc(id)}`),
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
     sendMessage: (id: string, text: string) => post<SendResult>(`chats/${enc(id)}/messages`, { text }),
+    /**
+     * Switches the model (409 while the agent works; 409 code "context_too_large" when the context does not fit,
+     * then compactFirst: compacts and switches afterwards, pending_model until then).
+     */
+    setModel: (id: string, model: string, compactFirst = false) =>
+        post<Chat>(`chats/${enc(id)}/model`, compactFirst ? { model, compact_first: true } : { model }),
+    /** Sets pi's thinking level; only levels the model reports (400 otherwise), 409 while the agent works. */
+    setEffort: (id: string, level: string) => post<Chat>(`chats/${enc(id)}/effort`, { level }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
     /** Lets the chat rest: saves the session and releases the sandbox (409 with an open approval or while running). */
     suspend: (id: string) => post<Chat>(`chats/${enc(id)}/suspend`),
