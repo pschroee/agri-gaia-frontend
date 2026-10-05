@@ -52,6 +52,21 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `Conversation`, so it survives the switch from live to stored. "Always show thinking" (switch inside an expanded
   block) is stored per gateway user in `localStorage` (`agentAlwaysShowThinking:<sub>`, try/catch, memory fallback);
   switching it resets the per-block choices.
+- **Run control:** `RunStatus` above the input shows the run state of the open chat with a running timer and is the
+  only place to stop the agent (`POST …/abort`; the input only sends) or to let an idle chat rest (`POST …/suspend`).
+  The state comes from the pure `runStateOf` in `src/agent/runState.ts`: `working`, `waiting` (running with an open
+  approval; the live approval list beats the chat's counter), `resuming`, `idle` (active, sandbox assigned) and
+  `dormant` (shown as "resting"); the timer uses `running_since`, otherwise the last user message. After an abort the
+  queue is held (`QueueList`, "Send now"). `suspend` answers 409 with an open approval or while running; the text
+  comes from `suspendErrorText`. The open `ChatView` hands its chat to `updateChat` of the context, so the history
+  list, the chat selector and the panel header chip follow live, not only every 15 s.
+- **Resuming a dormant chat:** sending to a dormant chat resumes it; the response to `POST …/messages` comes only after
+  resuming. The SSE event `resume` (`ResumeStep`, phases acquire → session → settings → workspace → inputs, then
+  `ready` or `failed`) feeds the pure `applyResumeStep` in `src/agent/resume.ts`; `ResumeBlock` shows the steps live
+  and collapses to "Resumed in a fresh sandbox · 1.7 s" after the triggering user message (`resumeAnchor`, by message
+  `seq`, which transcript items now carry). The sent text shows greyed (`pending` in `useChatStream`) until its user
+  message is stored. A lost `ready` is closed on the next pi event (`closeResumes`). The steps exist only live: after a
+  page reload the block is gone. On `failed` the request fails and `ChatInput` puts the text back.
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
