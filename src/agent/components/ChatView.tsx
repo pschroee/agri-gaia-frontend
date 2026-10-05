@@ -51,6 +51,14 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     useEffect(() => {
         if (chat && updateChat) updateChat(chat);
     }, [chat, updateChat]);
+    // a running compaction shows in the context ring of the header
+    const setCompacting = agent?.setCompacting;
+    const compacting = stream.compacting;
+    useEffect(() => {
+        if (!setCompacting) return;
+        setCompacting(chatId, compacting);
+        return () => setCompacting(chatId, undefined);
+    }, [chatId, compacting, setCompacting]);
     const items = useMemo(
         () =>
             buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running, thinkingTimes }),

@@ -20,6 +20,7 @@ import { formatRelativeDay } from '../format';
 import { runSince, runStateOf } from '../runState';
 import ActivityView from './ActivityView';
 import ChatView from './ChatView';
+import { ChatCost, ContextMeter } from './ContextMeter';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
@@ -105,6 +106,35 @@ function History({ onNew }: { onNew: () => void }) {
     );
 }
 
+/** Head of the open chat: title, context ring, tokens and cost. */
+function ChatHeader() {
+    const { chats, selectedChatId, compacting } = useAgent();
+    const chat = chats.find((c) => c.id === selectedChatId);
+    if (!chat) return null;
+    return (
+        <Box
+            data-testid="agent-chat-header"
+            sx={{ display: 'flex', alignItems: 'center', gap: 2, borderBottom: 1, borderColor: 'divider', pb: 1.25 }}
+        >
+            <Typography
+                sx={{
+                    fontSize: 15,
+                    fontWeight: 500,
+                    minWidth: 0,
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {chat.title || 'Untitled chat'}
+            </Typography>
+            <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
+            <ChatCost chat={chat} tokens />
+        </Box>
+    );
+}
+
 /** Page "Agent" (/ai-agent) with the tabs Chat and Activity. */
 export default function AgentPage() {
     const { status, selectedChatId, refreshChats } = useAgent();
@@ -167,6 +197,7 @@ export default function AgentPage() {
                                 key={selectedChatId}
                                 chatId={selectedChatId}
                                 placeholder="Reply or describe a new task …"
+                                header={<ChatHeader />}
                             />
                         ) : (
                             <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>

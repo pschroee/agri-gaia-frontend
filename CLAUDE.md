@@ -78,6 +78,18 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `src/agent/modelChoice.ts`, unit-tested. **New chat:** `POST /chats` takes no thinking level; the dialog offers the
   levels other chats reported for the chosen model (`levelsByModel`), creates the chat without the first message,
   sets the level, then sends the message, so the first turn already runs with it.
+- **Context, tokens and cost:** `ContextMeter` shows the chat's `context` (pi's usage, gateway API.md) as a ring with
+  the percentage, a tick where auto-compaction starts (`threshold_tokens` = window minus reserve) and a tooltip with
+  tokens, window, threshold, reserve and headroom. The colour follows the distance to the threshold, not the share of
+  the window: amber from 15 % of the window before it, red from 5 % (`contextLevel` in `src/agent/usage.ts`). After a
+  compaction `tokens` is null until the next answer ("–"). A running compaction exists only live: SSE `pi`
+  `compaction_start`/`compaction_end` (`compactingAfter`, also closed by `agent_start`); the open `ChatView` hands it to
+  `setCompacting` of the context, so the panel header shows a spinner, and the transcript shows "Compacting the
+  context …", later the stored entry (role `compaction`, with sizes and cost). `ChatCost` shows `cost` (LLM proxy,
+  incl. subagents and compactions) with a split by `cost_other` and `llm_calls`. Each answer gets a muted line with
+  tokens, cost and tariff from the stored assistant messages (`cost`, `peak`; pi's flat `usage.cost.total` only as
+  "≈" fallback). Panel: ring and total cost in the header (the section chip then gives way; the input's placeholder
+  names the section); `/ai-agent`: a chat header with title, ring, tokens and cost.
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local

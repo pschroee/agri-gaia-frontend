@@ -22,6 +22,7 @@ import { useAgent } from '../AgentContext';
 import { sectionOf } from '../format';
 import { runSince, runStateOf } from '../runState';
 import ChatView from './ChatView';
+import { ChatCost, ContextMeter } from './ContextMeter';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
@@ -86,7 +87,7 @@ function ChatSelector({ onNew }: { onNew: () => void }) {
  * content makes room for it (PageContainer).
  */
 export default function AgentContextPanel() {
-    const { status, panelOpen, setPanelOpen, selectedChatId, chatsLoaded, chats } = useAgent();
+    const { status, panelOpen, setPanelOpen, selectedChatId, chatsLoaded, chats, compacting } = useAgent();
     const [newOpen, setNewOpen] = useState(false);
     const section = sectionOf(useLocation().pathname);
     // live through updateChat of the open ChatView
@@ -127,7 +128,14 @@ export default function AgentContextPanel() {
                         <RunStateChip state={selectedState} since={runSince(selected)} short framed />
                     </Box>
                 )}
-                {section && (
+                {selected && (
+                    <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                        <ContextMeter chat={selected} compacting={compacting[selected.id]} />
+                        <ChatCost chat={selected} />
+                    </Box>
+                )}
+                {/* with a chat open, the input's placeholder names the section and the room goes to context and cost */}
+                {section && !selected && (
                     <Box
                         sx={{
                             ml: 'auto',
@@ -146,14 +154,14 @@ export default function AgentContextPanel() {
                         }}
                         title={`Context: ${section}`}
                     >
-                        {selectedState ? section : `Context: ${section}`}
+                        {`Context: ${section}`}
                     </Box>
                 )}
                 <Tooltip title="Close">
                     <IconButton
                         size="small"
                         onClick={() => setPanelOpen(false)}
-                        sx={{ ml: section ? 0 : 'auto' }}
+                        sx={{ ml: section || selected ? 0 : 'auto' }}
                         aria-label="Close agent panel"
                     >
                         <CloseIcon fontSize="small" />
