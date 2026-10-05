@@ -13,6 +13,8 @@ import { applyResumeStep, closeResumes } from './resume';
 import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
+import { compactingAfter } from './usage';
+import type { Compacting } from './usage';
 import type {
     Approval,
     Chat,
@@ -44,6 +46,8 @@ export type ChatStream = {
     resumes: ResumeView[];
     /** Sent outside the queue, not stored yet (e.g. while a dormant chat resumes). */
     pending?: PendingSend;
+    /** Compaction running right now (SSE compaction_start until compaction_end), seen live in this view. */
+    compacting?: Compacting;
     loading: boolean;
     error?: string;
     connected: boolean;
@@ -93,6 +97,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [queueError, setQueueError] = useState<string>();
     const [resumes, setResumes] = useState<ResumeView[]>([]);
     const [pending, setPending] = useState<PendingSend>();
+    const [compacting, setCompacting] = useState<Compacting>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
     const pendingClear = useRef<'ended' | 'all'>();
     const chatRef = useRef<Chat>();
@@ -153,6 +158,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setQueueError(undefined);
         setResumes([]);
         setPending(undefined);
+        setCompacting(undefined);
         if (!chatId) return;
 
         let stopped = false;
@@ -183,6 +189,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         const d = ev.data as { type: string; message?: { role?: string }; [k: string]: unknown };
                         dispatchLive({ type: 'pi', event: d, now: Date.now() });
                         setResumes(closeResumes);
+                        setCompacting((c) => compactingAfter(c, d, Date.now()));
+                        // the compaction entry, its cost and the new context exist only in the stored chat
+                        if (d.type === 'compaction_end') scheduleReload();
                         if (d.type === 'message_end') scheduleReload(d.message?.role === 'assistant' ? 'ended' : undefined);
                         if (
                             d.type === 'tool_execution_start' ||
@@ -358,6 +367,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         thinkingTimes: liveState.times,
         resumes,
         pending,
+        compacting,
         loading,
         error,
         connected,

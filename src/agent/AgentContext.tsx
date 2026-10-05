@@ -6,6 +6,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 
 import { AgentApiError, agentApi, silentLogin } from './api';
 import type { Chat, Me, Model } from './types';
+import type { Compacting } from './usage';
 
 export type SessionStatus = 'checking' | 'ready' | 'signed-out' | 'error';
 
@@ -26,6 +27,9 @@ type AgentState = {
     addChat: (chat: Chat) => void;
     /** Replaces a known chat with a newer state (from the open chat's stream), so lists and header follow live. */
     updateChat: (chat: Chat) => void;
+    /** Compactions the open chat views see running right now, by chat id (for the panel header). */
+    compacting: Record<string, Compacting>;
+    setCompacting: (chatId: string, c: Compacting | undefined) => void;
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
 };
@@ -65,6 +69,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [models, setModels] = useState<Model[]>([]);
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
     const [panelOpen, setPanelOpenState] = useState(() => load(PANEL_KEY) === 'true');
+    const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
     const checking = useRef(false);
 
     const check = useCallback(async (allowSilent: boolean) => {
@@ -157,6 +162,16 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
+    const setCompacting = useCallback((chatId: string, c: Compacting | undefined) => {
+        setCompactingState((m) => {
+            if (m[chatId] === c) return m;
+            const next = { ...m };
+            if (c) next[chatId] = c;
+            else delete next[chatId];
+            return next;
+        });
+    }, []);
+
     const setPanelOpen = useCallback((open: boolean) => {
         setPanelOpenState(open);
         store(PANEL_KEY, String(open));
@@ -176,6 +191,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectChat,
             addChat,
             updateChat,
+            compacting,
+            setCompacting,
             panelOpen,
             setPanelOpen,
         }),
@@ -192,6 +209,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectChat,
             addChat,
             updateChat,
+            compacting,
+            setCompacting,
             panelOpen,
             setPanelOpen,
         ],
