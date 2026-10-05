@@ -5,6 +5,8 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, eventsUrl } from './api';
+import { emptyLive, liveReducer, liveTextOf } from './live';
+import type { LiveMessage, ThinkingTime } from './live';
 import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
 import type { QueueRow } from './queue';
 import type { Approval, Chat, QueueEvent, ServerEvent, SocketCall, StoredMessage, ToolExecution } from './types';
@@ -21,6 +23,10 @@ export type ChatStream = {
     queueError?: string;
     /** Text of the answer that is being streamed right now (not yet stored). */
     liveText: string;
+    /** The answer that is being streamed right now: text, thinking and tool calls in order (not yet stored). */
+    live?: LiveMessage;
+    /** Thinking blocks measured while streaming, by thinkingKey (pi stores no timing). */
+    thinkingTimes: Record<string, ThinkingTime>;
     loading: boolean;
     error?: string;
     connected: boolean;
@@ -55,24 +61,27 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [approvals, setApprovals] = useState<Approval[]>([]);
     const [socketCalls, setSocketCalls] = useState<SocketCall[]>([]);
     const [executions, setExecutions] = useState<ToolExecution[]>([]);
-    const [liveText, setLiveText] = useState('');
+    const [liveState, dispatchLive] = useReducer(liveReducer, emptyLive);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>();
     const [connected, setConnected] = useState(false);
     const [queueState, dispatchQueue] = useReducer(queueReducer, emptyQueue);
     const [queueError, setQueueError] = useState<string>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
+    const pendingClear = useRef<'ended' | 'all'>();
     const chatRef = useRef<Chat>();
     chatRef.current = chat;
     const messagesRef = useRef<StoredMessage[]>([]);
     messagesRef.current = messages;
 
-    const load = useCallback(async () => {
+    const load = useCallback(async (clearLive?: 'ended' | 'all') => {
         if (!chatId) return;
         try {
             const d = await agentApi.chat(chatId);
             setChat(d.chat);
             setMessages(d.messages ?? []);
+            // in the same render as the stored messages, so the answer is not shown twice
+            if (clearLive) dispatchLive({ type: 'clear', onlyEnded: clearLive === 'ended' });
             messagesRef.current = d.messages ?? [];
             setApprovals(d.approvals ?? []);
             setSocketCalls(d.socket_calls ?? []);
@@ -91,12 +100,14 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     }, [chatId]);
 
     const scheduleReload = useCallback(
-        (clearLive = false) => {
+        (clearLive?: 'ended' | 'all') => {
             if (reloadTimer.current) clearTimeout(reloadTimer.current);
+            // a later reload without clearing must not drop the clearing of an earlier one
+            if (clearLive === 'all' || (clearLive === 'ended' && !pendingClear.current)) pendingClear.current = clearLive;
             reloadTimer.current = setTimeout(() => {
-                void load().then(() => {
-                    if (clearLive) setLiveText('');
-                });
+                const clear = pendingClear.current;
+                pendingClear.current = undefined;
+                void load(clear);
             }, 250);
         },
         [load],
@@ -108,7 +119,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setApprovals([]);
         setSocketCalls([]);
         setExecutions([]);
-        setLiveText('');
+        dispatchLive({ type: 'reset' });
+        pendingClear.current = undefined;
         setError(undefined);
         dispatchQueue({ type: 'reset' });
         setQueueError(undefined);
@@ -140,18 +152,14 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                 switch (ev.kind) {
                     case 'pi': {
                         const d = ev.data as { type: string; message?: { role?: string }; [k: string]: unknown };
-                        if (d.type === 'message_start' && d.message?.role === 'assistant') setLiveText('');
-                        if (d.type === 'message_update') {
-                            const a = d.assistantMessageEvent as { type?: string; delta?: string } | undefined;
-                            if (a?.type === 'text_delta' && a.delta) setLiveText((t) => t + a.delta);
-                        }
-                        if (d.type === 'message_end') scheduleReload(d.message?.role === 'assistant');
+                        dispatchLive({ type: 'pi', event: d, now: Date.now() });
+                        if (d.type === 'message_end') scheduleReload(d.message?.role === 'assistant' ? 'ended' : undefined);
                         if (
                             d.type === 'tool_execution_start' ||
                             d.type === 'tool_execution_end' ||
                             d.type === 'agent_settled'
                         ) {
-                            scheduleReload(d.type === 'agent_settled');
+                            scheduleReload(d.type === 'agent_settled' ? 'all' : undefined);
                         }
                         break;
                     }
@@ -256,7 +264,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         scheduleReload();
     }, [chatId, scheduleReload]);
 
+    const reload = useCallback(() => load(), [load]);
+
     const queue = useMemo(() => queueRows(queueState, chat), [queueState, chat]);
+    const liveText = useMemo(() => liveTextOf(liveState.message), [liveState.message]);
 
     const abort = useCallback(async () => {
         if (!chatId) return;
@@ -277,10 +288,12 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         queue,
         queueError,
         liveText,
+        live: liveState.message,
+        thinkingTimes: liveState.times,
         loading,
         error,
         connected,
-        reload: load,
+        reload,
         send,
         unqueue,
         sendQueueNow,

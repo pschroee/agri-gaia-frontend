@@ -2,15 +2,24 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { useCallback, useMemo, useState } from 'react';
+
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
+import { useAlwaysShowThinking } from '../thinkingPref';
+import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import Markdown from './Markdown';
 import StepList from './StepList';
+import ThinkingBlock from './ThinkingBlock';
+
+const NO_CHOICES: Record<string, boolean> = {};
+
+type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
 
 function UserBubble({ text, dense }: { text: string; dense: boolean }) {
     return (
@@ -34,19 +43,38 @@ function UserBubble({ text, dense }: { text: string; dense: boolean }) {
     );
 }
 
-function AgentBlock({ item, dense }: { item: Extract<TranscriptItem, { kind: 'agent' }>; dense: boolean }) {
+function AgentBlock({
+    item,
+    dense,
+    thinking,
+}: {
+    item: Extract<TranscriptItem, { kind: 'agent' }>;
+    dense: boolean;
+    thinking: Thinking;
+}) {
     return (
         <Box sx={{ display: 'flex', minWidth: 0 }}>
             <Box sx={{ flex: 1, minWidth: 0, fontSize: dense ? 13.5 : 14.5, lineHeight: 1.6 }}>
-                {item.parts.map((p, i) =>
-                    p.type === 'text' ? (
-                        <Box key={i} sx={{ mb: 1 }}>
-                            <Markdown text={p.text} dense={dense} />
-                        </Box>
-                    ) : (
-                        <StepList key={i} steps={p.steps} />
-                    ),
-                )}
+                {item.parts.map((p, i) => {
+                    if (p.type === 'text') {
+                        return (
+                            <Box key={i} sx={{ mb: 1 }}>
+                                <Markdown text={p.text} dense={dense} />
+                            </Box>
+                        );
+                    }
+                    if (p.type === 'thinking') {
+                        return (
+                            <ThinkingBlock
+                                key={p.id}
+                                part={p}
+                                open={thinking.open[p.id]}
+                                onOpenChange={thinking.onOpenChange}
+                            />
+                        );
+                    }
+                    return <StepList key={i} steps={p.steps} />;
+                })}
                 {item.error && (
                     <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>
                 )}
@@ -77,7 +105,7 @@ function Notice({ text, label }: { text: string; label?: string }) {
 
 /**
  * The conversation of a chat: user messages as green bubbles, agent answers with markdown and tool
- * steps, notices of the gateway, the answer that is streaming right now and a working indicator. Scrolling is
+ * steps and collapsed thinking, notices of the gateway, the answer that is streaming right now and a working indicator. Scrolling is
  * up to the caller (ChatView, useStickToBottom).
  */
 export default function Conversation({
@@ -90,7 +118,23 @@ export default function Conversation({
     items: TranscriptItem[];
     dense?: boolean;
 }) {
-    const { chat, liveText } = stream;
+    const { chat, live } = stream;
+    const liveP = useMemo(() => liveParts(live), [live]);
+    // Open state chosen per thinking block; kept here so it survives the switch from live to stored message.
+    // The choices belong to one value of "Always show thinking": switching it applies to every block again.
+    const [alwaysShow] = useAlwaysShowThinking();
+    const [choices, setChoices] = useState<{ pref: boolean; open: Record<string, boolean> }>({
+        pref: alwaysShow,
+        open: {},
+    });
+    const onOpenChange = useCallback(
+        (id: string, o: boolean) =>
+            setChoices((c) => ({ pref: alwaysShow, open: { ...(c.pref === alwaysShow ? c.open : {}), [id]: o } })),
+        [alwaysShow],
+    );
+    const open = choices.pref === alwaysShow ? choices.open : NO_CHOICES;
+    const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);
+    const hasLive = liveP.length > 0;
 
     if (stream.loading && items.length === 0) {
         return (
@@ -102,7 +146,7 @@ export default function Conversation({
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 1.5 : 1.75 }}>
-            {items.length === 0 && !liveText && (
+            {items.length === 0 && !hasLive && (
                 <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
                     No messages yet. Describe what you want to do.
                 </Typography>
@@ -113,16 +157,13 @@ export default function Conversation({
                 ) : it.kind === 'notice' ? (
                     <Notice key={it.key} text={it.text} label={it.label} />
                 ) : (
-                    <AgentBlock key={it.key} item={it} dense={dense} />
+                    <AgentBlock key={it.key} item={it} dense={dense} thinking={thinking} />
                 ),
             )}
-            {liveText && (
-                <AgentBlock
-                    item={{ kind: 'agent', key: 'live', parts: [{ type: 'text', text: liveText }] }}
-                    dense={dense}
-                />
+            {hasLive && (
+                <AgentBlock item={{ kind: 'agent', key: 'live', parts: liveP }} dense={dense} thinking={thinking} />
             )}
-            {chat?.running && !liveText && (
+            {chat?.running && !hasLive && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}>
                     <CircularProgress size={14} />
                     {chat.resuming ? 'Resuming the chat …' : 'The agent is working …'}

@@ -79,7 +79,8 @@ export type QueueEvent = {
 };
 
 export type TextContent = { type: 'text'; text: string };
-export type ThinkingContent = { type: 'thinking'; thinking: string };
+/** Thinking of the model; redacted blocks carry no readable text. */
+export type ThinkingContent = { type: 'thinking'; thinking: string; redacted?: boolean };
 export type ToolCallContent = { type: 'toolCall'; id: string; name: string; arguments: unknown };
 export type ImageContent = { type: 'image'; data?: string; mimeType?: string };
 export type ContentBlock = TextContent | ThinkingContent | ToolCallContent | ImageContent;

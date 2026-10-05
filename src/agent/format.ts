@@ -179,3 +179,13 @@ export function summarizeRules(rules: DelegationRule[]): string[] {
         return `${action} ${resources.join(', ')}${ids}`;
     });
 }
+
+/** Header text: "Thinking · 4.2 s", live "Thinking … 3 s", without a measured duration just "Thinking". */
+export function thinkingLabel(part: { durationMs?: number; liveSince?: number }, now: number): string {
+    if (part.liveSince !== undefined) {
+        const s = Math.max(0, Math.floor((now - part.liveSince) / 1000));
+        return s > 0 ? `Thinking … ${s} s` : 'Thinking …';
+    }
+    const d = formatMs(part.durationMs);
+    return d ? `Thinking · ${d}` : 'Thinking';
+}

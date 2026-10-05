@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 import { isBlocked } from './format';
+import { hasThinkingText, thinkingDuration, thinkingKey } from './live';
+import type { LiveMessage, ThinkingTime } from './live';
 import type { Approval, ContentBlock, MessageSource, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
 
 export type StepStatus = 'running' | 'done' | 'error' | 'waiting' | 'blocked' | 'stopped';
@@ -16,7 +18,18 @@ export type Step = {
     durationMs?: number;
 };
 
-export type AgentPart = { type: 'text'; text: string } | { type: 'steps'; steps: Step[] };
+/** Thinking of the model. id identifies the block across live and stored message (for its open state). */
+export type ThinkingPart = {
+    type: 'thinking';
+    id: string;
+    text: string;
+    /** Measured while streaming; unknown for blocks that were not seen live (pi stores no timing). */
+    durationMs?: number;
+    /** The model is still thinking: start of the block, for a running timer. */
+    liveSince?: number;
+};
+
+export type AgentPart = { type: 'text'; text: string } | ThinkingPart | { type: 'steps'; steps: Step[] };
 
 export type TranscriptItem =
     | { kind: 'user'; key: string; text: string }
@@ -126,7 +139,16 @@ type Context = {
     socketCalls: SocketCall[];
     executions: ToolExecution[];
     running: boolean;
+    /** Thinking blocks measured live (live.ts), by thinkingKey. */
+    thinkingTimes?: Record<string, ThinkingTime>;
 };
+
+/** Appends a tool step to the parts, joining it with a directly preceding step list. */
+function pushStep(parts: AgentPart[], step: Step) {
+    const last = parts[parts.length - 1];
+    if (last?.type === 'steps') last.steps.push(step);
+    else parts.push({ type: 'steps', steps: [step] });
+}
 
 /**
  * Builds the conversation from the stored messages: user messages, notices of the gateway (wake-ups)
@@ -185,20 +207,57 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             agent = { kind: 'agent', key: `a${m.seq}`, parts: [] };
             items.push(agent);
         }
+        const cur = agent;
         const blocks = Array.isArray(msg.content) ? msg.content : [];
-        for (const b of blocks) {
+        blocks.forEach((b, idx) => {
             if (b.type === 'text' && b.text.trim()) {
-                agent.parts.push({ type: 'text', text: b.text });
+                cur.parts.push({ type: 'text', text: b.text });
+            } else if (b.type === 'thinking' && hasThinkingText(b.thinking)) {
+                const ts = msg.timestamp;
+                const id = ts === undefined ? `s${m.seq}:${idx}` : thinkingKey(ts, idx);
+                const durationMs = thinkingDuration(ctx.thinkingTimes?.[id]);
+                cur.parts.push({ type: 'thinking', id, text: b.thinking, durationMs });
             } else if (b.type === 'toolCall') {
-                const last = agent.parts[agent.parts.length - 1];
-                const step = stepFor(b.id, b.name, b.arguments);
-                if (last?.type === 'steps') last.steps.push(step);
-                else agent.parts.push({ type: 'steps', steps: [step] });
+                pushStep(cur.parts, stepFor(b.id, b.name, b.arguments));
             }
-        }
+        });
         if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
     }
     return items;
+}
+
+/**
+ * Parts of the message that is being streamed: text, thinking (running ones with their start) and tool calls
+ * as running steps, in the order of the content blocks.
+ */
+export function liveParts(msg: LiveMessage | undefined): AgentPart[] {
+    const parts: AgentPart[] = [];
+    if (!msg) return parts;
+    msg.blocks.forEach((b, idx) => {
+        if (b.type === 'text') {
+            if (b.text.trim()) parts.push({ type: 'text', text: b.text });
+        } else if (b.type === 'thinking') {
+            const running = b.endedAt === undefined && !msg.ended;
+            // a running block shows up at once ("Thinking …"), a finished one only with text
+            if (!running && !hasThinkingText(b.thinking)) return;
+            const id = msg.timestamp === undefined ? `live:${idx}` : thinkingKey(msg.timestamp, idx);
+            parts.push({
+                type: 'thinking',
+                id,
+                text: b.thinking,
+                durationMs: running ? undefined : thinkingDuration(b),
+                liveSince: running ? b.startedAt : undefined,
+            });
+        } else if (b.id || b.name) {
+            pushStep(parts, {
+                id: b.id || `live:${idx}`,
+                tool: displayToolName(b.name),
+                summary: summarizeArgs(b.arguments),
+                status: 'running',
+            });
+        }
+    });
+    return parts;
 }
 
 /** Number of entries a reader sees: messages, notices, agent answers and each tool call in them. */
