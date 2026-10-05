@@ -7,6 +7,8 @@ import { Fragment, useCallback, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
+import Tooltip from '@mui/material/Tooltip';
+import CompressIcon from '@mui/icons-material/Compress';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
 import { resumeAnchor, resumeRunning } from '../resume';
@@ -15,6 +17,8 @@ import { useAlwaysShowThinking } from '../thinkingPref';
 import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
+import { compactionReason, formatAnswerUsage, formatTokens, formatUsd, TARIFF_LABEL } from '../usage';
+import type { AnswerUsage } from '../usage';
 import Markdown from './Markdown';
 import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
@@ -84,7 +88,79 @@ function AgentBlock({
                 {item.error && (
                     <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>
                 )}
+                {item.usage && <UsageLine usage={item.usage} />}
             </Box>
+        </Box>
+    );
+}
+
+/** Muted line under an answer: tokens, cost by tariff and the tariff it fell into. */
+function UsageLine({ usage }: { usage: AnswerUsage }) {
+    const hint = [
+        usage.cost !== undefined
+            ? `Cost by tariff at the time of the answer${usage.tariff ? ` (${TARIFF_LABEL[usage.tariff]})` : ''}.`
+            : usage.flatCost !== undefined
+              ? "Approximate: pi's flat price, no tariff cost stored for this answer."
+              : 'No cost stored for this answer.',
+        usage.calls > 1 ? `${usage.calls} model calls in this answer.` : undefined,
+        'Subagents and compactions count only in the chat total.',
+    ]
+        .filter(Boolean)
+        .join(' ');
+    return (
+        <Tooltip title={hint} placement="bottom-start">
+            <Typography
+                data-testid="agent-answer-usage"
+                sx={{
+                    fontSize: 11.5,
+                    color: 'text.disabled',
+                    fontVariantNumeric: 'tabular-nums',
+                    mt: 0.25,
+                    width: 'fit-content',
+                }}
+            >
+                {formatAnswerUsage(usage)}
+            </Typography>
+        </Tooltip>
+    );
+}
+
+/** Divider-like line for a compaction: stored ones with their sizes, a running one with a spinner. */
+function CompactionLine({
+    item,
+    running,
+}: {
+    item?: Extract<TranscriptItem, { kind: 'compaction' }>;
+    running?: { reason: string };
+}) {
+    const reason = compactionReason(running?.reason ?? item?.reason);
+    let text: string;
+    if (running) text = `Compacting the context${reason ? ` (${reason})` : ''} …`;
+    else {
+        const sizes =
+            item?.tokensBefore !== undefined
+                ? ` · ${formatTokens(item.tokensBefore)} → ${
+                      item.tokensAfter !== undefined ? `≈ ${formatTokens(item.tokensAfter)}` : '?'
+                  } tokens`
+                : '';
+        text = `Context compacted${reason ? ` (${reason})` : ''}${sizes}${
+            item?.cost !== undefined ? ` · ${formatUsd(item.cost)}` : ''
+        }`;
+    }
+    return (
+        <Box
+            data-testid={running ? 'agent-compacting' : 'agent-compaction'}
+            sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                fontSize: 12,
+                color: 'text.secondary',
+                '&::before, &::after': { content: '""', flex: 1, borderTop: 1, borderColor: 'divider' },
+            }}
+        >
+            {running ? <CircularProgress size={12} /> : <CompressIcon sx={{ fontSize: 14 }} />}
+            <span>{text}</span>
         </Box>
     );
 }
@@ -175,6 +251,8 @@ export default function Conversation({
                         <UserBubble text={it.text} dense={dense} />
                     ) : it.kind === 'notice' ? (
                         <Notice text={it.text} label={it.label} />
+                    ) : it.kind === 'compaction' ? (
+                        <CompactionLine item={it} />
                     ) : (
                         <AgentBlock item={it} dense={dense} thinking={thinking} />
                     )}
@@ -194,7 +272,8 @@ export default function Conversation({
             {hasLive && (
                 <AgentBlock item={{ kind: 'agent', key: 'live', parts: liveP }} dense={dense} thinking={thinking} />
             )}
-            {(chat?.running || pending) && !hasLive && !resuming && (
+            {stream.compacting && <CompactionLine running={stream.compacting} />}
+            {(chat?.running || pending) && !hasLive && !resuming && !stream.compacting && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}>
                     <CircularProgress size={14} />
                     {chat?.resuming
