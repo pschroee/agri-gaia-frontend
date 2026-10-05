@@ -9,7 +9,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
-import { buildTranscript, countEntries } from '../transcript';
+import { buildTranscript, countEntries, liveParts } from '../transcript';
 
 import { useChatStream } from '../useChatStream';
 import { useStickToBottom } from '../useStickToBottom';
@@ -35,13 +35,18 @@ type Props = {
  */
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
     const stream = useChatStream(chatId);
-    const { messages, approvals, socketCalls, executions, chat, liveText, send } = stream;
+    const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const items = useMemo(
-        () => buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running }),
-        [messages, approvals, socketCalls, executions, chat?.running],
+        () =>
+            buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running, thinkingTimes }),
+        [messages, approvals, socketCalls, executions, chat?.running, thinkingTimes],
     );
-    const count = countEntries(items) + pending.length + (liveText ? 1 : 0);
+    const liveCount = useMemo(() => {
+        const parts = liveParts(live);
+        return parts.length ? countEntries([{ kind: 'agent', key: 'live', parts }]) : 0;
+    }, [live]);
+    const count = countEntries(items) + pending.length + liveCount;
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
     // After sending, the own message and the answer are what the user wants to see.
     const onSend = useCallback(
