@@ -2,14 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useMemo, useRef } from 'react';
-
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 
-import { buildTranscript, TranscriptItem } from '../transcript';
+import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import Markdown from './Markdown';
 import StepList from './StepList';
@@ -79,22 +77,20 @@ function Notice({ text, label }: { text: string; label?: string }) {
 
 /**
  * The conversation of a chat: user messages as green bubbles, agent answers with markdown and tool
- * steps, notices of the gateway, the answer that is streaming right now and a working indicator.
+ * steps, notices of the gateway, the answer that is streaming right now and a working indicator. Scrolling is
+ * up to the caller (ChatView, useStickToBottom).
  */
-export default function Conversation({ stream, dense = false }: { stream: ChatStream; dense?: boolean }) {
-    const { messages, approvals, socketCalls, executions, chat, liveText } = stream;
-    const items = useMemo(
-        () => buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running }),
-        [messages, approvals, socketCalls, executions, chat?.running],
-    );
-    const end = useRef<HTMLDivElement>(null);
-
-    // Keep the newest message in view: scroll the nearest scrolling container (not the page).
-    useEffect(() => {
-        let el = end.current?.parentElement ?? null;
-        while (el && !/(auto|scroll)/.test(getComputedStyle(el).overflowY)) el = el.parentElement;
-        if (el) el.scrollTop = el.scrollHeight;
-    }, [items.length, liveText]);
+export default function Conversation({
+    stream,
+    items,
+    dense = false,
+}: {
+    stream: ChatStream;
+    /** The transcript, built by the caller (it also counts the entries for scrolling). */
+    items: TranscriptItem[];
+    dense?: boolean;
+}) {
+    const { chat, liveText } = stream;
 
     if (stream.loading && items.length === 0) {
         return (
@@ -132,7 +128,6 @@ export default function Conversation({ stream, dense = false }: { stream: ChatSt
                     {chat.resuming ? 'Resuming the chat …' : 'The agent is working …'}
                 </Box>
             )}
-            <div ref={end} />
         </Box>
     );
 }
