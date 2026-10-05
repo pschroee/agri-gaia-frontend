@@ -21,6 +21,7 @@ import { runSince, runStateOf } from '../runState';
 import ActivityView from './ActivityView';
 import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
+import InternetToggle from './InternetToggle';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
@@ -106,7 +107,7 @@ function History({ onNew }: { onNew: () => void }) {
     );
 }
 
-/** Head of the open chat: title, context ring, tokens and cost. */
+/** Head of the open chat: title, internet switch, context ring, tokens and cost. */
 function ChatHeader() {
     const { chats, selectedChatId, compacting } = useAgent();
     const chat = chats.find((c) => c.id === selectedChatId);
@@ -129,6 +130,7 @@ function ChatHeader() {
             >
                 {chat.title || 'Untitled chat'}
             </Typography>
+            <InternetToggle chat={chat} />
             <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
             <ChatCost chat={chat} tokens />
         </Box>

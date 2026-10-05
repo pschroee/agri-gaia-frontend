@@ -115,6 +115,10 @@ export type Chat = {
     auto_compact?: boolean;
     /** Compactions so far. */
     compactions?: number;
+    /** At most this many subagents (enforced at the LLM proxy and by aborting the turn). */
+    max_subagents?: number;
+    /** Subagent runs started so far. */
+    subagents?: number;
     artifact_count: number;
     pending_approvals: number;
     resuming?: boolean;
@@ -270,6 +274,15 @@ export type CreateChatRequest = {
     delegation?: Delegation;
     /** Preferred language of the browser (BCP 47, navigator.language); the agent uses it only when a message shows no clear language. */
     language?: string;
+};
+
+/** Defaults and limits of the gateway (GET /config), the subset the platform UI uses. */
+export type Config = {
+    internet_default?: boolean;
+    auto_compact_default?: boolean;
+    max_subagents_default?: number;
+    /** Upper bound for max_subagents per chat. */
+    max_subagents_limit?: number;
 };
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };

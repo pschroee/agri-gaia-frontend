@@ -5,7 +5,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, silentLogin } from './api';
-import type { Chat, Me, Model } from './types';
+import type { Chat, Config, Me, Model } from './types';
 import type { Compacting } from './usage';
 
 export type SessionStatus = 'checking' | 'ready' | 'signed-out' | 'error';
@@ -20,6 +20,8 @@ type AgentState = {
     chatsLoaded: boolean;
     /** Selectable models of the gateway (loaded once after sign-in; empty until then or on failure). */
     models: Model[];
+    /** Defaults and limits of the gateway (loaded once after sign-in; undefined until then or on failure). */
+    config?: Config;
     refreshChats: () => Promise<void>;
     selectedChatId?: string;
     selectChat: (id: string | undefined) => void;
@@ -67,6 +69,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [chats, setChats] = useState<Chat[]>([]);
     const [chatsLoaded, setChatsLoaded] = useState(false);
     const [models, setModels] = useState<Model[]>([]);
+    const [config, setConfig] = useState<Config>();
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
     const [panelOpen, setPanelOpenState] = useState(() => load(PANEL_KEY) === 'true');
     const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
@@ -127,6 +130,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             .catch(() => {
                 // without the list the pickers show model ids
             });
+        agentApi
+            .config()
+            .then((c) => setConfig(c && typeof c === 'object' ? c : undefined))
+            .catch(() => {
+                // without the config the subagent limit has no upper bound in the UI; the gateway still checks it
+            });
     }, [status]);
 
     // Fall back to the newest chat when the remembered one is gone.
@@ -186,6 +195,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             chats,
             chatsLoaded,
             models,
+            config,
             refreshChats,
             selectedChatId,
             selectChat,
@@ -204,6 +214,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             chats,
             chatsLoaded,
             models,
+            config,
             refreshChats,
             selectedChatId,
             selectChat,

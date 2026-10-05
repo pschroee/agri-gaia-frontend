@@ -57,6 +57,8 @@ export type ChatStream = {
     error?: string;
     connected: boolean;
     reload: () => Promise<void>;
+    /** Takes a newer chat state from an answer of the gateway (e.g. after switching a setting). */
+    applyChat: (chat: Chat) => void;
     /** Sends a message; while the agent works the gateway queues it. */
     send: (text: string) => Promise<void>;
     /** Removes a queued entry that has not been delivered yet. */
@@ -400,6 +402,13 @@ export function useChatStream(chatId: string | undefined): ChatStream {
 
     const reload = useCallback(() => load(), [load]);
 
+    const applyChat = useCallback(
+        (c: Chat) => {
+            if (c.id === chatId) setChat(c);
+        },
+        [chatId],
+    );
+
     const queue = useMemo(() => queueRows(queueState, chat), [queueState, chat]);
     const liveText = useMemo(() => liveTextOf(liveState.message), [liveState.message]);
 
@@ -454,6 +463,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         error,
         connected,
         reload,
+        applyChat,
         send,
         unqueue,
         sendQueueNow,

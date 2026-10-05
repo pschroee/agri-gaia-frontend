@@ -7,6 +7,7 @@ import type {
     Chat,
     ChatDetail,
     Command,
+    Config,
     CreateChatRequest,
     Me,
     Model,
@@ -70,6 +71,8 @@ const enc = encodeURIComponent;
 
 export const agentApi = {
     me: () => request<Me>('me'),
+    /** Defaults and limits (max_subagents_limit …). */
+    config: () => request<Config>('config'),
     models: () => request<Model[]>('models'),
     variants: () => request<Variant[]>('variants'),
     chats: () => request<Chat[]>('chats'),
@@ -91,6 +94,12 @@ export const agentApi = {
         post<Chat>(`chats/${enc(id)}/model`, compactFirst ? { model, compact_first: true } : { model }),
     /** Sets pi's thinking level; only levels the model reports (400 otherwise), 409 while the agent works. */
     setEffort: (id: string, level: string) => post<Chat>(`chats/${enc(id)}/effort`, { level }),
+    /** Internet access of the sandbox; immediate for an active chat, otherwise on the next resume. */
+    setInternet: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/internet`, { enabled }),
+    /** Automatic compaction on or off. */
+    setAutoCompact: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/autocompact`, { enabled }),
+    /** Limit for subagents (0 … max_subagents_limit, 400 otherwise); takes effect immediately. */
+    setMaxSubagents: (id: string, max: number) => post<Chat>(`chats/${enc(id)}/subagents`, { max }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
     /** Lets the chat rest: saves the session and releases the sandbox (409 with an open approval or while running). */
     suspend: (id: string) => post<Chat>(`chats/${enc(id)}/suspend`),

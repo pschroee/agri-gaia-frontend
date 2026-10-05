@@ -79,9 +79,9 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   levels other chats reported for the chosen model (`levelsByModel`), creates the chat without the first message,
   sets the level, then sends the message, so the first turn already runs with it.
 - **Context, tokens and cost:** `ContextMeter` shows the chat's `context` (pi's usage, gateway API.md) as a ring with
-  the percentage, a tick where auto-compaction starts (`threshold_tokens` = window minus reserve) and a tooltip with
-  tokens, window, threshold, reserve and headroom. The colour follows the distance to the threshold, not the share of
-  the window: amber from 15 % of the window before it, red from 5 % (`contextLevel` in `src/agent/usage.ts`). After a
+  the percentage, a tick where auto-compaction starts (`threshold_tokens` = window minus reserve) and, on click, a
+  popover with tokens, window, threshold, reserve and headroom plus the compaction settings (see *Chat settings*).
+  The colour follows the distance to the threshold, not the share of the window: amber from 15 % of the window before it, red from 5 % (`contextLevel` in `src/agent/usage.ts`). After a
   compaction `tokens` is null until the next answer ("–"). A running compaction exists only live: SSE `pi`
   `compaction_start`/`compaction_end` (`compactingAfter`, also closed by `agent_start`); the open `ChatView` hands it to
   `setCompacting` of the context, so the panel header shows a spinner, and the transcript shows "Compacting the
@@ -102,6 +102,20 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   follow; a failure (409 for `/compact` while the agent works, a missing argument checked before the call) is an error
   note and the text goes back into the input. `/model` with `context_too_large` opens the picker's "compact first"
   dialog (`tooLargeRequest`). Skills, templates and extensions go to pi like a message (pending bubble or queue).
+- **Chat settings:** internet access, automatic compaction, "Compact now" and the subagent limit, as in the gateway's
+  own UI. `useChatSettings` posts `…/internet`, `…/autocompact`, `…/subagents` (`{enabled}` / `{max}`) and `/compact`
+  via `POST …/commands`; the returned chat goes to `updateChat` of the context (and, for controls inside `ChatView`, to
+  `applyChat` of the stream), the gateway also publishes it as SSE `chat`. **Internet:** a globe (`InternetToggle`):
+  in the panel it is itself the switch (`role="switch"`) next to the chat selector, because the panel header has no
+  room left with a long run-state chip; on `/ai-agent` a labelled switch in the chat header. The tooltip says what on
+  and off mean and that a dormant chat gets the change on resume. When the agent asks for internet (`agw-internet`,
+  MCP `request_internet`) the approval of kind `internet_access` shows in `ApprovalCard` with its reason (the
+  approval's `name`; the gateway's "(no reason given)" is hidden), who asks (agent or subagent by `session`) and
+  "Allow internet" / "Reject". **Compaction:** switch and "Compact now" in the context popover; the button is locked
+  while the agent works, resumes or compacts; a 409 is explained inline. **Subagents:** `SubagentLimitButton` in the
+  row below the input ("Subagents 1 / 2", in the panel "1/2"), a popover with a stepper bounded by
+  `max_subagents_limit` from `GET /config` (loaded once in `AgentContext`). Texts and bounds are pure functions in
+  `src/agent/settings.ts`, unit-tested.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local

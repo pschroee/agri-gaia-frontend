@@ -23,6 +23,7 @@ import { sectionOf } from '../format';
 import { runSince, runStateOf } from '../runState';
 import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
+import InternetToggle from './InternetToggle';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
@@ -32,8 +33,10 @@ export const AGENT_PANEL_WIDTH = 400;
 /** Height of the fixed platform footer. */
 export const FOOTER_HEIGHT = 30;
 
+/** Chat selector with the open chat's internet switch (the globe) and "New chat". */
 function ChatSelector({ onNew }: { onNew: () => void }) {
     const { chats, selectedChatId, selectChat } = useAgent();
+    const selected = chats.find((c) => c.id === selectedChatId);
     return (
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Select
@@ -75,6 +78,7 @@ function ChatSelector({ onNew }: { onNew: () => void }) {
                     );
                 })}
             </Select>
+            {selected && <InternetToggle chat={selected} compact />}
             <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onNew} sx={{ flex: 'none' }}>
                 New chat
             </Button>

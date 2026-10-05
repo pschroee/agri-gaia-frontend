@@ -2,13 +2,21 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
+import Popover from '@mui/material/Popover';
+import Switch from '@mui/material/Switch';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import CompressIcon from '@mui/icons-material/Compress';
 
+import { autoCompactOn, compactNowState } from '../settings';
 import type { Chat } from '../types';
+import { useChatSettings } from '../useChatSettings';
 import {
     cacheHitRate,
     compactionReason,
@@ -114,8 +122,9 @@ function Rows({ rows }: { rows: [string, ReactNode][] }) {
 const tipSx = { fontSize: 12, lineHeight: 1.45, p: 0.5, maxWidth: 300 } as const;
 
 /**
- * Context usage as a ring with the percentage; the tooltip names tokens, window, compaction threshold and
- * reserve. Amber shortly before auto-compaction, red at it; a running compaction shows as a spinner.
+ * Context usage as a ring with the percentage. A click opens the details (tokens, window, compaction threshold,
+ * reserve) and the compaction settings: the auto-compaction switch and "Compact now". Amber shortly before
+ * auto-compaction, red at it; a running compaction shows as a spinner.
  */
 export function ContextMeter({
     chat,
@@ -127,11 +136,14 @@ export function ContextMeter({
     /** Wide layout: the word "context" after the percentage and "Compacting …" next to the spinner. */
     label?: boolean;
 }) {
+    const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+    const settings = useChatSettings(chat);
     const ctx = chat.context;
-    const autoCompact = chat.auto_compact ?? true;
+    const autoCompact = autoCompactOn(chat);
     const d = ctx ? describeContext(ctx, autoCompact) : undefined;
     const level = d?.level ?? 'normal';
     const running = !!compacting;
+    const compactState = compactNowState(chat, compacting, settings.busy === 'compact');
     const rows: [string, ReactNode][] = d
         ? [
               ...(d.measured ? ([['Used', d.used]] as [string, ReactNode][]) : []),
@@ -157,53 +169,142 @@ export function ContextMeter({
                     : 'Auto-compaction comes soon: older parts of the conversation will be summarised.'
                 : 'The context is nearly full and auto-compaction is off.'
             : undefined;
+    const open = !!anchor;
+    const close = () => {
+        setAnchor(null);
+        settings.clearError();
+    };
     return (
-        <Tooltip
-            title={
-                <Box sx={tipSx}>
-                    <Box sx={{ fontWeight: 500, mb: 0.5 }}>{title}</Box>
-                    <Rows rows={rows} />
-                    {warning && <Box sx={{ mt: 0.75 }}>{warning}</Box>}
-                </Box>
-            }
-        >
-            <Box
-                component="span"
-                tabIndex={0}
-                role="status"
-                aria-label={running ? 'Compacting the context' : `Context usage ${d?.percent ?? 'unknown'}`}
-                data-testid="agent-context-meter"
-                data-context-level={running ? 'compacting' : level}
-                sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.6,
-                    flex: 'none',
-                    whiteSpace: 'nowrap',
-                    fontSize: 12,
-                    fontVariantNumeric: 'tabular-nums',
-                    color: running ? agentColors.green : LEVEL_TEXT[level],
-                    fontWeight: level === 'normal' || running ? 400 : 500,
-                    cursor: 'default',
-                    borderRadius: 1,
-                    outline: 'none',
-                    '&:focus-visible': { boxShadow: `0 0 0 2px ${agentColors.greenLine}` },
-                }}
+        <>
+            <Tooltip title={open ? '' : `${title} · click for details and compaction`}>
+                <ButtonBase
+                    aria-label={
+                        running
+                            ? 'Compacting the context, details and compaction'
+                            : `Context usage ${d?.percent ?? 'unknown'}, details and compaction`
+                    }
+                    aria-haspopup="dialog"
+                    aria-expanded={open}
+                    data-testid="agent-context-meter"
+                    data-context-level={running ? 'compacting' : level}
+                    onClick={(e) => setAnchor(e.currentTarget)}
+                    sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.6,
+                        flex: 'none',
+                        whiteSpace: 'nowrap',
+                        fontSize: 12,
+                        fontFamily: 'inherit',
+                        fontVariantNumeric: 'tabular-nums',
+                        color: running ? agentColors.green : LEVEL_TEXT[level],
+                        fontWeight: level === 'normal' || running ? 400 : 500,
+                        borderRadius: 1,
+                        px: 0.25,
+                        '&:hover': { bgcolor: 'action.hover' },
+                        '&.Mui-focusVisible': { boxShadow: `0 0 0 2px ${agentColors.greenLine}` },
+                    }}
+                >
+                    <ContextRing
+                        ratio={d?.ratio ?? 0}
+                        thresholdRatio={autoCompact ? d?.thresholdRatio : undefined}
+                        level={level}
+                        compacting={running}
+                    />
+                    {running ? (label ? 'Compacting …' : null) : (d?.percent ?? '–')}
+                    {label && !running && (
+                        <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
+                            context
+                        </Box>
+                    )}
+                </ButtonBase>
+            </Tooltip>
+            <Popover
+                open={open}
+                anchorEl={anchor}
+                onClose={close}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                slotProps={{ paper: { sx: { width: 300, maxWidth: 'calc(100vw - 24px)', mt: 0.5 } } }}
             >
-                <ContextRing
-                    ratio={d?.ratio ?? 0}
-                    thresholdRatio={autoCompact ? d?.thresholdRatio : undefined}
-                    level={level}
-                    compacting={running}
-                />
-                {running ? (label ? 'Compacting …' : null) : (d?.percent ?? '–')}
-                {label && !running && (
-                    <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-                        context
+                <Box
+                    role="dialog"
+                    aria-label="Context and compaction"
+                    data-testid="agent-context-popover"
+                    sx={{ p: 1.5, fontSize: 12.5, lineHeight: 1.45 }}
+                >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                        <ContextRing
+                            ratio={d?.ratio ?? 0}
+                            thresholdRatio={autoCompact ? d?.thresholdRatio : undefined}
+                            level={level}
+                            size={24}
+                            compacting={running}
+                        />
+                        <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>{title}</Typography>
                     </Box>
-                )}
-            </Box>
-        </Tooltip>
+                    <Rows rows={rows} />
+                    {warning && <Box sx={{ mt: 0.75, color: LEVEL_TEXT[level] }}>{warning}</Box>}
+                    <Box sx={{ borderTop: 1, borderColor: 'divider', mt: 1.25, pt: 1 }}>
+                        <Box
+                            component="label"
+                            sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}
+                        >
+                            <Box>
+                                <Box sx={{ fontWeight: 500 }}>Auto-compaction</Box>
+                                <Box sx={{ color: 'text.secondary', fontSize: 11.5 }}>
+                                    {autoCompact
+                                        ? `Summarises older parts from ${d?.threshold ?? 'the threshold'} on.`
+                                        : 'Off: the context can run full.'}
+                                </Box>
+                            </Box>
+                            <Switch
+                                size="small"
+                                checked={autoCompact}
+                                disabled={settings.busy === 'autocompact'}
+                                onChange={(e) => void settings.setAutoCompact(e.target.checked)}
+                                inputProps={{ 'aria-label': 'Auto-compaction' }}
+                                data-testid="agent-autocompact-switch"
+                            />
+                        </Box>
+                        <Tooltip title={compactState.hint ?? ''}>
+                            {/* span: a disabled button fires no events, the tooltip needs a live wrapper */}
+                            <Box component="span" sx={{ display: 'block', mt: 1 }}>
+                                <Button
+                                    fullWidth
+                                    size="small"
+                                    variant="outlined"
+                                    disabled={compactState.disabled}
+                                    onClick={() => void settings.compactNow()}
+                                    startIcon={
+                                        settings.busy === 'compact' || running ? (
+                                            <CircularProgress size={14} />
+                                        ) : (
+                                            <CompressIcon />
+                                        )
+                                    }
+                                    data-testid="agent-compact-now"
+                                >
+                                    {running ? 'Compacting …' : 'Compact now'}
+                                </Button>
+                            </Box>
+                        </Tooltip>
+                        {settings.error ? (
+                            <Box role="alert" sx={{ mt: 0.75, color: 'error.main', fontSize: 11.5 }}>
+                                {settings.error}
+                            </Box>
+                        ) : (
+                            settings.compactStarted &&
+                            !running && (
+                                <Box role="status" sx={{ mt: 0.75, color: 'text.secondary', fontSize: 11.5 }}>
+                                    Compaction started; it shows in the conversation.
+                                </Box>
+                            )
+                        )}
+                    </Box>
+                </Box>
+            </Popover>
+        </>
     );
 }
 
