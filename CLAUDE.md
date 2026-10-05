@@ -67,6 +67,17 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `seq`, which transcript items now carry). The sent text shows greyed (`pending` in `useChatStream`) until its user
   message is stored. A lost `ready` is closed on the next pi event (`closeResumes`). The steps exist only live: after a
   page reload the block is gone. On `failed` the request fails and `ChatInput` puts the text back.
+- **Model and thinking level:** `ModelEffortPicker` sits in the row below the input (small text buttons with menus,
+  so they fit the 400 px panel; the approval hint shrinks to its lock icon there). Models come from `GET /models`
+  (loaded once in `AgentContext`, with prices and tariff as hint). **The model list carries no thinking levels:** the
+  gateway reports them per chat (`thinking_levels` for the chat's current model, empty until pi has been asked), so
+  only those are offered, and the picker is disabled with fewer than two. While the chat runs or resumes, both are
+  disabled with a tooltip (the gateway answers 409). A 409 with `code: "context_too_large"` and `details` opens
+  `ContextTooLargeDialog`; "Compact first, then switch" posts `compact_first: true`, and `pending_model` shows
+  "Compacting, then …" until the chat event brings the new model. The decisions are pure functions in
+  `src/agent/modelChoice.ts`, unit-tested. **New chat:** `POST /chats` takes no thinking level; the dialog offers the
+  levels other chats reported for the chosen model (`levelsByModel`), creates the chat without the first message,
+  sets the level, then sends the message, so the first turn already runs with it.
 - **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
