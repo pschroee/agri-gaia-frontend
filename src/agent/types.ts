@@ -36,6 +36,8 @@ export type Chat = {
     internet: boolean;
     delegation?: Delegation;
     owner?: string;
+    /** Preferred language of the browser given at creation (BCP 47); absent without one. */
+    language?: string;
     created_at: string;
     updated_at: string;
     tokens: Tokens;
@@ -71,6 +73,18 @@ export type StoredMessage = {
     turn_id?: number;
     trigger?: 'user' | 'queue' | 'wake';
     origin?: 'user' | 'system' | 'mixed';
+    /** Parts of a user message in order (gateway notes and user text); set with origin system or mixed. */
+    sources?: MessageSource[];
+};
+
+/** Part of a user message: a note of the gateway (type background, sandbox, language) or user text. */
+export type MessageSource = {
+    kind: 'user' | 'system';
+    type?: string;
+    refs?: string[];
+    queue_id?: string;
+    /** Marker of the fence around sandbox data inside the note. */
+    marker?: string;
 };
 
 export type Approval = {
@@ -138,6 +152,8 @@ export type CreateChatRequest = {
     title?: string;
     message?: string;
     delegation?: Delegation;
+    /** Preferred language of the browser (BCP 47, navigator.language); the agent uses it only when a message shows no clear language. */
+    language?: string;
 };
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };

@@ -80,8 +80,8 @@ function AgentBlock({ item, dense }: { item: Extract<TranscriptItem, { kind: 'ag
     );
 }
 
-function Notice({ text }: { text: string }) {
-    const first = text.split('\n').find((l) => l.trim() && !l.startsWith('[')) ?? text.split('\n')[0];
+function Notice({ text, label }: { text: string; label?: string }) {
+    const first = label ?? text.split('\n').find((l) => l.trim() && !l.startsWith('[')) ?? text.split('\n')[0];
     return (
         <Box
             title={text}
@@ -138,7 +138,7 @@ export default function Conversation({ stream, dense = false }: { stream: ChatSt
                 it.kind === 'user' ? (
                     <UserBubble key={it.key} text={it.text} dense={dense} />
                 ) : it.kind === 'notice' ? (
-                    <Notice key={it.key} text={it.text} />
+                    <Notice key={it.key} text={it.text} label={it.label} />
                 ) : (
                     <AgentBlock key={it.key} item={it} dense={dense} />
                 ),

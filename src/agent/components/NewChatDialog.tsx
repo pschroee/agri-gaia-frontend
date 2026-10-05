@@ -18,6 +18,8 @@ import Typography from '@mui/material/Typography';
 import { useAgent } from '../AgentContext';
 import { AgentApiError, agentApi } from '../api';
 import { DEFAULT_DELEGATION_HOURS, DELEGATION_TEMPLATES, delegationFrom } from '../delegationTemplates';
+import { variantLabel } from '../format';
+import { browserLanguage } from '../language';
 import type { Model, Variant, VariantId } from '../types';
 import { blockSx } from './tokens';
 
@@ -62,6 +64,7 @@ export default function NewChatDialog({ open, onClose, initialMessage }: Props) 
                 title: title.trim() || undefined,
                 message: message.trim() || undefined,
                 delegation: delegationFrom(template, hours),
+                language: browserLanguage(),
             });
             addChat(chat);
             setTitle('');
@@ -107,7 +110,7 @@ export default function NewChatDialog({ open, onClose, initialMessage }: Props) 
                     >
                         {variants.map((v) => (
                             <MenuItem key={v.id} value={v.id}>
-                                {v.label}
+                                {variantLabel(v)}
                             </MenuItem>
                         ))}
                     </TextField>
