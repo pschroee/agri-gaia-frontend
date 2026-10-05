@@ -10,6 +10,8 @@ import Button from '@mui/material/Button';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 import { useAgentOptional } from '../AgentContext';
+import { withLiveOptions } from '../commands';
+import { modelName } from '../modelChoice';
 import { resumeRunning } from '../resume';
 import { runSince, runStateOf } from '../runState';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
@@ -69,7 +71,12 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
         return parts.length ? countEntries([{ kind: 'agent', key: 'live', parts }]) : 0;
     }, [live]);
     const count =
-        countEntries(items) + pending.length + liveCount + stream.resumes.length + (stream.pending ? 1 : 0);
+        countEntries(items) +
+        pending.length +
+        liveCount +
+        stream.resumes.length +
+        stream.commandNotices.length +
+        (stream.pending ? 1 : 0);
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
     // After sending, the own message and the answer are what the user wants to see.
     const onSend = useCallback(
@@ -79,6 +86,16 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
         },
         [jumpToLatest, send],
     );
+    const models = agent?.models;
+    const runCommand = stream.runCommand;
+    const onCommand = useCallback(
+        (text: string) => {
+            jumpToLatest();
+            return runCommand(text, (id) => modelName(models ?? [], id));
+        },
+        [jumpToLatest, runCommand, models],
+    );
+    const commands = useMemo(() => withLiveOptions(stream.commands, chat), [stream.commands, chat]);
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -169,6 +186,9 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     running={stream.chat?.running}
                     placeholder={placeholder}
                     dense={dense}
+                    commands={commands}
+                    onCommand={onCommand}
+                    onCommandsOpen={stream.refreshCommands}
                     toolbar={
                         <ModelEffortPicker
                             chat={stream.chat}
@@ -176,6 +196,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                             dense={dense}
                             onModel={stream.setModel}
                             onEffort={stream.setEffort}
+                            tooLargeRequest={stream.commandTooLarge}
                         />
                     }
                 />

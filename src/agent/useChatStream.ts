@@ -5,6 +5,9 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, eventsUrl } from './api';
+import { commandErrorText, commandProblem, commandResultText, isBuiltinCommand } from './commands';
+import type { CommandNotice } from './commands';
+import { switchFailure } from './modelChoice';
 import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
 import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
@@ -18,6 +21,8 @@ import type { Compacting } from './usage';
 import type {
     Approval,
     Chat,
+    Command,
+    ContextTooLarge,
     QueueEvent,
     ResumeStep,
     ServerEvent,
@@ -67,6 +72,19 @@ export type ChatStream = {
     setModel: (model: string, compactFirst?: boolean) => Promise<void>;
     /** Sets the thinking level. Throws AgentApiError. */
     setEffort: (level: string) => Promise<void>;
+    /** Slash commands of the chat (built-in ones and pi's), last loaded list. */
+    commands: Command[];
+    /** Loads the command list again (pi's skills and templates are known once the chat has a sandbox). */
+    refreshCommands: () => void;
+    /**
+     * Runs a slash command. Built-in ones leave a note in the transcript; false means it failed (the note explains,
+     * the input gets the text back). Others go to pi like a message (pending bubble or queue) and throw on failure.
+     */
+    runCommand: (text: string, modelName?: (id: string) => string) => Promise<boolean>;
+    /** Notes of built-in commands run in this view. */
+    commandNotices: CommandNotice[];
+    /** "/model x" did not fit the context: the model picker offers to compact first (new object per attempt). */
+    commandTooLarge?: { details: ContextTooLarge };
 };
 
 function upsert<T>(list: T[], item: T, key: (x: T) => string | number): T[] {
@@ -98,6 +116,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [resumes, setResumes] = useState<ResumeView[]>([]);
     const [pending, setPending] = useState<PendingSend>();
     const [compacting, setCompacting] = useState<Compacting>();
+    const [commands, setCommands] = useState<Command[]>([]);
+    const [commandNotices, setCommandNotices] = useState<CommandNotice[]>([]);
+    const [commandTooLarge, setCommandTooLarge] = useState<{ details: ContextTooLarge }>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
     const pendingClear = useRef<'ended' | 'all'>();
     const chatRef = useRef<Chat>();
@@ -159,6 +180,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setResumes([]);
         setPending(undefined);
         setCompacting(undefined);
+        setCommands([]);
+        setCommandNotices([]);
+        setCommandTooLarge(undefined);
         if (!chatId) return;
 
         let stopped = false;
@@ -168,6 +192,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
 
         setLoading(true);
         void load().finally(() => !stopped && setLoading(false));
+        agentApi.commands(chatId).then(
+            (l) => !stopped && setCommands(Array.isArray(l) ? l : []),
+            () => undefined, // without the list only the suggestions are missing; typing a command still works
+        );
 
         const connect = () => {
             if (stopped) return;
@@ -254,8 +282,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         };
     }, [chatId, load, scheduleReload]);
 
-    const send = useCallback(
-        async (text: string) => {
+    const deliver = useCallback(
+        async (text: string, asCommand: boolean) => {
             if (!chatId) return;
             const guessQueued = expectQueued(chatRef.current);
             const key = `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -264,7 +292,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             else setPending({ key, text, afterSeq: lastSeq(messagesRef.current) });
             const dropPending = () => setPending((p) => (p?.key === key ? undefined : p));
             try {
-                const r = await agentApi.sendMessage(chatId, text);
+                const r = asCommand ? await agentApi.runCommand(chatId, text) : await agentApi.sendMessage(chatId, text);
                 if (r.queued) dropPending();
                 if (r.queued) {
                     // the SSE event "queue" carries the entry; fetch anyway in case the stream is reconnecting,
@@ -285,6 +313,60 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             scheduleReload();
         },
         [chatId, scheduleReload],
+    );
+
+    const send = useCallback((text: string) => deliver(text, false), [deliver]);
+
+    const refreshCommands = useCallback(() => {
+        if (!chatId) return;
+        agentApi.commands(chatId).then(
+            (l) => setCommands(Array.isArray(l) ? l : []),
+            () => undefined,
+        );
+    }, [chatId]);
+
+    const runCommand = useCallback(
+        async (text: string, modelName?: (id: string) => string) => {
+            if (!chatId) return false;
+            const t = text.trim();
+            // skills, prompt templates and extensions: pi expands them into a user message
+            if (!isBuiltinCommand(t)) {
+                await deliver(t, true);
+                return true;
+            }
+            const note = (n: Pick<CommandNotice, 'text' | 'tone'>) =>
+                setCommandNotices((l) => [
+                    ...l,
+                    {
+                        key: `cmd-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                        command: t,
+                        afterSeq: lastSeq(messagesRef.current),
+                        ...n,
+                    },
+                ]);
+            const problem = commandProblem(t);
+            if (problem) {
+                note({ text: problem, tone: 'error' });
+                return false;
+            }
+            try {
+                await agentApi.runCommand(chatId, t);
+            } catch (e) {
+                const f = /^\/model\s/i.test(t) ? switchFailure(e) : undefined;
+                if (f?.kind === 'too_large') {
+                    // the picker's dialog takes over: compact first, then switch
+                    setCommandTooLarge({ details: f.details });
+                    return true;
+                }
+                note({ text: commandErrorText(t, e), tone: 'error' });
+                return false;
+            }
+            note({ text: commandResultText(t, modelName), tone: 'done' });
+            // the new title, model, level or auto-compaction come with the chat
+            await load();
+            return true;
+        },
+        [chatId, deliver, load],
     );
 
     const unqueue = useCallback(
@@ -380,5 +462,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         decide,
         setModel,
         setEffort,
+        commands,
+        refreshCommands,
+        runCommand,
+        commandNotices,
+        commandTooLarge,
     };
 }

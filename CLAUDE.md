@@ -90,7 +90,19 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   tokens, cost and tariff from the stored assistant messages (`cost`, `peak`; pi's flat `usage.cost.total` only as
   "≈" fallback). Panel: ring and total cost in the header (the section chip then gives way; the input's placeholder
   names the section); `/ai-agent`: a chat header with title, ring, tokens and cost.
-- **Unit tests:** `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
+- **Slash commands:** typing `/` at the start of the input opens `SlashCommandMenu` (MUI Popper right above the field,
+  as wide as it; focus stays in the field, which is an ARIA combobox). The list comes from `GET /chats/{id}/commands`
+  (loaded with the chat and again whenever the input is exactly `/`), `/todos` (terminal only) is hidden; `/model` and
+  `/effort` suggest values, with the chat's live model and the levels pi reports (`withLiveOptions`). Ranking: name
+  prefix, then part of the name, then (from three characters) the description. Arrow keys move and wrap, Enter/Tab take
+  the entry, Esc hides the list for the current text. The logic is pure in `src/agent/commands.ts` (`menuKey` is the
+  key state machine), unit-tested; `useSlashCommands` holds the state. Every `/…` goes to `POST …/commands`. Built-in
+  ones (`/compact`, `/autocompact`, `/rename`, `/model`, `/effort`) leave a note in the transcript (`CommandNotice`,
+  only in this view, placed before the first message stored after it), then the chat is reloaded, so title and pickers
+  follow; a failure (409 for `/compact` while the agent works, a missing argument checked before the call) is an error
+  note and the text goes back into the input. `/model` with `context_too_large` opens the picker's "compact first"
+  dialog (`tooLargeRequest`). Skills, templates and extensions go to pi like a message (pending bubble or queue).
+ `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
   npm: `docker run --rm -v "$PWD":/app -w /app node:20-alpine npm install --package-lock-only`. A lock from npm 11
