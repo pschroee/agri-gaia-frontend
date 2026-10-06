@@ -23,6 +23,7 @@ import StatusView from './StatusView';
 import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
+import AgentDropZone from './AgentDropZone';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
@@ -192,7 +193,8 @@ export default function AgentPage() {
             {status !== 'ready' ? (
                 <SignInNotice />
             ) : tab === 'chat' ? (
-                <Box
+                // files dropped anywhere on the chat area (history and chat) go to the open chat
+                <AgentDropZone
                     sx={{
                         display: 'grid',
                         gridTemplateColumns: '240px minmax(0, 1fr)',
@@ -217,7 +219,7 @@ export default function AgentPage() {
                             </Typography>
                         )}
                     </Box>
-                </Box>
+                </AgentDropZone>
             ) : tab === 'activity' ? (
                 <Box sx={{ mt: 3, pb: 4 }}>
                     <ActivityView refreshKey={refreshKey} />

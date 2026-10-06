@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { DragEvent, KeyboardEvent, ReactNode, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { KeyboardEvent, ReactNode, useEffect, useId, useReducer, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -19,7 +19,9 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { isSlashCommand } from '../commands';
 import { canSend, checkSizes, emptyStaged, stagedReducer } from '../files';
 import type { Artifact, Command } from '../types';
+import { useFileDrop } from '../useFileDrop';
 import { useSlashCommands } from '../useSlashCommands';
+import { useAgentDropTarget } from './AgentDropZone';
 import SlashCommandMenu, { optionId } from './SlashCommandMenu';
 import { StagedAttachments } from './Attachments';
 import { agentColors } from './tokens';
@@ -76,14 +78,12 @@ export default function ChatInput({
     const [error, setError] = useState<string>();
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
     const [staged, dispatchStaged] = useReducer(stagedReducer, emptyStaged);
-    const [dragging, setDragging] = useState(false);
     // The send button's tooltip is controlled: sending disables the button under the pointer or focus. A
     // disabled button fires no blur, and its wrapper gets a fresh mouseover, so an uncontrolled tooltip stayed
     // open after sending. After a send it stays closed until the pointer has left the button.
     const [sendTip, setSendTip] = useState(false);
     const sendTipHeld = useRef(false);
     const sendHovered = useRef(false);
-    const dragDepth = useRef(0);
     const fileRef = useRef<HTMLInputElement>(null);
     const listId = `agent-slash-${useId().replace(/:/g, '')}`;
     const slash = useSlashCommands(onCommand ? commands ?? NO_COMMANDS : NO_COMMANDS, text, setText);
@@ -133,30 +133,13 @@ export default function ChatInput({
         }
     };
 
-    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
-    const dropHandlers = onUpload
-        ? {
-              onDragEnter: (e: DragEvent) => {
-                  if (!hasFiles(e) || disabled) return;
-                  dragDepth.current++;
-                  setDragging(true);
-              },
-              onDragLeave: () => {
-                  dragDepth.current = Math.max(0, dragDepth.current - 1);
-                  if (dragDepth.current === 0) setDragging(false);
-              },
-              onDragOver: (e: DragEvent) => {
-                  if (hasFiles(e) && !disabled) e.preventDefault();
-              },
-              onDrop: (e: DragEvent) => {
-                  if (!hasFiles(e)) return;
-                  e.preventDefault();
-                  dragDepth.current = 0;
-                  setDragging(false);
-                  if (!disabled) void upload(Array.from(e.dataTransfer.files));
-              },
-          }
-        : {};
+    // Dropped files: the surrounding AgentDropZone (whole panel or chat area) hands them here; without one the
+    // input area itself is the drop target.
+    const dropTarget = onUpload && !disabled ? (files: File[]) => void upload(files) : undefined;
+    const inZone = useAgentDropTarget(dropTarget);
+    const ownDrop = useFileDrop(inZone ? undefined : dropTarget);
+    const dragging = ownDrop.active;
+    const dropHandlers = inZone ? {} : ownDrop.handlers;
     const uploading = staged.uploading > 0;
     const sendable = onCommand && isSlashCommand(text.trim()) ? true : canSend(text, staged);
 

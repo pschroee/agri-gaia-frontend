@@ -26,6 +26,7 @@ import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
+import AgentDropZone from './AgentDropZone';
 import SignInNotice from './SignInNotice';
 import { agentColors } from './tokens';
 
@@ -113,99 +114,102 @@ export default function AgentContextPanel() {
             }}
         >
             <Toolbar />
-            <Box
-                sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1.25,
-                    px: 2,
-                    py: 1.25,
-                    bgcolor: '#fff',
-                    borderBottom: 1,
-                    borderColor: 'divider',
-                }}
-            >
-                <AutoAwesomeIcon
-                    aria-label="Agent"
-                    sx={{ fontSize: 20, color: agentColors.green, flex: 'none' }}
-                />
-                {/* during a run the "Agent" label gives its room to the state chip with the timer */}
-                {!(selectedState && isRunning(selectedState)) && (
-                    <Typography sx={{ fontSize: 16, fontWeight: 500, color: agentColors.green, flex: 'none' }}>
-                        Agent
-                    </Typography>
-                )}
-                {/* the chip is the part of the header that gives way on long runs; the close button always stays */}
-                {selectedState && (
-                    <Box data-testid="agent-panel-state" sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}>
-                        <RunStateChip state={selectedState} since={runSince(selected)} short framed />
-                    </Box>
-                )}
-                {selected && (
-                    <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
-                        <ContextMeter chat={selected} compacting={compacting[selected.id]} />
-                        <ChatCost chat={selected} />
-                    </Box>
-                )}
-                {/* with a chat open, the input's placeholder names the section and the room goes to context and cost */}
-                {section && !selected && (
-                    <Box
-                        sx={{
-                            ml: 'auto',
-                            fontSize: 12,
-                            color: 'text.secondary',
-                            border: 1,
-                            borderColor: 'divider',
-                            borderRadius: 3,
-                            px: 1.25,
-                            py: '2px',
-                            whiteSpace: 'nowrap',
-                            // gives way to the run state chip
-                            minWidth: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                        }}
-                        title={`Context: ${section}`}
-                    >
-                        {`Context: ${section}`}
-                    </Box>
-                )}
-                <Tooltip title="Close">
-                    <IconButton
-                        size="small"
-                        onClick={() => setPanelOpen(false)}
-                        sx={{ ml: section || selected ? 0 : 'auto', flex: 'none' }}
-                        aria-label="Close agent panel"
-                    >
-                        <CloseIcon fontSize="small" />
-                    </IconButton>
-                </Tooltip>
-            </Box>
-            {status !== 'ready' ? (
-                <SignInNotice />
-            ) : (
-                <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                    {selectedChatId ? (
-                        <ChatView
-                            key={selectedChatId}
-                            chatId={selectedChatId}
-                            dense
-                            placeholder={section ? `Ask about ${section} …` : undefined}
-                            header={<ChatSelector onNew={() => setNewOpen(true)} />}
-                        />
-                    ) : (
-                        <Box sx={{ p: 1.75, display: 'grid', gap: 1.5 }}>
-                            <ChatSelector onNew={() => setNewOpen(true)} />
-                            {chatsLoaded && chats.length === 0 && (
-                                <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                                    Start a chat to let the agent work with your datasets, models and trainings. You
-                                    choose which rights it gets.
-                                </Typography>
-                            )}
+            {/* files dropped anywhere on the panel go to the open chat (AgentDropZone) */}
+            <AgentDropZone sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                <Box
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1.25,
+                        px: 2,
+                        py: 1.25,
+                        bgcolor: '#fff',
+                        borderBottom: 1,
+                        borderColor: 'divider',
+                    }}
+                >
+                    <AutoAwesomeIcon
+                        aria-label="Agent"
+                        sx={{ fontSize: 20, color: agentColors.green, flex: 'none' }}
+                    />
+                    {/* during a run the "Agent" label gives its room to the state chip with the timer */}
+                    {!(selectedState && isRunning(selectedState)) && (
+                        <Typography sx={{ fontSize: 16, fontWeight: 500, color: agentColors.green, flex: 'none' }}>
+                            Agent
+                        </Typography>
+                    )}
+                    {/* the chip is the part of the header that gives way on long runs; the close button always stays */}
+                    {selectedState && (
+                        <Box data-testid="agent-panel-state" sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}>
+                            <RunStateChip state={selectedState} since={runSince(selected)} short framed />
                         </Box>
                     )}
+                    {selected && (
+                        <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+                            <ContextMeter chat={selected} compacting={compacting[selected.id]} />
+                            <ChatCost chat={selected} />
+                        </Box>
+                    )}
+                    {/* with a chat open, the input's placeholder names the section and the room goes to context and cost */}
+                    {section && !selected && (
+                        <Box
+                            sx={{
+                                ml: 'auto',
+                                fontSize: 12,
+                                color: 'text.secondary',
+                                border: 1,
+                                borderColor: 'divider',
+                                borderRadius: 3,
+                                px: 1.25,
+                                py: '2px',
+                                whiteSpace: 'nowrap',
+                                // gives way to the run state chip
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                            }}
+                            title={`Context: ${section}`}
+                        >
+                            {`Context: ${section}`}
+                        </Box>
+                    )}
+                    <Tooltip title="Close">
+                        <IconButton
+                            size="small"
+                            onClick={() => setPanelOpen(false)}
+                            sx={{ ml: section || selected ? 0 : 'auto', flex: 'none' }}
+                            aria-label="Close agent panel"
+                        >
+                            <CloseIcon fontSize="small" />
+                        </IconButton>
+                    </Tooltip>
                 </Box>
-            )}
+                {status !== 'ready' ? (
+                    <SignInNotice />
+                ) : (
+                    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                        {selectedChatId ? (
+                            <ChatView
+                                key={selectedChatId}
+                                chatId={selectedChatId}
+                                dense
+                                placeholder={section ? `Ask about ${section} …` : undefined}
+                                header={<ChatSelector onNew={() => setNewOpen(true)} />}
+                            />
+                        ) : (
+                            <Box sx={{ p: 1.75, display: 'grid', gap: 1.5 }}>
+                                <ChatSelector onNew={() => setNewOpen(true)} />
+                                {chatsLoaded && chats.length === 0 && (
+                                    <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+                                        Start a chat to let the agent work with your datasets, models and trainings. You
+                                        choose which rights it gets.
+                                    </Typography>
+                                )}
+                            </Box>
+                        )}
+                    </Box>
+                )}
+            </AgentDropZone>
             <NewChatDialog open={newOpen} onClose={() => setNewOpen(false)} />
         </Drawer>
     );
