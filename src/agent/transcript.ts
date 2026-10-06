@@ -13,7 +13,46 @@ import type { Approval, ContentBlock, MessageSource, PiMessage, SocketCall, Stor
 import { answerUsage } from './usage';
 import type { AnswerUsage } from './usage';
 
-export type StepStatus = 'running' | 'done' | 'error' | 'waiting' | 'blocked' | 'stopped';
+/** aborted: ended by the user's stop (abort of the run or "Stop" on the command), not a failure. */
+export type StepStatus = 'running' | 'done' | 'error' | 'waiting' | 'blocked' | 'stopped' | 'aborted';
+
+/**
+ * Texts with which an aborted call or answer ends: the abort error of Node/fetch ("This operation was aborted"),
+ * pi's providers ("Request was aborted"), the gateway's bash bridge ("Command aborted", "Command stopped by the
+ * user", appended to the output so far).
+ */
+const ABORT_LINE =
+    /^(?:(?:this|the) operation was aborted|(?:request (?:was )?)?aborted|operation aborted|command aborted|command stopped by the user)\.?$/i;
+
+/** Whether a tool result or error message only says that the user stopped it (its last line decides). */
+export function isAbortText(text: string | undefined): boolean {
+    const lines = (text ?? '').trim().split('\n');
+    return ABORT_LINE.test(lines[lines.length - 1].trim());
+}
+
+/** Whether a stored assistant message ended because the run was aborted (pi: stopReason "aborted"). */
+export function isAbortedAnswer(msg: Pick<PiMessage, 'stopReason' | 'errorMessage'>): boolean {
+    return msg.stopReason === 'aborted' || (msg.stopReason === 'error' && isAbortText(msg.errorMessage));
+}
+
+/**
+ * Status of a stored tool call. `result` is pi's tool result (missing while it runs or when it never ended);
+ * `answerAborted`: the answer that requested the call was aborted.
+ */
+export function stepStatus(
+    result: PiMessage | undefined,
+    flags: { blocked: boolean; pending: boolean; rejected: boolean; running: boolean; answerAborted: boolean },
+): StepStatus {
+    if (flags.blocked) return 'blocked';
+    if (flags.pending) return 'waiting';
+    if (result) {
+        if (!result.isError) return 'done';
+        if (flags.rejected) return 'stopped';
+        return isAbortText(textOf(result.content)) ? 'aborted' : 'error';
+    }
+    if (flags.running) return 'running';
+    return flags.answerAborted ? 'aborted' : 'stopped';
+}
 
 export type Step = {
     id: string;
@@ -47,7 +86,16 @@ export type TranscriptItem =
     | { kind: 'user'; key: string; seq?: number; text: string; files?: string[] }
     /** note: a background task's end, parsed for the compact line (gateway type "background"). */
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }
-    | { kind: 'agent'; key: string; seq?: number; parts: AgentPart[]; error?: string; usage?: AnswerUsage }
+    /** stopped: the answer was aborted by the user (shown muted, not as an error). */
+    | {
+          kind: 'agent';
+          key: string;
+          seq?: number;
+          parts: AgentPart[];
+          error?: string;
+          stopped?: boolean;
+          usage?: AnswerUsage;
+      }
     | {
           kind: 'compaction';
           key: string;
@@ -195,13 +243,14 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
     // stored messages of each agent block, for its tokens and cost
     const answerRows = new Map<Extract<TranscriptItem, { kind: 'agent' }>, StoredMessage[]>();
 
-    const stepFor = (id: string, name: string, args: unknown): Step => {
-        const res = results.get(id);
-        let status: StepStatus;
-        if (blocked.has(id)) status = 'blocked';
-        else if (pending.has(id)) status = 'waiting';
-        else if (res) status = res.isError ? (rejected.has(id) ? 'stopped' : 'error') : 'done';
-        else status = ctx.running ? 'running' : 'stopped';
+    const stepFor = (id: string, name: string, args: unknown, answerAborted: boolean): Step => {
+        const status = stepStatus(results.get(id), {
+            blocked: blocked.has(id),
+            pending: pending.has(id),
+            rejected: rejected.has(id),
+            running: ctx.running,
+            answerAborted,
+        });
         return { id, tool: displayToolName(name), summary: summarizeArgs(args), status, durationMs: durations.get(id) };
     };
 
@@ -269,6 +318,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
         answerRows.get(agent)?.push(m);
         const cur = agent;
         const blocks = Array.isArray(msg.content) ? msg.content : [];
+        const aborted = isAbortedAnswer(msg);
         const imageKey = messageImageKey(msg);
         blocks.forEach((b, idx) => {
             if (b.type === 'text' && b.text.trim()) {
@@ -279,10 +329,12 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                 const durationMs = thinkingDuration(ctx.thinkingTimes?.[id]);
                 cur.parts.push({ type: 'thinking', id, text: b.thinking, durationMs });
             } else if (b.type === 'toolCall') {
-                pushStep(cur.parts, stepFor(b.id, b.name, b.arguments));
+                pushStep(cur.parts, stepFor(b.id, b.name, b.arguments, aborted));
             }
         });
-        if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
+        // an answer the user stopped is no error: a muted note instead of "Error: This operation was aborted"
+        if (aborted) agent.stopped = true;
+        else if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
     }
     for (const [item, rows] of answerRows) item.usage = answerUsage(rows);
     return items;

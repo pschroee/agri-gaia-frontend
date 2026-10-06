@@ -147,6 +147,11 @@ function AgentBlock({
                 {item.error && (
                     <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>
                 )}
+                {item.stopped && (
+                    <Typography data-testid="agent-answer-stopped" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                        Stopped by you
+                    </Typography>
+                )}
                 {item.usage && <UsageLine usage={item.usage} />}
             </Box>
         </Box>
