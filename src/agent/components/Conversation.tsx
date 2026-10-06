@@ -13,6 +13,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
+import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
 import type { CommandNotice } from '../commands';
 import type { Artifact } from '../types';
@@ -26,8 +27,10 @@ import { compactionReason, formatAnswerUsage, formatTokens, formatUsd, TARIFF_LA
 import type { AnswerUsage } from '../usage';
 import { MessageAttachments } from './Attachments';
 import Markdown from './Markdown';
+import BackgroundNoteLine from './BackgroundNoteLine';
 import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
+import type { StepControls } from './StepList';
 import ThinkingBlock from './ThinkingBlock';
 
 const NO_CHOICES: Record<string, boolean> = {};
@@ -101,10 +104,13 @@ function AgentBlock({
     thinking,
     chatId,
     live = false,
+    controls,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
     thinking: Thinking;
+    /** Stop / move running commands, background chips. */
+    controls?: StepControls;
     /** For the answer's display images. */
     chatId?: string;
     /** The answer is still streaming (Mermaid blocks render once closed). */
@@ -136,7 +142,7 @@ function AgentBlock({
                             />
                         );
                     }
-                    return <StepList key={i} steps={p.steps} />;
+                    return <StepList key={i} steps={p.steps} controls={controls} />;
                 })}
                 {item.error && (
                     <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>
@@ -304,6 +310,16 @@ export default function Conversation({
     const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);
     const hasLive = liveP.length > 0;
     const files = useMemo<Files>(() => ({ chatId: chat?.id, known: stream.artifacts }), [chat?.id, stream.artifacts]);
+    const { runningTools, stopTool, backgroundTool, background } = stream;
+    const controls = useMemo<StepControls>(
+        () => ({
+            running: runningTools,
+            onStop: stopTool,
+            onBackground: backgroundTool,
+            background: backgroundByCall(background),
+        }),
+        [runningTools, stopTool, backgroundTool, background],
+    );
     // resume blocks sit after the user message that triggered them; not stored yet: at the end
     const placed = useMemo(() => {
         const after = new Map<number, ResumeView[]>();
@@ -349,11 +365,15 @@ export default function Conversation({
                     {it.kind === 'user' ? (
                         <UserBubble text={it.text} dense={dense} attachments={it.files} files={files} />
                     ) : it.kind === 'notice' ? (
-                        <Notice text={it.text} label={it.label} />
+                        it.note ? (
+                            <BackgroundNoteLine note={it.note} text={it.text} />
+                        ) : (
+                            <Notice text={it.text} label={it.label} />
+                        )
                     ) : it.kind === 'compaction' ? (
                         <CompactionLine item={it} />
                     ) : (
-                        <AgentBlock item={it} dense={dense} thinking={thinking} chatId={chat?.id} />
+                        <AgentBlock item={it} dense={dense} thinking={thinking} chatId={chat?.id} controls={controls} />
                     )}
                     {placed.after.get(i)?.map((r) => <ResumeBlock key={`resume-${r.id}`} resume={r} />)}
                 </Fragment>
@@ -379,6 +399,7 @@ export default function Conversation({
                     dense={dense}
                     thinking={thinking}
                     live
+                    controls={controls}
                 />
             )}
             {stream.compacting && <CompactionLine running={stream.compacting} />}

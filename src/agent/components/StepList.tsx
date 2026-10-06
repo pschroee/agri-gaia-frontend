@@ -2,15 +2,23 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { useState } from 'react';
+
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import BlockIcon from '@mui/icons-material/Block';
 import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import MoveDownIcon from '@mui/icons-material/MoveDown';
 import RemoveIcon from '@mui/icons-material/Remove';
+import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
+
+import { backgroundStatus } from '../background';
+import type { BackgroundTask } from '../types';
 
 import { formatMs } from '../format';
 import type { Step, StepStatus } from '../transcript';
@@ -50,11 +58,169 @@ function headline(steps: Step[]): string {
     return running ? `Working · ${n} ${word}` : `${n} ${word}`;
 }
 
+/** Control of running foreground commands and the background tasks they became (ChatView → Conversation). */
+export type StepControls = {
+    /** Tool call IDs of running foreground commands that can be stopped or moved. */
+    running: Set<string>;
+    onStop: (toolCallId: string) => Promise<void>;
+    onBackground: (toolCallId: string) => Promise<BackgroundTask>;
+    /** Background task per tool call that started it. */
+    background: Map<string, BackgroundTask>;
+};
+
+const TONE_COLOR = { running: agentColors.green, ok: agentColors.ok, error: agentColors.red, muted: 'text.secondary' };
+
+/** Small chip on a step that started (or became) a background task: "bg-3 · running". */
+function BackgroundChip({ task }: { task: BackgroundTask }) {
+    const st = backgroundStatus(task);
+    return (
+        <Tooltip title={`Background task ${task.id}: ${st.label}`}>
+            <Box
+                component="span"
+                data-testid="agent-step-bg"
+                sx={{
+                    flex: 'none',
+                    fontFamily: MONO,
+                    fontSize: 11,
+                    px: 0.6,
+                    borderRadius: 0.75,
+                    border: 1,
+                    borderColor: agentColors.greenLine,
+                    color: TONE_COLOR[st.tone],
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {task.id} · {st.tone === 'running' ? 'running' : st.label}
+            </Box>
+        </Tooltip>
+    );
+}
+
+/** Stop and "Move to background" on a running foreground command; failures show below the row. */
+function RunningControls({
+    id,
+    controls,
+    onError,
+}: {
+    id: string;
+    controls: StepControls;
+    onError: (t?: string) => void;
+}) {
+    const [busy, setBusy] = useState<'stop' | 'bg'>();
+    const act = async (kind: 'stop' | 'bg') => {
+        setBusy(kind);
+        onError(undefined);
+        try {
+            if (kind === 'stop') await controls.onStop(id);
+            else await controls.onBackground(id);
+        } catch (e) {
+            onError(e instanceof Error ? e.message : String(e));
+        } finally {
+            setBusy(undefined);
+        }
+    };
+    const btn = { p: 0.25, flex: 'none' } as const;
+    return (
+        <Box sx={{ display: 'flex', flex: 'none', ml: 0.25 }}>
+            <Tooltip title="Move to background: keeps running, the agent continues and is told when it ends">
+                <span>
+                    <IconButton
+                        size="small"
+                        aria-label="Move to background"
+                        data-testid="agent-step-background"
+                        disabled={!!busy}
+                        onClick={() => void act('bg')}
+                        sx={btn}
+                    >
+                        {busy === 'bg' ? <CircularProgress size={14} /> : <MoveDownIcon sx={{ fontSize: 17 }} />}
+                    </IconButton>
+                </span>
+            </Tooltip>
+            <Tooltip title="Stop the command: the agent learns about it and continues">
+                <span>
+                    <IconButton
+                        size="small"
+                        aria-label="Stop command"
+                        data-testid="agent-step-stop"
+                        disabled={!!busy}
+                        onClick={() => void act('stop')}
+                        sx={btn}
+                    >
+                        {busy === 'stop' ? (
+                            <CircularProgress size={14} />
+                        ) : (
+                            <StopCircleOutlinedIcon sx={{ fontSize: 17, color: agentColors.red }} />
+                        )}
+                    </IconButton>
+                </span>
+            </Tooltip>
+        </Box>
+    );
+}
+
+function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
+    const [error, setError] = useState<string>();
+    const controllable = s.status === 'running' && !!controls?.running.has(s.id);
+    const task = controls?.background.get(s.id);
+    return (
+        <Box component="li" data-testid="agent-step" data-step-id={s.id} sx={{ minWidth: 0 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                <Tooltip title={STATUS_LABEL[s.status]}>
+                    <Box sx={{ display: 'flex', flex: 'none' }}>
+                        <StatusIcon status={s.status} />
+                    </Box>
+                </Tooltip>
+                <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12, flex: 'none' }}>
+                    {s.tool}
+                </Typography>
+                {s.summary && (
+                    <Typography
+                        component="span"
+                        noWrap
+                        title={s.summary}
+                        sx={{ fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+                    >
+                        {s.summary}
+                    </Typography>
+                )}
+                {task && <BackgroundChip task={task} />}
+                <Typography
+                    component="span"
+                    sx={{
+                        ml: 'auto',
+                        pl: 1,
+                        flex: 'none',
+                        fontSize: 11.5,
+                        fontVariantNumeric: 'tabular-nums',
+                        color:
+                            s.status === 'blocked' || s.status === 'error'
+                                ? agentColors.red
+                                : s.status === 'waiting'
+                                ? agentColors.amberText
+                                : 'text.disabled',
+                    }}
+                >
+                    {s.status === 'done' || s.status === 'running'
+                        ? formatMs(s.durationMs) ?? ''
+                        : STATUS_LABEL[s.status]}
+                </Typography>
+                {controllable && controls && <RunningControls id={s.id} controls={controls} onError={setError} />}
+            </Box>
+            {error && (
+                <Typography role="alert" sx={{ fontSize: 11.5, color: agentColors.red, pl: 3 }}>
+                    {error}
+                </Typography>
+            )}
+        </Box>
+    );
+}
+
 /**
  * Compact list of the tool calls of one agent step, like the "Datensatz analysiert" block of the
- * prototype: status, tool name in monospace, a hint at the arguments and the measured duration.
+ * prototype: status, tool name in monospace, a hint at the arguments and the measured duration. A running
+ * foreground command offers "Move to background" and "Stop"; a call that started a background task names it.
  */
-export default function StepList({ steps }: { steps: Step[] }) {
+export default function StepList({ steps, controls }: { steps: Step[]; controls?: StepControls }) {
     const total = steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
     const anyDuration = steps.some((s) => s.durationMs !== undefined);
     return (
@@ -71,46 +237,7 @@ export default function StepList({ steps }: { steps: Step[] }) {
             </Box>
             <Box component="ul" sx={{ listStyle: 'none', m: 0, px: 1.5, pb: 1, display: 'grid', rowGap: 0.75 }}>
                 {steps.map((s) => (
-                    <Box component="li" key={s.id} sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
-                        <Tooltip title={STATUS_LABEL[s.status]}>
-                            <Box sx={{ display: 'flex', flex: 'none' }}>
-                                <StatusIcon status={s.status} />
-                            </Box>
-                        </Tooltip>
-                        <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12, flex: 'none' }}>
-                            {s.tool}
-                        </Typography>
-                        {s.summary && (
-                            <Typography
-                                component="span"
-                                noWrap
-                                title={s.summary}
-                                sx={{ fontSize: 12, color: 'text.secondary', minWidth: 0 }}
-                            >
-                                {s.summary}
-                            </Typography>
-                        )}
-                        <Typography
-                            component="span"
-                            sx={{
-                                ml: 'auto',
-                                pl: 1,
-                                flex: 'none',
-                                fontSize: 11.5,
-                                fontVariantNumeric: 'tabular-nums',
-                                color:
-                                    s.status === 'blocked' || s.status === 'error'
-                                        ? agentColors.red
-                                        : s.status === 'waiting'
-                                        ? agentColors.amberText
-                                        : 'text.disabled',
-                            }}
-                        >
-                            {s.status === 'done' || s.status === 'running'
-                                ? formatMs(s.durationMs) ?? ''
-                                : STATUS_LABEL[s.status]}
-                        </Typography>
-                    </Box>
+                    <StepRow key={s.id} s={s} controls={controls} />
                 ))}
             </Box>
         </Box>
