@@ -31,6 +31,7 @@ const STATUS_LABEL: Record<StepStatus, string> = {
     waiting: 'needs approval',
     blocked: 'blocked',
     stopped: 'not finished',
+    aborted: 'stopped by you',
 };
 
 function StatusIcon({ status }: { status: StepStatus }) {
@@ -46,6 +47,8 @@ function StatusIcon({ status }: { status: StepStatus }) {
             return <BlockIcon sx={{ ...sx, color: agentColors.red }} />;
         case 'error':
             return <CloseIcon sx={{ ...sx, color: agentColors.red }} />;
+        case 'aborted':
+            return <StopCircleOutlinedIcon sx={{ ...sx, color: 'text.secondary' }} />;
         default:
             return <RemoveIcon sx={{ ...sx, color: 'text.disabled' }} />;
     }

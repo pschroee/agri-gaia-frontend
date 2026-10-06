@@ -23,8 +23,10 @@ import type {
     Variant,
 } from './types';
 
-/** The agent gateway is served on the platform host under /agent/ (Traefik strips the prefix). */
-export const AGENT_BASE = '/agent';
+import { AGENT_BASE } from './login';
+
+export { AGENT_BASE, interactiveLoginUrl } from './login';
+
 const API = `${AGENT_BASE}/api`;
 
 export const agentEnabled = import.meta.env.VITE_AGENT_ENABLED === 'true';
@@ -169,9 +171,6 @@ export const imageUrl = (chatId: string, path: string, msg: string) =>
     `${API}/chats/${enc(chatId)}/images?path=${enc(path)}&msg=${enc(msg)}`;
 
 export const eventsUrl = (chatId: string) => `${API}/chats/${enc(chatId)}/events`;
-
-/** Login at the gateway, used visibly when the silent login failed (the gateway returns to /agent/). */
-export const interactiveLoginUrl = () => `${AGENT_BASE}/oidc/login?return=${enc(`${AGENT_BASE}/`)}`;
 
 /**
  * Silent login: the gateway runs the authorization code flow against the platform's Keycloak with

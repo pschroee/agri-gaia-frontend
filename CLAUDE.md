@@ -35,7 +35,10 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `config`, `approvals` and drive the 15 s refresh with `page.clock`.
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
-  reuses the platform's Keycloak session; the gateway only accepts `return` paths under `/agent/`.
+  reuses the platform's Keycloak session (`return` stays `/agent/`). The visible "Sign in" of `SignInNotice` passes the
+  current platform location as `return` (`loginReturnTarget` in `src/agent/login.ts`, unit-tested), so the login ends
+  on the page the user was on; since gateway PR #7 the gateway accepts any absolute path on the same host there
+  (gateway API.md, *Return after login*), anything it would refuse falls back to `/agent/` already in the frontend.
 - Render check without backend: run `npx vite` with `VITE_AGENT_ENABLED=true` and intercept requests in Playwright
   (serve a fake `keycloak-js` module for `/node_modules/.vite/deps/keycloak-js.js`, answer `api.<base>` and
   `/agent/api/**` with JSON). No mock code lives in the repository.
@@ -65,6 +68,16 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `Conversation`, so it survives the switch from live to stored. "Always show thinking" (switch inside an expanded
   block) is stored per gateway user in `localStorage` (`agentAlwaysShowThinking:<sub>`, try/catch, memory fallback);
   switching it resets the per-block choices.
+- **Stopped steps:** a tool call ended by the user's stop (abort of the run or "Stop" on a command) shows as
+  "stopped by you" with a muted stop icon, not as "failed"; an answer that ended with the abort gets a muted
+  "Stopped by you" instead of "Error: This operation was aborted". The decision is pure in `src/agent/transcript.ts`
+  (`isAbortText` on the last line of the result: "This operation was aborted", "Request was aborted", "Command
+  aborted", "Command stopped by the user"; `isAbortedAnswer`; `stepStatus`), unit-tested. The gateway does not record
+  who aborted: its own aborts (maximum run time, turn or subagent limit) show the same way.
+- **Panel header:** the run-state chip is the part that gives way (label ellipsized, icon and timer stay), the close
+  button is `flex: none`; during a run the "Agent" label is hidden, so "needs approval · 1:15:03" fits at 400 px. The
+  send button's tooltip is controlled and closed on sending (a disabled button fires no blur and its wrapper a fresh
+  mouseover, so it used to stay open); it reopens once the pointer has left the button.
 - **Run control:** `RunStatus` above the input shows the run state of the open chat with a running timer and is the
   only place to stop the agent (`POST …/abort`; the input only sends) or to let an idle chat rest (`POST …/suspend`).
   The state comes from the pure `runStateOf` in `src/agent/runState.ts`: `working`, `waiting` (running with an open

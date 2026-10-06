@@ -77,6 +77,12 @@ export default function ChatInput({
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
     const [staged, dispatchStaged] = useReducer(stagedReducer, emptyStaged);
     const [dragging, setDragging] = useState(false);
+    // The send button's tooltip is controlled: sending disables the button under the pointer or focus. A
+    // disabled button fires no blur, and its wrapper gets a fresh mouseover, so an uncontrolled tooltip stayed
+    // open after sending. After a send it stays closed until the pointer has left the button.
+    const [sendTip, setSendTip] = useState(false);
+    const sendTipHeld = useRef(false);
+    const sendHovered = useRef(false);
     const dragDepth = useRef(0);
     const fileRef = useRef<HTMLInputElement>(null);
     const listId = `agent-slash-${useId().replace(/:/g, '')}`;
@@ -107,6 +113,8 @@ export default function ChatInput({
         // a command goes without the attachments; they stay for the next message
         if (busy || (command ? !t : !canSend(t, staged))) return;
         const attachments = command ? [] : staged.files;
+        sendTipHeld.current = sendHovered.current;
+        setSendTip(false);
         setBusy(true);
         setError(undefined);
         // cleared right away (the message shows in the history or the queue); restored when sending fails
@@ -263,8 +271,21 @@ export default function ChatInput({
                                         ? 'Queue message (goes to the agent when the current run ends)'
                                         : 'Send (Enter)'
                                 }
+                                open={sendTip}
+                                onOpen={() => {
+                                    if (!sendTipHeld.current) setSendTip(true);
+                                }}
+                                onClose={() => setSendTip(false)}
                             >
-                                <span>
+                                <span
+                                    onMouseEnter={() => {
+                                        sendHovered.current = true;
+                                    }}
+                                    onMouseLeave={() => {
+                                        sendHovered.current = false;
+                                        sendTipHeld.current = false;
+                                    }}
+                                >
                                     <IconButton
                                         size="small"
                                         color="primary"
