@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -26,6 +27,7 @@ import EdgeDetailsGrid from '../components/edge/EdgeDetailsGrid';
 import IEdgeDevice from '../types/IEdgeDevice';
 import { EDGE_DEVICES_PATH } from '../endpoints';
 import CircularProgress from '@mui/material/CircularProgress';
+import { usePublishPageSelection } from '../agent/pageSelection';
 
 export default function EdgeDetails() {
     const keycloak = useKeycloak();
@@ -51,6 +53,9 @@ export default function EdgeDetails() {
     useEffect(() => {
         fetchEdgeDevice(edgeId);
     }, [keycloak]);
+
+    // the opened edge device is the agent's page context (name once loaded)
+    usePublishPageSelection(edgeDevice ? { kind: 'edge_device', id: edgeDevice.id, name: edgeDevice.name } : undefined);
 
     if (isLoading) {
         return (

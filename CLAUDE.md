@@ -75,6 +75,19 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   a part with `audience: "agent"` (today the preferred browser language of the first message) is context for the model
   only and is cut out (`isAgentOnly`), never shown as user text. Decide by that mark, not by `type` or the text; the
   gateway fills it in for old rows too (gateway API.md, *Origin of instructions*).
+- **Page context:** a message from the panel carries the platform page and the open or selected object (issue #13;
+  gateway API.md, *Page context*): `pageContextOf` in `src/agent/pageContext.ts` maps the route to the gateway's page id
+  (`/data` → `datasets`, `/models/7` → model 7, `/edge/3` → edge device 3; none on `/ai-agent`, debug pages or open data)
+  and takes the object from a detail route or from what the page publishes with `usePublishPageSelection`
+  (`src/agent/pageSelection.tsx`, a no-op without the agent): `DataManagement` publishes exactly one checked dataset,
+  `ModelDetails` and `EdgeDetails` the loaded object with its name. Ids must be canonical integers, names are cleaned of
+  control and formatting characters and cut to 200 characters, otherwise the gateway answers 400. `ChatInput` shows the
+  context as a chip above the field ("Refers to smarttail-bucht-3-kw31"); its cross leaves it out until the page or
+  object changes (`visibleContext`, keyed by page and id). Sent messages show a muted "Refers to …" above the bubble,
+  taken only from the structured `context` of the gateway's `page_context` source (the note itself is `audience:
+  "agent"` and cut out); queued rows show it from `QueueEntry.context`. `sectionOf` uses the same route table. Slash
+  commands and the first message of the new-chat dialog carry no context. The context never grants rights; the
+  delegation decides. Unit tests in `pageContext.test.ts`, `transcript.test.ts`, `queue.test.ts`.
 - **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
   `message_update` with `thinking_start|delta|end`) show as a collapsed muted line "Thinking · 4.2 s" between text and
   tool steps (`ThinkingBlock`), live as "Thinking … n s". The live message is assembled by the pure reducer

@@ -423,3 +423,34 @@ describe('delivered entries after a page reload (queue_delivered)', () => {
         ).toBe(emptyQueue);
     });
 });
+
+describe('queued messages with a page context', () => {
+    const context = { page: 'datasets', object: { kind: 'dataset' as const, id: '42', name: 'bay-3' } };
+
+    it('carries the context of gateway entries and of unconfirmed ones into the rows', () => {
+        const rows = queueRows(
+            {
+                ...emptyQueue,
+                entries: [entry('q1', 'two', { context }), entry('q2', 'three')],
+                local: [{ key: 'k1', text: 'four', context: { page: 'models' } }],
+            },
+            running,
+        );
+        expect(rows.map((r) => r.context)).toEqual([context, undefined, { page: 'models' }]);
+    });
+
+    it('ignores a context on a system entry or one that is not structured', () => {
+        const rows = queueRows(
+            {
+                ...emptyQueue,
+                entries: [
+                    entry('q1', 'x', { kind: 'system', note: 'background', context }),
+                    entry('q2', 'y', { context: { page: 'datasets', object: { kind: 'dataset', id: 42 } } as never }),
+                ],
+            },
+            running,
+        );
+        expect(rows.map((r) => r.context)).toEqual([undefined, undefined]);
+    });
+});
+

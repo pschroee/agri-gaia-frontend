@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import type { PageContext } from './pageContext';
 // Subset of the agent gateway API types (agri-gaia-agent-gateway, API.md and web/src/api/types.ts),
 // limited to what the platform UI shows.
 
@@ -149,6 +150,8 @@ export type QueueEntry = {
     kind: 'user' | 'system';
     note?: string;
     refs?: string[];
+    /** Page context the user sent the message with (user entries; gateway API.md, *Page context*). */
+    context?: PageContext;
 };
 
 /** SSE event "queue": new state of the queue after a change. */
@@ -227,6 +230,8 @@ export type MessageSource = {
     marker?: string;
     /** "agent": context for the model only (e.g. the preferred browser language); the chat does not show it. */
     audience?: 'agent';
+    /** Type "page_context": the page context as structured data (shown as "Refers to …"); queue_id: its user entry. */
+    context?: PageContext;
 };
 
 export type Approval = {

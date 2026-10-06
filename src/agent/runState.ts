@@ -6,6 +6,7 @@
 // (stop, let it rest). Pure functions, unit-tested.
 
 import type { Chat, StoredMessage } from './types';
+import type { PageContext } from './pageContext';
 
 /**
  * - `working`: pi works on a turn
@@ -116,7 +117,7 @@ export function suspendErrorText(status: number | undefined, message: string): s
 
 /** A message sent outside the queue whose user message is not stored yet (shown greyed in the transcript). */
 /** files: names of the attachments sent with it. */
-export type PendingSend = { key: string; text: string; afterSeq: number; files?: string[] };
+export type PendingSend = { key: string; text: string; afterSeq: number; files?: string[]; context?: PageContext };
 
 /** Has the pending message been stored (a user message after the send)? */
 export function pendingSettled(p: PendingSend, messages: StoredMessage[]): boolean {

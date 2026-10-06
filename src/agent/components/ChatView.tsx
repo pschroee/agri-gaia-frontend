@@ -12,6 +12,8 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useAgentOptional } from '../AgentContext';
 import { withLiveOptions } from '../commands';
 import { modelName } from '../modelChoice';
+import type { PageContext } from '../pageContext';
+import { useCurrentPageContext } from '../pageSelection';
 import { resumeRunning } from '../resume';
 import { runSince, runStateOf } from '../runState';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
@@ -80,11 +82,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
         stream.commandNotices.length +
         (stream.pending ? 1 : 0);
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
+    // the platform page next to the panel (none on /ai-agent)
+    const pageContext = useCurrentPageContext();
     // After sending, the own message and the answer are what the user wants to see.
     const onSend = useCallback(
-        (text: string, attachments: string[]) => {
+        (text: string, attachments: string[], context?: PageContext) => {
             jumpToLatest();
-            return send(text, attachments);
+            return send(text, attachments, context);
         },
         [jumpToLatest, send],
     );
@@ -204,6 +208,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     commands={commands}
                     onCommand={onCommand}
                     onCommandsOpen={stream.refreshCommands}
+                    pageContext={pageContext}
                     toolbar={
                         <ModelEffortPicker
                             chat={stream.chat}

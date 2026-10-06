@@ -7,15 +7,25 @@ import { useLocation } from 'react-router-dom';
 
 import { AgentProvider, useAgentOptional } from '../AgentContext';
 import { agentEnabled } from '../api';
+import { PageSelectionProvider } from '../pageSelection';
 import AgentContextPanel, { AGENT_PANEL_WIDTH } from './AgentContextPanel';
 import AgentFab from './AgentFab';
 import AgentMenuTheme from './AgentMenuTheme';
 
 export const AGENT_ROUTE = '/ai-agent';
 
-/** Wraps the platform layout with the agent state when the build flag VITE_AGENT_ENABLED is set. */
+/**
+ * Wraps the platform layout with the agent state when the build flag VITE_AGENT_ENABLED is set, and with the
+ * selection platform pages publish for the page context (pageSelection.tsx).
+ */
 export function AgentProviderIfEnabled({ children }: { children: ReactNode }) {
-    return agentEnabled ? <AgentProvider>{children}</AgentProvider> : <>{children}</>;
+    return agentEnabled ? (
+        <AgentProvider>
+            <PageSelectionProvider>{children}</PageSelectionProvider>
+        </AgentProvider>
+    ) : (
+        <>{children}</>
+    );
 }
 
 const onAgentPage = (pathname: string) => pathname === AGENT_ROUTE || pathname.startsWith(`${AGENT_ROUTE}/`);
