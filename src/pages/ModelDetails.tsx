@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -22,6 +23,7 @@ import Paper from '@mui/material/Paper';
 import { MODELS_PATH } from '../endpoints';
 import IModel from '../types/IModel';
 import ModelDetailsGrid from '../components/models/ModelDetailsGrid';
+import { usePublishPageSelection } from '../agent/pageSelection';
 
 export default function ModelDetails() {
     const keycloak = useKeycloak();
@@ -46,6 +48,9 @@ export default function ModelDetails() {
     useEffect(() => {
         fetchModel(modelId);
     }, [keycloak]);
+
+    // the opened model is the agent's page context (name once loaded)
+    usePublishPageSelection(model ? { kind: 'model', id: model.id, name: model.name } : undefined);
 
     return model ? (
         <>

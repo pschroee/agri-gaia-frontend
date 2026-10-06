@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -33,6 +34,7 @@ import AgrovocSearchbar from '../components/common/AgrovocSearchbar';
 import React from 'react';
 import { downloadBlob } from '../util';
 import DatasetInferenceDialog from '../components/datamanagement/DatasetInferenceDialog';
+import { usePublishPageSelection } from '../agent/pageSelection';
 
 export default function DataManagement() {
     const keycloak = useKeycloak();
@@ -44,6 +46,12 @@ export default function DataManagement() {
     const [inferenceDialogOpen, setInferenceDialogOpen] = useState(false);
     const [selected, setSelected] = React.useState<readonly number[]>([]);
     const [connectorAvailable, setConnectorAvailable] = useState<boolean>(false);
+
+    // exactly one selected dataset is the agent's page context
+    const selectedDataset = selected.length === 1 ? datasets.find((d) => d.id === selected[0]) : undefined;
+    usePublishPageSelection(
+        selectedDataset ? { kind: 'dataset', id: selectedDataset.id, name: selectedDataset.name } : undefined,
+    );
 
     useEffect(() => {
         fetchConnectorInformation();
