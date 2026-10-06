@@ -191,6 +191,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             setSocketCalls(d.socket_calls ?? []);
             if (Array.isArray(d.artifacts)) setArtifacts(d.artifacts);
             dispatchQueue({ type: 'loaded', entries: d.queue ?? [] });
+            // handed to pi but not read yet: shown as before a page reload (gateway issue #21)
+            if (Array.isArray(d.queue_delivered))
+                dispatchQueue({ type: 'delivered_loaded', deliveries: d.queue_delivered, lastSeq: lastSeq(d.messages ?? []) });
             // delivered entries stay visible until their user message is stored
             dispatchQueue({ type: 'messages', messages: d.messages ?? [] });
             if (Array.isArray(d.background)) setBackground(d.background);

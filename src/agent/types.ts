@@ -159,6 +159,22 @@ export type QueueEvent = {
     text?: string;
 };
 
+/**
+ * Queued entries the gateway handed to pi as one message whose user message pi has not reported yet (steered in
+ * while a tool runs, or on their way while the chat resumes); `queue_delivered` of GET /chats/{id}, same content as
+ * the SSE event "queue" with change "delivered" (gateway API.md, "Queue").
+ */
+export type QueueDelivery = {
+    ids: string[];
+    /** The entries as they were queued, in order. */
+    entries: QueueEntry[];
+    /** The message as it went to pi. */
+    text: string;
+    delivered_at: string;
+    /** Steered into the running turn: pi reads it after its current step. */
+    steered?: boolean;
+};
+
 export type TextContent = { type: 'text'; text: string };
 /** Thinking of the model; redacted blocks carry no readable text. */
 export type ThinkingContent = { type: 'thinking'; thinking: string; redacted?: boolean };
@@ -292,6 +308,8 @@ export type ChatDetail = {
     socket_calls: SocketCall[];
     /** Open entries of the queue. */
     queue?: QueueEntry[];
+    /** Handed to pi but not read yet, oldest first; missing on gateways before issue #21. */
+    queue_delivered?: QueueDelivery[];
     /** Background tasks of the chat by seq. */
     background?: BackgroundTask[];
     /** Entries from the session files of the subagents. */
