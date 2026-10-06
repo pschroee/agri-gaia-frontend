@@ -15,6 +15,8 @@ import type {
     LLMCall,
     Me,
     Model,
+    PlatformStatus,
+    Pool,
     QueueEntry,
     SendResult,
     ToolExecution,
@@ -80,6 +82,10 @@ export const agentApi = {
     config: () => request<Config>('config'),
     models: () => request<Model[]>('models'),
     variants: () => request<Variant[]>('variants'),
+    /** Warm pool: slots per variant; other users' chats come without id and title. */
+    pool: () => request<Pool>('pool'),
+    /** Binding to the platform API (probe, last token exchange); 404 on gateways without the endpoint. */
+    platform: () => request<PlatformStatus>('platform'),
     chats: () => request<Chat[]>('chats'),
     chat: (id: string) => request<ChatDetail>(`chats/${enc(id)}`),
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
