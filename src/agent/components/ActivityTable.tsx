@@ -20,6 +20,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import BlockIcon from '@mui/icons-material/Block';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 
+import { ActivityRow, formatDuration } from '../activity';
 import {
     effectOf,
     formatClock,
@@ -30,12 +31,12 @@ import {
     splitCall,
     summarizeRules,
 } from '../format';
-import type { Approval, Chat, SocketCall } from '../types';
+import type { ActivityCall } from '../types';
 import EffectChip from './EffectChip';
 import { agentColors, MONO } from './tokens';
 
-/** One platform call of the agent, with the chat it belongs to. */
-export type ActivityRow = { call: SocketCall; chat: Chat; log: SocketCall[]; approvals: Approval[] };
+/** Outcome as the gateway classified it; older entries without it from the result text. */
+const outcomeOfCall = (c: ActivityCall): Outcome => c.outcome ?? outcomeOf(c.result);
 
 function OutcomeCell({ outcome }: { outcome: Outcome }) {
     const style: Record<Outcome, { color: string; icon: JSX.Element }> = {
@@ -56,21 +57,21 @@ function OutcomeCell({ outcome }: { outcome: Outcome }) {
 }
 
 function CallLog({ row }: { row: ActivityRow }) {
-    const { call, chat, log, approvals } = row;
-    const approval = approvals.find(
-        (a) => a.kind === 'platform_write' && a.tool_call_id && a.tool_call_id === call.tool_call_id,
-    );
+    const { call, chat, log } = row;
     const lines: { at: string; text: string; tone?: 'warn' | 'bad' }[] = [];
     for (const c of log) {
-        const o = outcomeOf(c.result);
+        const o = outcomeOfCall(c);
+        const took = c.duration_ms !== undefined ? `  (${formatDuration(c.duration_ms)})` : '';
         lines.push({
             at: c.created_at,
-            text: `${c.op.padEnd(10)} ${c.detail}  →  ${c.result}`,
+            text: `${c.op.padEnd(10)} ${c.detail}  →  ${c.result}${took}`,
             tone: o === 'ok' ? undefined : o === 'logged' ? 'warn' : 'bad',
         });
     }
-    if (approval) {
-        lines.push({ at: approval.created_at, text: `approval requested  ${approval.name}`, tone: 'warn' });
+    for (const c of log) {
+        const approval = c.approval;
+        if (!approval) continue;
+        lines.push({ at: approval.created_at, text: `approval requested  ${c.detail}`, tone: 'warn' });
         if (approval.decided_at) {
             lines.push({
                 at: approval.decided_at,
@@ -135,7 +136,14 @@ function CallLog({ row }: { row: ActivityRow }) {
                 <dd>{chat.title || chat.id}</dd>
                 <dt>Connection</dt>
                 <dd>
-                    {call.via.toUpperCase()} · model {chat.model}
+                    {call.via.toUpperCase()}
+                    {chat.model && ` · model ${chat.model}`}
+                </dd>
+                <dt>Duration</dt>
+                <dd>
+                    {call.duration_ms !== undefined
+                        ? `${formatDuration(call.duration_ms)} round trip to the platform`
+                        : 'not measured (the call did not go out, or it predates the measurement)'}
                 </dd>
                 <dt>Delegation</dt>
                 <dd>{d ? summarizeRules(d.rules).join('; ') : 'none (writes need approval)'}</dd>
@@ -150,91 +158,114 @@ function CallLog({ row }: { row: ActivityRow }) {
     );
 }
 
-/** Platform calls of the agent with effect and result; a row expands to its call log. */
-export default function ActivityTable({ rows }: { rows: ActivityRow[] }) {
+/** Platform calls of the agent with effect, result and duration; a row expands to its call log. */
+export default function ActivityTable({
+    rows,
+    emptyText = 'The agent has not called the platform yet.',
+}: {
+    rows: ActivityRow[];
+    emptyText?: string;
+}) {
     const [open, setOpen] = useState<number>();
 
     if (rows.length === 0) {
-        return (
-            <Typography sx={{ color: 'text.secondary', fontSize: 14, py: 3 }}>
-                The agent has not called the platform yet.
-            </Typography>
-        );
+        return <Typography sx={{ color: 'text.secondary', fontSize: 14, py: 3 }}>{emptyText}</Typography>;
     }
 
     return (
-        <Table size="medium" sx={{ '& td, & th': { fontSize: 14 } }}>
-            <TableHead>
-                <TableRow>
-                    <TableCell sx={{ width: 40, p: 0 }} />
-                    <TableCell sx={{ fontWeight: 500 }}>Time</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>Chat</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>Call</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>Via</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>Effect</TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>Result</TableCell>
-                </TableRow>
-            </TableHead>
-            <TableBody>
-                {rows.map((row) => {
-                    const { call, chat } = row;
-                    const { method, path } = splitCall(call.detail);
-                    const effect = effectOf(method, path);
-                    const expanded = open === call.id;
-                    return (
-                        <Fragment key={call.id}>
-                            <TableRow
-                                hover
-                                onClick={() => setOpen(expanded ? undefined : call.id)}
-                                sx={{
-                                    cursor: 'pointer',
-                                    '& > td': { borderBottom: expanded ? 0 : undefined },
-                                    ...(expanded && {
-                                        bgcolor: '#f4f7f5',
-                                        '& > td:first-of-type': { boxShadow: `inset 3px 0 0 ${agentColors.green}` },
-                                    }),
-                                }}
-                            >
-                                <TableCell sx={{ p: 0, pl: 0.5 }}>
-                                    <IconButton size="small" aria-label={expanded ? 'Collapse' : 'Expand'}>
-                                        {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
-                                    </IconButton>
-                                </TableCell>
-                                <TableCell sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
-                                    {isToday(call.created_at)
-                                        ? ''
-                                        : `${new Date(call.created_at).toLocaleDateString('en-GB')} `}
-                                    {formatClock(call.created_at)}
-                                </TableCell>
-                                <TableCell sx={{ maxWidth: 220 }}>
-                                    <Typography noWrap sx={{ fontSize: 14 }} title={chat.title}>
-                                        {chat.title || 'Untitled chat'}
-                                    </Typography>
-                                </TableCell>
-                                <TableCell
-                                    sx={{ fontFamily: MONO, fontSize: '13px !important', overflowWrap: 'anywhere' }}
+        // Narrow screens scroll the table, not the page.
+        <Box sx={{ overflowX: 'auto' }}>
+            <Table size="medium" sx={{ '& td, & th': { fontSize: 14 } }}>
+                <TableHead>
+                    <TableRow>
+                        <TableCell sx={{ width: 40, p: 0 }} />
+                        <TableCell sx={{ fontWeight: 500 }}>Time</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>Chat</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>Call</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>Via</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>Effect</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }}>Result</TableCell>
+                        <TableCell sx={{ fontWeight: 500 }} align="right">
+                            Duration
+                        </TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {rows.map((row) => {
+                        const { call, chat } = row;
+                        const { method, path } = splitCall(call.detail);
+                        const effect = effectOf(method, path);
+                        const expanded = open === call.id;
+                        return (
+                            <Fragment key={call.id}>
+                                <TableRow
+                                    hover
+                                    onClick={() => setOpen(expanded ? undefined : call.id)}
+                                    sx={{
+                                        cursor: 'pointer',
+                                        '& > td': { borderBottom: expanded ? 0 : undefined },
+                                        ...(expanded && {
+                                            bgcolor: '#f4f7f5',
+                                            '& > td:first-of-type': { boxShadow: `inset 3px 0 0 ${agentColors.green}` },
+                                        }),
+                                    }}
                                 >
-                                    {call.detail}
-                                </TableCell>
-                                <TableCell sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
-                                    {call.via}
-                                </TableCell>
-                                <TableCell>{effect && <EffectChip effect={effect} />}</TableCell>
-                                <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                                    <OutcomeCell outcome={outcomeOf(call.result)} />
-                                </TableCell>
-                            </TableRow>
-                            <TableRow>
-                                <TableCell colSpan={7} sx={{ p: 0, borderBottom: expanded ? undefined : 0 }}>
-                                    <Collapse in={expanded} timeout="auto" unmountOnExit>
-                                        <CallLog row={row} />
-                                    </Collapse>
-                                </TableCell>
-                            </TableRow>
-                        </Fragment>
-                    );
-                })}
-            </TableBody>
-        </Table>
+                                    <TableCell sx={{ p: 0, pl: 0.5 }}>
+                                        <IconButton size="small" aria-label={expanded ? 'Collapse' : 'Expand'}>
+                                            {expanded ? <KeyboardArrowUpIcon /> : <KeyboardArrowDownIcon />}
+                                        </IconButton>
+                                    </TableCell>
+                                    <TableCell sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                                        {isToday(call.created_at)
+                                            ? ''
+                                            : `${new Date(call.created_at).toLocaleDateString('en-GB')} `}
+                                        {formatClock(call.created_at)}
+                                    </TableCell>
+                                    <TableCell>
+                                        <Typography noWrap sx={{ fontSize: 14, maxWidth: 180 }} title={chat.title}>
+                                            {chat.title || 'Untitled chat'}
+                                        </Typography>
+                                    </TableCell>
+                                    <TableCell
+                                        sx={{
+                                            fontFamily: MONO,
+                                            fontSize: '13px !important',
+                                            overflowWrap: 'anywhere',
+                                            minWidth: 160,
+                                        }}
+                                    >
+                                        {call.detail}
+                                    </TableCell>
+                                    <TableCell sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
+                                        {call.via}
+                                    </TableCell>
+                                    <TableCell>{effect && <EffectChip effect={effect} />}</TableCell>
+                                    <TableCell>
+                                        <OutcomeCell outcome={outcomeOfCall(call)} />
+                                    </TableCell>
+                                    <TableCell
+                                        align="right"
+                                        sx={{
+                                            whiteSpace: 'nowrap',
+                                            fontVariantNumeric: 'tabular-nums',
+                                            color: call.duration_ms === undefined ? 'text.disabled' : undefined,
+                                        }}
+                                    >
+                                        {formatDuration(call.duration_ms)}
+                                    </TableCell>
+                                </TableRow>
+                                <TableRow>
+                                    <TableCell colSpan={8} sx={{ p: 0, borderBottom: expanded ? undefined : 0 }}>
+                                        <Collapse in={expanded} timeout="auto" unmountOnExit>
+                                            <CallLog row={row} />
+                                        </Collapse>
+                                    </TableCell>
+                                </TableRow>
+                            </Fragment>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+        </Box>
     );
 }

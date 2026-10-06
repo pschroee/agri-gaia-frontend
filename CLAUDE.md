@@ -33,6 +33,16 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   the last exchange lives only in its memory. Derivations are pure in `src/agent/status.ts` (with a port of the
   gateway's `formatPeakWindows`), unit-tested. Render check: answer `pool`, `platform`, `variants`, `models`,
   `config`, `approvals` and drive the 15 s refresh with `page.clock`.
+- **Activity tab:** `ActivityView` reads the gateway's `GET /activity` (gateway PR for issue #12): platform calls of all
+  the user's chats in one request, newest first, in pages of 100 ("Load more" passes `next_before`), filtered by period
+  (Today, 7 days (default), 30 days, All; `since` is local midnight sent in UTC) and result (`outcome`). The key figures
+  come from the response's `summary` and cover the whole period, not only the loaded pages (calls, chats, agent runs,
+  blocked, rejected, average and 95th percentile of the duration); "waiting for approval" still comes from
+  `GET /approvals?state=pending`. The table shows the gateway's `outcome` and `duration_ms` (round trip to the platform,
+  "–" when the call did not go out or predates the measurement); an expanded row shows the calls of the same tool call
+  among the loaded ones plus the approval the gateway joined to the call. An older gateway answers 404, shown as a hint
+  instead of the table. The view no longer loads chats one by one. Query, paging, rows and figures are pure in
+  `src/agent/activity.ts`, unit-tested. Render check: answer `activity` by `before` and check the query parameters.
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
   reuses the platform's Keycloak session (`return` stays `/agent/`). The visible "Sign in" of `SignInNotice` passes the
