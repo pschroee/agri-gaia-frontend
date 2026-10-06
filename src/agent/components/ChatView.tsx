@@ -19,6 +19,7 @@ import { buildTranscript, countEntries, liveParts } from '../transcript';
 import { useChatStream } from '../useChatStream';
 import { useStickToBottom } from '../useStickToBottom';
 import ApprovalCard from './ApprovalCard';
+import ArtifactStrip from './ArtifactStrip';
 import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
@@ -81,9 +82,9 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
     // After sending, the own message and the answer are what the user wants to see.
     const onSend = useCallback(
-        (text: string) => {
+        (text: string, attachments: string[]) => {
             jumpToLatest();
-            return send(text);
+            return send(text, attachments);
         },
         [jumpToLatest, send],
     );
@@ -114,6 +115,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
             >
                 {header}
                 {chat && <DelegationStrip chat={chat} socketCalls={stream.socketCalls} />}
+                <ArtifactStrip chatId={chatId} artifacts={stream.artifacts} onOpen={stream.refreshArtifacts} />
             </Box>
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
                 <Box
@@ -184,6 +186,9 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                 )}
                 <ChatInput
                     onSend={onSend}
+                    onUpload={stream.uploadFiles}
+                    maxFileMb={agent?.config?.artifact_max_mb}
+                    chatId={chatId}
                     running={stream.chat?.running}
                     placeholder={placeholder}
                     dense={dense}
