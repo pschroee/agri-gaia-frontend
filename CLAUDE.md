@@ -143,8 +143,8 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `max_subagents_limit` from `GET /config` (loaded once in `AgentContext`). Texts and bounds are pure functions in
   `src/agent/settings.ts`, unit-tested.
 - **Files:** attachments, the chat's artifacts and display images, as in the gateway's own UI (API.md, *Attachments to
-  messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files onto the
-  input area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
+  messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files anywhere on the
+  agent area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
   `GET /config` are refused before uploading and named. Uploaded files sit as chips above the field until sent; sending
   posts their names as `attachments` with the text (text may be empty), also when the message is queued (the queue row
   names the files); a failed send puts text and chips back; a slash command leaves the chips for the next message.
@@ -161,8 +161,15 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   muted note, as do local images of an answer still streaming. A click enlarges (`ImagePreview`, MUI Dialog with
   download). Images are split off a line before the other inline forms, so underscores in a path cannot start italics.
   `request` in `api.ts` sets the JSON content type only for string bodies; FormData brings its own boundary. The pure
-  logic is in `src/agent/files.ts` and `images.ts`, unit-tested. Render check: drop with a `DataTransfer` built in the
-  page and `dispatchEvent('dragenter'|'dragover'|'drop', {dataTransfer})` on `agent-chat-input`.
+  logic is in `src/agent/files.ts` and `images.ts`, unit-tested. **Drop area:** `AgentDropZone` covers the whole context panel (from its header down) and the chat tab of
+  `/ai-agent` (history and chat); while files are dragged over it, an overlay "Drop files to upload" covers the area,
+  and dropped files go to the open chat's `ChatInput` (registered through `useAgentDropTarget`), the same path as the
+  paperclip. Without an open chat the area takes nothing; drags without files (text, links) pass through, so the text
+  field still takes dropped text. Nested `dragenter`/`dragleave` are counted by the pure `dragReducer`
+  (`src/agent/dropzone.ts`, unit-tested); a `dragleave` towards an element outside the area, `dragend` and `drop` on
+  the window end it at once. A `ChatInput` outside a zone keeps its own drop target (`useFileDrop`). Render check: drop
+  with a `DataTransfer` built in the page and `dispatchEvent('dragenter'|'dragleave'|'dragover'|'drop', {dataTransfer,
+  relatedTarget})` on any element of `agent-drop-area`.
 - **Mermaid diagrams:** ```` ```mermaid ```` blocks in answers render as diagrams (`MermaidDiagram`), as in the
   gateway's own UI (port of its `web/src/lib/mermaid.ts`). mermaid and DOMPurify are loaded only at the first diagram
   (dynamic import of `src/agent/mermaidLoad.ts`, separate chunks); the main bundle grew by about 10 kB for the UI code
