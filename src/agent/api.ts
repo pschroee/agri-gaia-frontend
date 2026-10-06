@@ -4,6 +4,8 @@
 
 import type {
     Approval,
+    Artifact,
+    ArtifactKind,
     Chat,
     ChatDetail,
     Command,
@@ -43,7 +45,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         credentials: 'same-origin',
         headers: {
             Accept: 'application/json',
-            ...(init?.body ? { 'Content-Type': 'application/json' } : {}),
+            // FormData sets its own multipart content type with the boundary
+            ...(typeof init?.body === 'string' ? { 'Content-Type': 'application/json' } : {}),
             ...init?.headers,
         },
     });
@@ -78,7 +81,21 @@ export const agentApi = {
     chats: () => request<Chat[]>('chats'),
     chat: (id: string) => request<ChatDetail>(`chats/${enc(id)}`),
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
-    sendMessage: (id: string, text: string) => post<SendResult>(`chats/${enc(id)}/messages`, { text }),
+    /** Sends a message; attachments: names of inputs uploaded before (400 for unknown names). */
+    sendMessage: (id: string, text: string, attachments: string[] = []) =>
+        post<SendResult>(
+            `chats/${enc(id)}/messages`,
+            attachments.length > 0 ? { text, attachments } : { text },
+        ),
+    /** Uploads files for the agent (inputs, mirrored to /workspace/inputs/); limit artifact_max_mb per file. */
+    uploadFiles: (id: string, files: File[]) => {
+        const form = new FormData();
+        for (const f of files) form.append('file', f, f.name);
+        return request<Artifact[]>(`chats/${enc(id)}/files`, { method: 'POST', body: form });
+    },
+    /** Inputs and outputs of the chat. */
+    artifacts: (id: string) =>
+        request<Artifact[]>(`chats/${enc(id)}/artifacts`).then((l) => (Array.isArray(l) ? l : [])),
     /** Slash commands: the gateway's built-in ones and pi's (extensions, prompt templates, skills). */
     commands: (id: string) => request<Command[]>(`chats/${enc(id)}/commands`),
     /**
@@ -116,6 +133,14 @@ export const agentApi = {
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
     decide: (id: string, approve: boolean) => post<Approval>(`approvals/${enc(id)}`, { approve }),
 };
+
+/** Download address of an artifact (the gateway serves it as attachment). */
+export const artifactUrl = (chatId: string, name: string, kind: ArtifactKind = 'output') =>
+    `${API}/chats/${enc(chatId)}/artifacts/${enc(name)}?kind=${kind}`;
+
+/** Display image of an answer: path in the sandbox and ID of the answer (images.ts). */
+export const imageUrl = (chatId: string, path: string, msg: string) =>
+    `${API}/chats/${enc(chatId)}/images?path=${enc(path)}&msg=${enc(msg)}`;
 
 export const eventsUrl = (chatId: string) => `${API}/chats/${enc(chatId)}/events`;
 

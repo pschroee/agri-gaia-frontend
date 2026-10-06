@@ -2,7 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { splitAttachments } from './files';
 import { isBlocked } from './format';
+import { messageImageKey } from './images';
 import { hasThinkingText, thinkingDuration, thinkingKey } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
 import type { Approval, ContentBlock, MessageSource, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
@@ -31,11 +33,16 @@ export type ThinkingPart = {
     liveSince?: number;
 };
 
-export type AgentPart = { type: 'text'; text: string } | ThinkingPart | { type: 'steps'; steps: Step[] };
+/** imageKey: ID of the stored answer the text comes from, to fetch its display images (missing while live). */
+export type AgentPart =
+    | { type: 'text'; text: string; imageKey?: string }
+    | ThinkingPart
+    | { type: 'steps'; steps: Step[] };
 
 /** seq: the stored message the item comes from (the first one for an agent block; missing for the live one). */
 export type TranscriptItem =
-    | { kind: 'user'; key: string; seq?: number; text: string }
+    /** files: names of the attachments (inputs) that went with the message. */
+    | { kind: 'user'; key: string; seq?: number; text: string; files?: string[] }
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string }
     | { kind: 'agent'; key: string; seq?: number; parts: AgentPart[]; error?: string; usage?: AnswerUsage }
     | {
@@ -47,9 +54,6 @@ export type TranscriptItem =
           tokensAfter?: number;
           cost?: number;
       };
-
-/** Head of the attachments block the gateway appends to a user message (internal/chat/manager.go). */
-const ATTACHMENTS_HEAD = '[Attachments in /workspace/inputs/]';
 
 /** Fixed head of every gateway note inside a user message (agent gateway, internal/chat/origin.go). */
 const SYSTEM_HEADER = '[Note from the orchestrator, not from the user]';
@@ -198,18 +202,22 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
         const msg = m.message;
         if (msg.role === 'user') {
             agent = undefined;
-            let text = textOf(msg.content);
-            const i = text.lastIndexOf(ATTACHMENTS_HEAD);
-            if (i >= 0) text = text.slice(0, i).trim();
+            const split = splitAttachments(textOf(msg.content));
+            const text = split.text.trim();
+            const files = split.files.length ? split.files : undefined;
             if (m.origin === 'system' && !m.sources?.length) {
                 items.push({ kind: 'notice', key: `n${m.seq}`, seq: m.seq, text });
                 continue;
             }
             if (m.origin !== 'system' && m.origin !== 'mixed') {
-                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, text });
+                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, text, files });
                 continue;
             }
-            splitMessage(text, m.sources).forEach((p, i) => {
+            const parts = splitMessage(text, m.sources);
+            const lastUser = parts.map((p) => p.kind).lastIndexOf('user');
+            // the attachments block ends the message: it belongs to the user's text (or stands alone)
+            if (files && lastUser < 0) items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, text: '', files });
+            parts.forEach((p, i) => {
                 if (p.kind === 'system')
                     items.push({
                         kind: 'notice',
@@ -218,7 +226,14 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                         text: p.text,
                         label: noteLabel(p.source),
                     });
-                else items.push({ kind: 'user', key: `u${m.seq}-${i}`, seq: m.seq, text: p.text });
+                else
+                    items.push({
+                        kind: 'user',
+                        key: `u${m.seq}-${i}`,
+                        seq: m.seq,
+                        text: p.text,
+                        files: i === lastUser ? files : undefined,
+                    });
             });
             continue;
         }
@@ -244,9 +259,10 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
         answerRows.get(agent)?.push(m);
         const cur = agent;
         const blocks = Array.isArray(msg.content) ? msg.content : [];
+        const imageKey = messageImageKey(msg);
         blocks.forEach((b, idx) => {
             if (b.type === 'text' && b.text.trim()) {
-                cur.parts.push({ type: 'text', text: b.text });
+                cur.parts.push({ type: 'text', text: b.text, imageKey });
             } else if (b.type === 'thinking' && hasThinkingText(b.thinking)) {
                 const ts = msg.timestamp;
                 const id = ts === undefined ? `s${m.seq}:${idx}` : thinkingKey(ts, idx);

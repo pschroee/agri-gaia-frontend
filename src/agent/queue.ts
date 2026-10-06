@@ -12,7 +12,7 @@ import { noteLabel, textOf } from './transcript';
 import type { Chat, HoldReason, QueueEntry, QueueEvent, StoredMessage } from './types';
 
 /** Sent while the agent works, the gateway's response is still pending (optimistic). */
-export type LocalQueued = { key: string; text: string };
+export type LocalQueued = { key: string; text: string; attachments?: string[] };
 
 export type QueueState = {
     /** Open entries according to the gateway. */
@@ -194,7 +194,13 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
         ),
         ...state.entries.map((e) => row(e, state.removing.includes(e.id) ? 'removing' : held ? 'held' : 'waiting')),
         ...state.local.map(
-            (l): QueueRow => ({ key: l.key, text: l.text, attachments: [], system: false, state: 'sending' }),
+            (l): QueueRow => ({
+                key: l.key,
+                text: l.text,
+                attachments: l.attachments ?? [],
+                system: false,
+                state: 'sending',
+            }),
         ),
     ];
 }
