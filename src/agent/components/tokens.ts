@@ -27,3 +27,18 @@ export const blockSx = {
     borderColor: 'divider',
     borderRadius: 1,
 } as const;
+
+/** Fenced code block in an answer (Markdown, Mermaid source). */
+export const codeBlockSx = {
+    fontFamily: MONO,
+    fontSize: 12,
+    lineHeight: 1.6,
+    bgcolor: '#fafafa',
+    border: 1,
+    borderColor: 'divider',
+    borderRadius: 1,
+    p: 1.25,
+    m: 0,
+    overflowX: 'auto',
+    whiteSpace: 'pre',
+} as const;

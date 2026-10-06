@@ -100,12 +100,15 @@ function AgentBlock({
     dense,
     thinking,
     chatId,
+    live = false,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
     thinking: Thinking;
     /** For the answer's display images. */
     chatId?: string;
+    /** The answer is still streaming (Mermaid blocks render once closed). */
+    live?: boolean;
 }) {
     return (
         <Box sx={{ display: 'flex', minWidth: 0 }}>
@@ -114,7 +117,12 @@ function AgentBlock({
                     if (p.type === 'text') {
                         return (
                             <Box key={i} sx={{ mb: 1 }}>
-                                <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} />
+                                <Markdown
+                                    text={p.text}
+                                    dense={dense}
+                                    images={{ chatId, msgId: p.imageKey }}
+                                    streaming={live}
+                                />
                             </Box>
                         );
                     }
@@ -366,7 +374,12 @@ export default function Conversation({
                 <CommandLine key={n.key} notice={n} />
             ))}
             {hasLive && (
-                <AgentBlock item={{ kind: 'agent', key: 'live', parts: liveP }} dense={dense} thinking={thinking} />
+                <AgentBlock
+                    item={{ kind: 'agent', key: 'live', parts: liveP }}
+                    dense={dense}
+                    thinking={thinking}
+                    live
+                />
             )}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
             {(chat?.running || pending) && !hasLive && !resuming && !stream.compacting && (

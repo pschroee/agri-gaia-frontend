@@ -8,10 +8,13 @@ import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 
 import { imageSource, MARKDOWN_IMAGE, parseMarkdownImage } from '../images';
+import { isFenceOpen, mermaidReady, readFence } from '../mermaid';
 import ImagePreview, { ImageNote } from './ImagePreview';
+import MermaidDiagram from './MermaidDiagram';
+import { codeBlockSx, MONO } from './tokens';
 
 // A small Markdown renderer for agent answers: paragraphs, headings, lists, block quotes, fenced code,
-// tables and the inline forms code, bold, italic, links and images. It builds React elements, never HTML strings.
+// tables, Mermaid diagrams (MermaidDiagram) and the inline forms code, bold, italic, links and images. It builds React elements, never HTML strings.
 
 /** Where images of this text may come from: the chat and the ID of the stored answer (images.ts). */
 export type ImageContext = { chatId?: string; msgId?: string };
@@ -44,8 +47,6 @@ function AnswerImage({ alt, src, ctx }: { alt: string; src: string; ctx?: ImageC
             );
     }
 }
-
-const MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
 
 /**
  * Inline forms of a line. Images are split off first, so that an underscore in an image path cannot start an
@@ -126,9 +127,12 @@ export default function Markdown({
     text,
     dense = false,
     images,
+    streaming = false,
 }: {
     text: string;
     dense?: boolean;
+    /** The answer is still streaming: an unclosed Mermaid block at the end stays code. */
+    streaming?: boolean;
     /** Chat and answer for local images; without it they stay a note. */
     images?: ImageContext;
 }) {
@@ -136,37 +140,31 @@ export default function Markdown({
     const blocks: ReactNode[] = [];
     let i = 0;
     let n = 0;
+    let diagrams = 0;
     const gap = dense ? 0.75 : 1;
 
     while (i < lines.length) {
         const line = lines[i];
         const key = `b${n++}`;
 
-        if (/^\s*```/.test(line)) {
-            const body: string[] = [];
-            i++;
-            while (i < lines.length && !/^\s*```/.test(lines[i])) body.push(lines[i++]);
-            i++;
+        const fence = readFence(lines, i);
+        if (fence) {
+            i = fence.next;
+            if (fence.lang === 'mermaid') {
+                blocks.push(
+                    <MermaidDiagram
+                        key={key}
+                        code={fence.body}
+                        ready={mermaidReady(fence, streaming)}
+                        index={diagrams++}
+                        gap={gap}
+                    />,
+                );
+                continue;
+            }
             blocks.push(
-                <Box
-                    key={key}
-                    component="pre"
-                    sx={{
-                        fontFamily: MONO,
-                        fontSize: 12,
-                        lineHeight: 1.6,
-                        bgcolor: '#fafafa',
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                        p: 1.25,
-                        m: 0,
-                        mb: gap,
-                        overflowX: 'auto',
-                        whiteSpace: 'pre',
-                    }}
-                >
-                    {body.join('\n')}
+                <Box key={key} component="pre" sx={{ ...codeBlockSx, mb: gap }}>
+                    {fence.body}
                 </Box>,
             );
             continue;
@@ -274,7 +272,7 @@ export default function Markdown({
         while (
             i < lines.length &&
             lines[i].trim() &&
-            !/^\s*```/.test(lines[i]) &&
+            !isFenceOpen(lines[i]) &&
             !/^#{1,6}\s/.test(lines[i]) &&
             !ul.test(lines[i]) &&
             !ol.test(lines[i]) &&
