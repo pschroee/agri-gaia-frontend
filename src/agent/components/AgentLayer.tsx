@@ -9,6 +9,7 @@ import { AgentProvider, useAgentOptional } from '../AgentContext';
 import { agentEnabled } from '../api';
 import AgentContextPanel, { AGENT_PANEL_WIDTH } from './AgentContextPanel';
 import AgentFab from './AgentFab';
+import AgentMenuTheme from './AgentMenuTheme';
 
 export const AGENT_ROUTE = '/ai-agent';
 
@@ -31,9 +32,9 @@ export default function AgentLayer() {
     const { pathname } = useLocation();
     if (onAgentPage(pathname)) return null;
     return (
-        <>
+        <AgentMenuTheme>
             <AgentContextPanel />
             <AgentFab />
-        </>
+        </AgentMenuTheme>
     );
 }

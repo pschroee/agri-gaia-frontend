@@ -213,6 +213,16 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   (`BackgroundNoteLine`), opening to command, last lines and log path; queued notes are labelled from their header line.
   Render check: answer `tools/running`, `background`, `llm_calls` and the chat's `background`/`subagent_*` fields, drive
   SSE `pi` `tool_execution_start|end`, `background`, `subagent`, `subagent_run`.
+- **Menus without scroll lock:** MUI's Popover (and Menu and Select) locks the page while open: `overflow: hidden`
+  on body removes the document scrollbar and `padding-right` on body and `.mui-fixed` makes up for it. In-flow content
+  and the app bar stay, but the context panel (fixed drawer at `right: 0`, no `.mui-fixed`) jumped right by the
+  scrollbar width (15 px with classic scrollbars), so next to it the page seemed to move (issue #25). `AgentMenuTheme`
+  wraps the panel layer and `/ai-agent` with the platform theme plus `MuiPopover.defaultProps.disableScrollLock`
+  (`withoutPopoverScrollLock`, `src/agent/menuTheme.ts`, unit-tested), so every menu, select and popover there,
+  including new ones, leaves the page alone; menus still close on outside click and Escape. The page can scroll
+  under an open menu; menus of the panel stay put (fixed panel). Dialogs keep their modal lock (the panel still moves
+  15 px behind the backdrop). Render check: launch Chromium with `ignoreDefaultArgs: ['--hide-scrollbars']`, else
+  headless has no scrollbar and nothing moves; compare `getBoundingClientRect().left` of page and panel elements.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
