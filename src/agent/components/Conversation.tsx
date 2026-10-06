@@ -15,6 +15,7 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 
 import { noticeAnchor } from '../commands';
 import type { CommandNotice } from '../commands';
+import type { Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
 import { useAlwaysShowThinking } from '../thinkingPref';
@@ -23,6 +24,7 @@ import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import { compactionReason, formatAnswerUsage, formatTokens, formatUsd, TARIFF_LABEL } from '../usage';
 import type { AnswerUsage } from '../usage';
+import { MessageAttachments } from './Attachments';
 import Markdown from './Markdown';
 import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
@@ -32,15 +34,33 @@ const NO_CHOICES: Record<string, boolean> = {};
 
 type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
 
-function UserBubble({ text, dense, pending }: { text: string; dense: boolean; pending?: string }) {
-    return (
+type Files = { chatId?: string; known: Artifact[] };
+
+function UserBubble({
+    text,
+    dense,
+    pending,
+    attachments,
+    files,
+}: {
+    text: string;
+    dense: boolean;
+    pending?: string;
+    /** Names of the attachments that went with the message. */
+    attachments?: string[];
+    files: Files;
+}) {
+    const width = dense ? '88%' : '74%';
+    const withFiles = !!attachments?.length;
+    const bubble = text ? (
         <Box
             title={pending}
             data-pending={pending ? 'true' : undefined}
+            data-testid="agent-user-bubble"
             sx={{
                 opacity: pending ? 0.6 : 1,
                 alignSelf: 'flex-end',
-                maxWidth: dense ? '88%' : '74%',
+                maxWidth: withFiles ? '100%' : width,
                 bgcolor: 'primary.main',
                 color: '#fff',
                 borderRadius: '14px 14px 3px 14px',
@@ -54,6 +74,24 @@ function UserBubble({ text, dense, pending }: { text: string; dense: boolean; pe
         >
             {text}
         </Box>
+    ) : null;
+    if (!withFiles) return bubble;
+    return (
+        <Box
+            title={bubble ? undefined : pending}
+            data-pending={pending ? 'true' : undefined}
+            sx={{
+                alignSelf: 'flex-end',
+                maxWidth: width,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                opacity: pending && !bubble ? 0.6 : 1,
+            }}
+        >
+            {bubble}
+            <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />
+        </Box>
     );
 }
 
@@ -61,10 +99,13 @@ function AgentBlock({
     item,
     dense,
     thinking,
+    chatId,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
     thinking: Thinking;
+    /** For the answer's display images. */
+    chatId?: string;
 }) {
     return (
         <Box sx={{ display: 'flex', minWidth: 0 }}>
@@ -73,7 +114,7 @@ function AgentBlock({
                     if (p.type === 'text') {
                         return (
                             <Box key={i} sx={{ mb: 1 }}>
-                                <Markdown text={p.text} dense={dense} />
+                                <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} />
                             </Box>
                         );
                     }
@@ -254,6 +295,7 @@ export default function Conversation({
     const open = choices.pref === alwaysShow ? choices.open : NO_CHOICES;
     const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);
     const hasLive = liveP.length > 0;
+    const files = useMemo<Files>(() => ({ chatId: chat?.id, known: stream.artifacts }), [chat?.id, stream.artifacts]);
     // resume blocks sit after the user message that triggered them; not stored yet: at the end
     const placed = useMemo(() => {
         const after = new Map<number, ResumeView[]>();
@@ -297,13 +339,13 @@ export default function Conversation({
                 <Fragment key={it.key}>
                     {notes.before.get(i)?.map((n) => <CommandLine key={n.key} notice={n} />)}
                     {it.kind === 'user' ? (
-                        <UserBubble text={it.text} dense={dense} />
+                        <UserBubble text={it.text} dense={dense} attachments={it.files} files={files} />
                     ) : it.kind === 'notice' ? (
                         <Notice text={it.text} label={it.label} />
                     ) : it.kind === 'compaction' ? (
                         <CompactionLine item={it} />
                     ) : (
-                        <AgentBlock item={it} dense={dense} thinking={thinking} />
+                        <AgentBlock item={it} dense={dense} thinking={thinking} chatId={chat?.id} />
                     )}
                     {placed.after.get(i)?.map((r) => <ResumeBlock key={`resume-${r.id}`} resume={r} />)}
                 </Fragment>
@@ -311,6 +353,8 @@ export default function Conversation({
             {pending && (
                 <UserBubble
                     text={pending.text}
+                    attachments={pending.files}
+                    files={files}
                     dense={dense}
                     pending={resuming ? 'Goes to the agent once the chat has resumed' : 'Sending …'}
                 />
