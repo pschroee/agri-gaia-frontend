@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { isPageContext, type PageContext } from './pageContext';
 import { compactNoteSummary, parseBackgroundNote } from './background';
 import type { BackgroundNote } from './background';
 import { splitAttachments } from './files';
@@ -91,7 +92,8 @@ export type AgentPart =
 /** seq: the stored message the item comes from (the first one for an agent block; missing for the live one). */
 export type TranscriptItem =
     /** files: names of the attachments (inputs) that went with the message. */
-    | { kind: 'user'; key: string; seq?: number; text: string; files?: string[] }
+    /** context: page context the message was sent with (structured, from the gateway's source), shown as "Refers to …". */
+    | { kind: 'user'; key: string; seq?: number; text: string; files?: string[]; context?: PageContext }
     /** note: a background task's end, parsed for the compact line (gateway type "background"). */
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }
     /** stopped: the answer was aborted by the user (shown muted, not as an error). */
@@ -289,10 +291,25 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             }
             // notes the gateway marks as context for the model only (audience "agent", e.g. the preferred
             // language) are cut out, never shown as user text
-            const parts = splitMessage(text, m.sources).filter((p) => !isAgentOnly(p));
+            // a page context (agent-only part with structured `context`) goes to the user text that follows it
+            const contexts = new Map<number, PageContext>();
+            const parts: Part[] = [];
+            let ctx: PageContext | undefined;
+            for (const p of splitMessage(text, m.sources)) {
+                if (isAgentOnly(p)) {
+                    if (p.kind === 'system' && isPageContext(p.source.context)) ctx = p.source.context;
+                    continue;
+                }
+                if (p.kind === 'user' && ctx) {
+                    contexts.set(parts.length, ctx);
+                    ctx = undefined;
+                }
+                parts.push(p);
+            }
             const lastUser = parts.map((p) => p.kind).lastIndexOf('user');
             // the attachments block ends the message: it belongs to the user's text (or stands alone)
-            if (files && lastUser < 0) items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, text: '', files });
+            if (files && lastUser < 0)
+                items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, text: '', files, context: ctx });
             parts.forEach((p, i) => {
                 if (p.kind === 'system') {
                     const note = p.source.type === 'background' ? parseBackgroundNote(p.text) : undefined;
@@ -311,6 +328,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                         seq: m.seq,
                         text: p.text,
                         files: i === lastUser ? files : undefined,
+                        context: contexts.get(i),
                     });
             });
             continue;

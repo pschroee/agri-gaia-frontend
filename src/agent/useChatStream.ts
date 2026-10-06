@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import type { PageContext } from './pageContext';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, eventsUrl } from './api';
@@ -83,7 +84,8 @@ export type ChatStream = {
     /** Takes a newer chat state from an answer of the gateway (e.g. after switching a setting). */
     applyChat: (chat: Chat) => void;
     /** Sends a message with the names of uploaded attachments; while the agent works the gateway queues it. */
-    send: (text: string, attachments?: string[]) => Promise<void>;
+    /** context: page context sent with the message (pageContext.ts). */
+    send: (text: string, attachments?: string[], context?: PageContext) => Promise<void>;
     /** Removes a queued entry that has not been delivered yet. */
     unqueue: (id: string) => Promise<void>;
     /** Delivers held entries now (after an abort or with an idle chat). */
@@ -397,19 +399,19 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     }, [chatId, load, scheduleReload]);
 
     const deliver = useCallback(
-        async (text: string, asCommand: boolean, attachments: string[] = []) => {
+        async (text: string, asCommand: boolean, attachments: string[] = [], context?: PageContext) => {
             if (!chatId) return;
             const guessQueued = expectQueued(chatRef.current);
             const key = `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const files = attachments.length ? attachments : undefined;
-            if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text, attachments: files } });
+            if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text, attachments: files, context } });
             // shown greyed in the transcript until its user message is stored; resuming a dormant chat takes seconds
-            else setPending({ key, text, afterSeq: lastSeq(messagesRef.current), files });
+            else setPending({ key, text, afterSeq: lastSeq(messagesRef.current), files, context });
             const dropPending = () => setPending((p) => (p?.key === key ? undefined : p));
             try {
                 const r = asCommand
                     ? await agentApi.runCommand(chatId, text)
-                    : await agentApi.sendMessage(chatId, text, attachments);
+                    : await agentApi.sendMessage(chatId, text, attachments, context);
                 if (r.queued) dropPending();
                 if (r.queued) {
                     // the SSE event "queue" carries the entry; fetch anyway in case the stream is reconnecting,
@@ -433,7 +435,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     );
 
     const send = useCallback(
-        (text: string, attachments?: string[]) => deliver(text, false, attachments),
+        (text: string, attachments?: string[], context?: PageContext) => deliver(text, false, attachments, context),
         [deliver],
     );
 

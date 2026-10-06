@@ -13,6 +13,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
+import type { PageContext } from '../pageContext';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
 import type { CommandNotice } from '../commands';
@@ -25,6 +26,7 @@ import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import { compactionReason, formatAnswerUsage, formatTokens, formatUsd, TARIFF_LABEL } from '../usage';
 import type { AnswerUsage } from '../usage';
+import { RefersTo } from './PageContextChip';
 import { MessageAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
@@ -45,6 +47,7 @@ function UserBubble({
     pending,
     attachments,
     files,
+    context,
 }: {
     text: string;
     dense: boolean;
@@ -52,6 +55,8 @@ function UserBubble({
     /** Names of the attachments that went with the message. */
     attachments?: string[];
     files: Files;
+    /** Page context the message was sent with, shown as "Refers to …" above it. */
+    context?: PageContext;
 }) {
     const width = dense ? '88%' : '74%';
     const withFiles = !!attachments?.length;
@@ -78,22 +83,24 @@ function UserBubble({
             {text}
         </Box>
     ) : null;
-    if (!withFiles) return bubble;
+    if (!withFiles && !context) return bubble;
     return (
         <Box
             title={bubble ? undefined : pending}
             data-pending={pending ? 'true' : undefined}
             sx={{
                 alignSelf: 'flex-end',
-                maxWidth: width,
+                maxWidth: withFiles ? width : '100%',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-end',
+                gap: context ? 0.4 : 0,
                 opacity: pending && !bubble ? 0.6 : 1,
             }}
         >
+            {context && <RefersTo context={context} />}
             {bubble}
-            <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />
+            {withFiles && <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />}
         </Box>
     );
 }
@@ -368,7 +375,13 @@ export default function Conversation({
                 <Fragment key={it.key}>
                     {notes.before.get(i)?.map((n) => <CommandLine key={n.key} notice={n} />)}
                     {it.kind === 'user' ? (
-                        <UserBubble text={it.text} dense={dense} attachments={it.files} files={files} />
+                        <UserBubble
+                            text={it.text}
+                            dense={dense}
+                            attachments={it.files}
+                            files={files}
+                            context={it.context}
+                        />
                     ) : it.kind === 'notice' ? (
                         it.note ? (
                             <BackgroundNoteLine note={it.note} text={it.text} />
@@ -388,6 +401,7 @@ export default function Conversation({
                     text={pending.text}
                     attachments={pending.files}
                     files={files}
+                    context={pending.context}
                     dense={dense}
                     pending={resuming ? 'Goes to the agent once the chat has resumed' : 'Sending …'}
                 />

@@ -11,9 +11,10 @@
 
 import { noteLabel, textOf } from './transcript';
 import type { Chat, HoldReason, QueueDelivery, QueueEntry, QueueEvent, StoredMessage } from './types';
+import { isPageContext, type PageContext } from './pageContext';
 
 /** Sent while the agent works, the gateway's response is still pending (optimistic). */
-export type LocalQueued = { key: string; text: string; attachments?: string[] };
+export type LocalQueued = { key: string; text: string; attachments?: string[]; context?: PageContext };
 
 export type QueueState = {
     /** Open entries according to the gateway. */
@@ -195,6 +196,8 @@ export type QueueRow = {
     /** Short line shown instead of the text (gateway notes). */
     label?: string;
     attachments: string[];
+    /** Page context the message was sent with ("Refers to …"). */
+    context?: PageContext;
     system: boolean;
     state: QueueRowState;
 };
@@ -220,6 +223,7 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
                   ) ?? 'note from the gateway'
                 : undefined,
             attachments: Array.isArray(e.attachments) ? e.attachments : [],
+            context: !system && isPageContext(e.context) ? e.context : undefined,
             system,
             state: rowState,
         };
@@ -236,6 +240,7 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
                 key: l.key,
                 text: l.text,
                 attachments: l.attachments ?? [],
+                context: l.context,
                 system: false,
                 state: 'sending',
             }),

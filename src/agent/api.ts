@@ -24,6 +24,7 @@ import type {
 } from './types';
 
 import { AGENT_BASE } from './login';
+import type { PageContext } from './pageContext';
 
 export { AGENT_BASE, interactiveLoginUrl } from './login';
 
@@ -91,12 +92,16 @@ export const agentApi = {
     chats: () => request<Chat[]>('chats'),
     chat: (id: string) => request<ChatDetail>(`chats/${enc(id)}`),
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
-    /** Sends a message; attachments: names of inputs uploaded before (400 for unknown names). */
-    sendMessage: (id: string, text: string, attachments: string[] = []) =>
-        post<SendResult>(
-            `chats/${enc(id)}/messages`,
-            attachments.length > 0 ? { text, attachments } : { text },
-        ),
+    /**
+     * Sends a message; attachments: names of inputs uploaded before (400 for unknown names); context: the page the
+     * user is on (pageContext.ts; the gateway refuses anything outside its lists with 400).
+     */
+    sendMessage: (id: string, text: string, attachments: string[] = [], context?: PageContext) =>
+        post<SendResult>(`chats/${enc(id)}/messages`, {
+            text,
+            ...(attachments.length > 0 ? { attachments } : {}),
+            ...(context ? { context } : {}),
+        }),
     /** Uploads files for the agent (inputs, mirrored to /workspace/inputs/); limit artifact_max_mb per file. */
     uploadFiles: (id: string, files: File[]) => {
         const form = new FormData();

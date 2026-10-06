@@ -17,6 +17,7 @@ import AttachFileIcon from '@mui/icons-material/AttachFile';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 import { isSlashCommand } from '../commands';
+import { PageContext, contextKey, visibleContext } from '../pageContext';
 import { canSend, checkSizes, emptyStaged, stagedReducer } from '../files';
 import type { Artifact, Command } from '../types';
 import { sendTipIdle, sendTipReducer } from '../sendTooltip';
@@ -25,11 +26,12 @@ import { useSlashCommands } from '../useSlashCommands';
 import { useAgentDropTarget } from './AgentDropZone';
 import SlashCommandMenu, { optionId } from './SlashCommandMenu';
 import { StagedAttachments } from './Attachments';
+import { PageContextChip } from './PageContextChip';
 import { agentColors } from './tokens';
 
 type Props = {
-    /** Sends the text with the names of the uploaded attachments. */
-    onSend: (text: string, attachments: string[]) => Promise<void>;
+    /** Sends the text with the names of the uploaded attachments and the page context (unless the user removed it). */
+    onSend: (text: string, attachments: string[], context?: PageContext) => Promise<void>;
     /** Uploads files for the agent (button and drag and drop); without it the field takes no files. */
     onUpload?: (files: File[]) => Promise<Artifact[]>;
     /** Size limit per file in MB (gateway config), checked before uploading. */
@@ -51,6 +53,8 @@ type Props = {
     onCommand?: (text: string) => Promise<boolean>;
     /** The command list just opened (to load it again). */
     onCommandsOpen?: () => void;
+    /** Context of the current platform page; shown as a removable chip and sent with the next message. */
+    pageContext?: PageContext;
 };
 
 const NO_COMMANDS: Command[] = [];
@@ -73,12 +77,16 @@ export default function ChatInput({
     commands,
     onCommand,
     onCommandsOpen,
+    pageContext,
 }: Props) {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
     const [staged, dispatchStaged] = useReducer(stagedReducer, emptyStaged);
+    // key of the context the user removed with the chip's cross; a new page or object shows the chip again
+    const [dismissedContext, setDismissedContext] = useState<string>();
+    const context = visibleContext(pageContext, dismissedContext);
     // controlled tooltip of the send button (sendTooltip.ts: not after a send, not without real pointer movement)
     const [sendTip, sendTipEvent] = useReducer(sendTipReducer, sendTipIdle);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -119,7 +127,7 @@ export default function ChatInput({
         try {
             if (command && onCommand) {
                 if (!(await onCommand(t))) setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
-            } else await onSend(t, attachments.map((a) => a.name));
+            } else await onSend(t, attachments.map((a) => a.name), context);
         } catch (e) {
             if (t) setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
             if (attachments.length) dispatchStaged({ type: 'restore', files: attachments });
@@ -186,6 +194,9 @@ export default function ChatInput({
                         void upload(files);
                     }}
                 />
+            )}
+            {context && (
+                <PageContextChip context={context} onRemove={() => setDismissedContext(contextKey(context))} />
             )}
             <StagedAttachments
                 chatId={chatId}

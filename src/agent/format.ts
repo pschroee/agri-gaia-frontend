@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { DelegationRule, SocketCall, Variant } from './types';
+import { pageOf } from './pageContext';
 
 /** Effect class of a platform call, as in the prototype (read, write, compute, irreversible). */
 export type Effect = 'read' | 'write' | 'compute' | 'irreversible';
@@ -88,22 +89,9 @@ export function outcomeReason(result: string): string | undefined {
 export const isPlatformCall = (c: SocketCall) => c.op === 'platform';
 export const isBlocked = (c: SocketCall) => /violation/i.test(c.result ?? '');
 
-/** Platform section for the context chip, derived from the route. */
+/** Platform section for the context chip, derived from the route (same table as the page context). */
 export function sectionOf(pathname: string): string | undefined {
-    const sections: [RegExp, string][] = [
-        [/^\/($|data)/, 'Datasets'],
-        [/^\/train/, 'Model Training'],
-        [/^\/models/, 'Models'],
-        [/^\/inference-container-templates/, 'Container Templates'],
-        [/^\/container-images/, 'Container Registry'],
-        [/^\/edge-groups/, 'Edge Groups'],
-        [/^\/edge/, 'Edge Devices'],
-        [/^\/applications/, 'Applications'],
-        [/^\/integrated-services/, 'Integrated Services'],
-        [/^\/network/, 'Network'],
-        [/^\/licenses/, 'Licenses'],
-    ];
-    return sections.find(([re]) => re.test(pathname))?.[1];
+    return pageOf(pathname)?.label;
 }
 
 export function formatMs(ms: number | undefined): string | undefined {
