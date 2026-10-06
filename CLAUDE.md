@@ -154,6 +154,26 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   imports `mermaid/dist/mermaid.core.mjs` by path (the package's own ESM entry), typed by `src/agent/mermaid-module.d.ts`;
   importing `'mermaid'` breaks `tsc`. Render check: in the dev server the mermaid chunk only loads when a diagram
   appears; the first visit after the lockfile changed re-optimizes dependencies.
+- **Subagents and background tasks:** as in the gateway's own UI (API.md, *Background tasks*). **Running
+  commands:** a running `bash` step in `StepList` gets "Move to background" and "Stop" (`POST …/tools/{call}/background`,
+  `…/stop`). Which calls are controllable is the pure `runningReducer` in `src/agent/background.ts`: bash executions
+  seen as pi events (`tool_execution_start` until `_end`) plus the gateway's list `GET …/tools/running`, fetched with
+  each load of a running chat and 400 ms after a bash start (the gateway registers the command a moment after pi reports
+  it, so a live one stays until its end event). A failure (404: already ended, 409: too many background tasks) shows
+  below the row. A step that started or became a background task carries a chip "bg-3 · running". **Background
+  tasks** and **subagent runs** sit in `TaskStrip` below the files (only when there are any): collapsed "Tasks Background
+  1 running · Subagents 1 running · 2 done" with a spinner while something runs; opened, the tasks (running first) with
+  state, runtime, the last three lines of `tail` and Stop (`POST …/background/{bg}/stop`, 409 explained), and the runs
+  with title (workflow label, else the task's first line), state, duration, tool count, agent and short run ID, and
+  the cost recorded at the LLM proxy (`GET …/llm_calls`, matched by the `response_id` of the run's entries, loaded once
+  subagents exist). A run opens to its own steps (`runItems`: task, step lists, text answers). Data: `background`,
+  `subagent_entries`, `subagent_runs` of `GET /chats/{id}`, SSE `background` (a throttled `output` never overwrites an
+  end), `subagent`, `subagent_run`, `llm_call`. A run's state comes from pi-subagents when known, otherwise it is
+  estimated from its entries (`runStatus`, `src/agent/subagents.ts`). **Notes:** the gateway's note that a task ended
+  (user message with a `background` source) shows as one muted line "Background task bg-3 finished · exit 0 · 0:08"
+  (`BackgroundNoteLine`), opening to command, last lines and log path; queued notes are labelled from their header line.
+  Render check: answer `tools/running`, `background`, `llm_calls` and the chat's `background`/`subagent_*` fields, drive
+  SSE `pi` `tool_execution_start|end`, `background`, `subagent`, `subagent_run`.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
