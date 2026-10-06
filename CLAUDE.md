@@ -18,8 +18,21 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
 ## Agent UI (`src/agent/`)
 
 - Native MUI UI for the agent gateway, behind the build flag `VITE_AGENT_ENABLED`: floating button and right-hand
-  context panel on every page, side-nav entry and page **`/ai-agent`** (tabs Chat and Activity). The route must not
+  context panel on every page, side-nav entry and page **`/ai-agent`** (tabs Chat, Activity and Status, `?tab=activity|status`). The route must not
   start with `/agent`: Traefik sends `/agent*` on the app host to the gateway.
+- **Status tab:** `StatusView` shows the state of the agent service, like the gateway's own `#/status`: key figures,
+  reachability (gateway with round trip and the signed-in user from `GET /me`; platform API, platform login and the
+  last token exchange from `GET /platform`), the warm pool per variant (`GET /pool`: free, busy, starting, target,
+  image, the user's chats with what the agent does; other users' chats only as a count), pending approvals oldest
+  first with a link that opens the chat on the Chat tab, models (`GET /models`: provider, context window, prices per
+  1M tokens in the tariff in effect now, peak hours in local time, thinking levels as far as the user's chats reported
+  them) and variants with the English labels of `variantLabel`, plus defaults from `GET /config`. Everything reloads
+  every 15 s and on the refresh button; a failed request empties only its section, a failed `GET /me` shows the error
+  alert, and figures that could not be loaded show "–", not 0. `GET /platform` exists since gateway PR #6; an older
+  gateway answers 404, shown as "Not reported by this gateway version". The probe is cached 10 s in the gateway, and
+  the last exchange lives only in its memory. Derivations are pure in `src/agent/status.ts` (with a port of the
+  gateway's `formatPeakWindows`), unit-tested. Render check: answer `pool`, `platform`, `variants`, `models`,
+  `config`, `approvals` and drive the 15 s refresh with `page.clock`.
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
   reuses the platform's Keycloak session; the gateway only accepts `return` paths under `/agent/`.
