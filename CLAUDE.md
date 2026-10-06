@@ -80,8 +80,10 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   who aborted: its own aborts (maximum run time, turn or subagent limit) show the same way.
 - **Panel header:** the run-state chip is the part that gives way (label ellipsized, icon and timer stay), the close
   button is `flex: none`; during a run the "Agent" label is hidden, so "needs approval · 1:15:03" fits at 400 px. The
-  send button's tooltip is controlled and closed on sending (a disabled button fires no blur and its wrapper a fresh
-  mouseover, so it used to stay open); it reopens once the pointer has left the button.
+  send button's tooltip is controlled (pure `sendTipReducer`, `src/agent/sendTooltip.ts`, unit-tested): closed on
+  sending until the pointer has left the button (a disabled button fires no blur and its wrapper a fresh mouseover),
+  and a hover counts only after a real mousemove, because the opening panel puts the send button under the pointer
+  resting on the floating button and the browser fires a mouseover without movement. Keyboard focus still opens it.
 - **Run control:** `RunStatus` above the input shows the run state of the open chat with a running timer and is the
   only place to stop the agent (`POST …/abort`; the input only sends) or to let an idle chat rest (`POST …/suspend`).
   The state comes from the pure `runStateOf` in `src/agent/runState.ts`: `working`, `waiting` (running with an open
