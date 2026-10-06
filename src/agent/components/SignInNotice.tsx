@@ -8,14 +8,19 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 
 import { useAgent } from '../AgentContext';
-import { interactiveLoginUrl } from '../api';
+import { useLocation } from 'react-router-dom';
+
+import { interactiveLoginUrl, loginReturnTarget } from '../login';
 
 /**
  * Shown instead of the agent UI while the gateway session is being checked or missing. The silent
- * login has already run once when "signed-out" shows; the user can retry it or sign in at the gateway.
+ * login has already run once when "signed-out" shows; the user can retry it or sign in at the gateway, which
+ * returns to the current platform page.
  */
 export default function SignInNotice() {
     const { status, error, retrySignIn } = useAgent();
+    // the visible login comes back to the page the user is on (the gateway checks the path again)
+    const location = useLocation();
 
     if (status === 'checking') {
         return (
@@ -41,7 +46,7 @@ export default function SignInNotice() {
                     Try again
                 </Button>
                 {status === 'signed-out' && (
-                    <Button size="small" variant="outlined" href={interactiveLoginUrl()}>
+                    <Button size="small" variant="outlined" href={interactiveLoginUrl(loginReturnTarget(location))}>
                         Sign in
                     </Button>
                 )}
