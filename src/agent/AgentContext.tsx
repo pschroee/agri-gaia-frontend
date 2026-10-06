@@ -134,7 +134,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             .config()
             .then((c) => setConfig(c && typeof c === 'object' ? c : undefined))
             .catch(() => {
-                // without the config the subagent limit has no upper bound in the UI; the gateway still checks it
+                // without the config the UI shows no file size limit or defaults; the gateway still checks them
             });
     }, [status]);
 

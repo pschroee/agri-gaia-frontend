@@ -7,7 +7,16 @@
 import { AgentApiError } from './api';
 import { variantLabel } from './format';
 import { levelsByModel } from './modelChoice';
-import type { Approval, Chat, Me, Model, PlatformStatus, Pool, Slot, SlotActivity, Variant } from './types';
+import type { Approval, Chat, Config, Me, Model, PlatformStatus, Pool, Slot, SlotActivity, Variant } from './types';
+
+/**
+ * Subagents a chat may run at the same time, fixed in the gateway. Older gateways sent only the default and upper
+ * bound of the former per-chat setting; their default is shown then.
+ */
+export function subagentsAtOnce(cfg: Pick<Config, 'max_subagents' | 'max_subagents_default'>): string {
+    const n = cfg.max_subagents ?? cfg.max_subagents_default;
+    return n === undefined ? '–' : `at most ${n}`;
+}
 
 /** How often the Status tab reloads. */
 export const STATUS_REFRESH_MS = 15000;

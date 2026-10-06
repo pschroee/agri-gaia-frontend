@@ -20,7 +20,6 @@ export type ChatSettings = {
     clearError: () => void;
     setInternet: (enabled: boolean) => Promise<void>;
     setAutoCompact: (enabled: boolean) => Promise<void>;
-    setMaxSubagents: (max: number) => Promise<void>;
     compactNow: () => Promise<void>;
 };
 
@@ -65,7 +64,6 @@ export function useChatSettings(chat: Chat | undefined, onChat?: (c: Chat) => vo
         clearError: useCallback(() => setError(undefined), []),
         setInternet: useCallback((on: boolean) => run('internet', (c) => agentApi.setInternet(c, on)), [run]),
         setAutoCompact: useCallback((on: boolean) => run('autocompact', (c) => agentApi.setAutoCompact(c, on)), [run]),
-        setMaxSubagents: useCallback((n: number) => run('subagents', (c) => agentApi.setMaxSubagents(c, n)), [run]),
         compactNow: useCallback(
             () =>
                 run('compact', async (c) => {

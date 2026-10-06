@@ -115,10 +115,12 @@ export type Chat = {
     auto_compact?: boolean;
     /** Compactions so far. */
     compactions?: number;
-    /** At most this many subagents (enforced at the LLM proxy and by aborting the turn). */
+    /** At most this many subagents at the same time; fixed in the gateway, the same for every chat. */
     max_subagents?: number;
     /** Subagent runs started so far. */
     subagents?: number;
+    /** Subagents running right now according to the gateway's monitoring (gateway PR for issue #24). */
+    subagents_running?: number;
     artifact_count: number;
     pending_approvals: number;
     resuming?: boolean;
@@ -400,8 +402,10 @@ export type CreateChatRequest = {
 export type Config = {
     internet_default?: boolean;
     auto_compact_default?: boolean;
+    /** Subagents at the same time per chat, fixed in the gateway (since the fix for issue #24). */
+    max_subagents?: number;
+    /** Older gateways: default and upper bound of the former per-chat setting; newer ones send max_subagents. */
     max_subagents_default?: number;
-    /** Upper bound for max_subagents per chat. */
     max_subagents_limit?: number;
     /** Size limit per uploaded or handed-over file in MB (AGW_ARTIFACT_MAX_MB). */
     artifact_max_mb?: number;

@@ -8,13 +8,11 @@ import { AgentApiError } from './api';
 import {
     approvalWho,
     autoCompactOn,
-    clampSubagents,
     compactErrorText,
     compactNowState,
     internetApprovalText,
     internetHint,
     settingErrorText,
-    subagentLimit,
 } from './settings';
 
 describe('internetHint', () => {
@@ -38,9 +36,6 @@ describe('settingErrorText and compactErrorText', () => {
         expect(compactErrorText(new AgentApiError(500, 'boom'))).toBe('Compaction failed: boom');
         expect(settingErrorText('internet', new Error('network down'))).toBe(
             'Switching internet access failed: network down',
-        );
-        expect(settingErrorText('subagents', new AgentApiError(400, 'max_subagents must be between 0 and 4'))).toBe(
-            'Changing the subagent limit failed: max_subagents must be between 0 and 4',
         );
         expect(settingErrorText('autocompact', new AgentApiError(409, 'busy'))).toBe(
             'Switching auto-compaction is not possible right now: busy',
@@ -79,40 +74,6 @@ describe('autoCompactOn', () => {
         expect(autoCompactOn({ auto_compact: true })).toBe(true);
         expect(autoCompactOn({})).toBe(true);
         expect(autoCompactOn(undefined)).toBe(true);
-    });
-});
-
-describe('subagentLimit', () => {
-    it('labels used and allowed and bounds the stepper by the config', () => {
-        const v = subagentLimit({ max_subagents: 3, subagents: 1 }, { max_subagents_limit: 3 });
-        expect(v).toMatchObject({
-            max: 3,
-            used: 1,
-            over: false,
-            limit: 3,
-            label: 'Subagents 1 / 3',
-            short: '1/3',
-            canDecrease: true,
-            canIncrease: false,
-        });
-    });
-    it('marks more started than allowed', () => {
-        expect(subagentLimit({ max_subagents: 1, subagents: 2 }).over).toBe(true);
-    });
-    it('treats missing values as zero and an unknown limit as open', () => {
-        const v = subagentLimit({});
-        expect(v).toMatchObject({ max: 0, used: 0, limit: undefined, canDecrease: false, canIncrease: true });
-        expect(subagentLimit({ max_subagents: 2 }, {}).canIncrease).toBe(true);
-    });
-});
-
-describe('clampSubagents', () => {
-    it('keeps the value within 0 … limit as an integer', () => {
-        expect(clampSubagents(-1, 4)).toBe(0);
-        expect(clampSubagents(5, 4)).toBe(4);
-        expect(clampSubagents(2.6, 4)).toBe(3);
-        expect(clampSubagents(9)).toBe(9);
-        expect(clampSubagents(Number.NaN, 4)).toBe(0);
     });
 });
 
