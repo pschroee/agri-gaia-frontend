@@ -24,6 +24,7 @@ import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
+import AgentMenuTheme from './AgentMenuTheme';
 import NewChatDialog from './NewChatDialog';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
@@ -143,8 +144,16 @@ type PageTab = 'chat' | 'activity' | 'status';
 
 const tabOf = (v: string | null): PageTab => (v === 'activity' || v === 'status' ? v : 'chat');
 
-/** Page "Agent" (/ai-agent) with the tabs Chat, Activity and Status. */
+/** Page "Agent" (/ai-agent) with the tabs Chat, Activity and Status; its menus leave the page scroll alone. */
 export default function AgentPage() {
+    return (
+        <AgentMenuTheme>
+            <AgentPageContent />
+        </AgentMenuTheme>
+    );
+}
+
+function AgentPageContent() {
     const { status, selectedChatId, selectChat, refreshChats } = useAgent();
     const [params, setParams] = useSearchParams();
     const tab = tabOf(params.get('tab'));
