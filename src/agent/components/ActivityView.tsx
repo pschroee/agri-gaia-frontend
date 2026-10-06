@@ -20,7 +20,7 @@ import { agentColors } from './tokens';
 /** How many of the most recent chats the activity view loads. */
 const MAX_CHATS = 25;
 
-function Kpi({ value, label, highlight }: { value: number | string; label: string; highlight?: boolean }) {
+export function Kpi({ value, label, highlight }: { value: number | string; label: string; highlight?: boolean }) {
     return (
         <Box
             sx={{

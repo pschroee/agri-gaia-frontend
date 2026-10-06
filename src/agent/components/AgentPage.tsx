@@ -19,6 +19,7 @@ import { useAgent } from '../AgentContext';
 import { formatRelativeDay } from '../format';
 import { runSince, runStateOf } from '../runState';
 import ActivityView from './ActivityView';
+import StatusView from './StatusView';
 import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
@@ -137,11 +138,19 @@ function ChatHeader() {
     );
 }
 
-/** Page "Agent" (/ai-agent) with the tabs Chat and Activity. */
+type PageTab = 'chat' | 'activity' | 'status';
+
+const tabOf = (v: string | null): PageTab => (v === 'activity' || v === 'status' ? v : 'chat');
+
+/** Page "Agent" (/ai-agent) with the tabs Chat, Activity and Status. */
 export default function AgentPage() {
-    const { status, selectedChatId, refreshChats } = useAgent();
+    const { status, selectedChatId, selectChat, refreshChats } = useAgent();
     const [params, setParams] = useSearchParams();
-    const tab = params.get('tab') === 'activity' ? 'activity' : 'chat';
+    const tab = tabOf(params.get('tab'));
+    const openChat = (id: string) => {
+        selectChat(id);
+        setParams({});
+    };
     const [newOpen, setNewOpen] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -173,11 +182,12 @@ export default function AgentPage() {
             </Box>
             <Tabs
                 value={tab}
-                onChange={(_, v) => setParams(v === 'activity' ? { tab: 'activity' } : {})}
+                onChange={(_, v: PageTab) => setParams(v === 'chat' ? {} : { tab: v })}
                 sx={{ borderBottom: 1, borderColor: 'divider', mt: 1.5 }}
             >
                 <Tab value="chat" label="Chat" />
                 <Tab value="activity" label="Activity" />
+                <Tab value="status" label="Status" />
             </Tabs>
             {status !== 'ready' ? (
                 <SignInNotice />
@@ -208,9 +218,13 @@ export default function AgentPage() {
                         )}
                     </Box>
                 </Box>
-            ) : (
+            ) : tab === 'activity' ? (
                 <Box sx={{ mt: 3, pb: 4 }}>
                     <ActivityView refreshKey={refreshKey} />
+                </Box>
+            ) : (
+                <Box sx={{ mt: 3, pb: 4 }}>
+                    <StatusView refreshKey={refreshKey} onOpenChat={openChat} />
                 </Box>
             )}
             <NewChatDialog open={newOpen} onClose={() => setNewOpen(false)} />
