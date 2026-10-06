@@ -3,19 +3,18 @@
 // SPDX-License-Identifier: MIT
 
 // Settings of a chat that the user switches in the UI: internet access of the sandbox, automatic compaction,
-// "Compact now" and the subagent limit (gateway API.md: POST /chats/{id}/internet, /autocompact, /subagents,
-// /commands with "/compact"). Pure functions; the components only render what these return.
+// "Compact now" (gateway API.md: POST /chats/{id}/internet, /autocompact, /commands with "/compact"). The subagent
+// limit is fixed in the gateway (at most 5 at the same time) and not a setting. Pure functions; the components only render what these return.
 
 import { AgentApiError } from './api';
-import type { Approval, Chat, Config } from './types';
+import type { Approval, Chat } from './types';
 import type { Compacting } from './usage';
 
-export type Setting = 'internet' | 'autocompact' | 'subagents' | 'compact';
+export type Setting = 'internet' | 'autocompact' | 'compact';
 
 const SETTING_LABEL: Record<Setting, string> = {
     internet: 'Switching internet access',
     autocompact: 'Switching auto-compaction',
-    subagents: 'Changing the subagent limit',
     compact: 'Compaction',
 };
 
@@ -64,51 +63,6 @@ export function compactNowState(
 
 /** Automatic compaction is on unless the chat says otherwise (pi's default). */
 export const autoCompactOn = (chat: Pick<Chat, 'auto_compact'> | undefined): boolean => chat?.auto_compact ?? true;
-
-export type SubagentLimit = {
-    /** Allowed subagents. */
-    max: number;
-    /** Started so far. */
-    used: number;
-    /** More started than allowed (the gateway aborted the turn). */
-    over: boolean;
-    /** Upper bound from the config; undefined when unknown. */
-    limit?: number;
-    /** "Subagents 1 / 3". */
-    label: string;
-    /** "1/3", for the narrow panel. */
-    short: string;
-    canDecrease: boolean;
-    canIncrease: boolean;
-};
-
-/** Subagent limit of a chat, bounded by max_subagents_limit of the config. */
-export function subagentLimit(
-    chat: Pick<Chat, 'max_subagents' | 'subagents'>,
-    config?: Pick<Config, 'max_subagents_limit'>,
-): SubagentLimit {
-    const max = Math.max(0, chat.max_subagents ?? 0);
-    const used = Math.max(0, chat.subagents ?? 0);
-    const raw = config?.max_subagents_limit;
-    const limit = typeof raw === 'number' && raw >= 0 ? raw : undefined;
-    return {
-        max,
-        used,
-        over: used > max,
-        limit,
-        label: `Subagents ${used} / ${max}`,
-        short: `${used}/${max}`,
-        canDecrease: max > 0,
-        canIncrease: limit === undefined || max < limit,
-    };
-}
-
-/** A new limit within 0 … limit (an integer); without a known limit only the lower bound applies. */
-export function clampSubagents(n: number, limit?: number): number {
-    const v = Number.isFinite(n) ? Math.round(n) : 0;
-    const lower = Math.max(0, v);
-    return limit === undefined ? lower : Math.min(lower, limit);
-}
 
 /** The agent or one of its subagents (the session of a subagent is not "main"). */
 export const approvalWho = (a: Pick<Approval, 'session'>): string =>

@@ -19,6 +19,7 @@ import {
     shortImage,
     signedInAs,
     sortApprovals,
+    subagentsAtOnce,
 } from './status';
 import type { Approval, Chat, Model, PlatformStatus, Pool, Slot, Variant } from './types';
 
@@ -296,5 +297,15 @@ describe('reachability', () => {
             text: 'Status unavailable: Bad Gateway',
         });
         expect(platformChecks(undefined, undefined, me)[0].text).toBe('Loading …');
+    });
+});
+
+describe('subagentsAtOnce', () => {
+    it('shows the fixed limit of the gateway', () => {
+        expect(subagentsAtOnce({ max_subagents: 5 })).toBe('at most 5');
+    });
+    it('falls back to the default of an older gateway, or a dash', () => {
+        expect(subagentsAtOnce({ max_subagents_default: 3 })).toBe('at most 3');
+        expect(subagentsAtOnce({})).toBe('–');
     });
 });

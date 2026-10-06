@@ -134,8 +134,8 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   follow; a failure (409 for `/compact` while the agent works, a missing argument checked before the call) is an error
   note and the text goes back into the input. `/model` with `context_too_large` opens the picker's "compact first"
   dialog (`tooLargeRequest`). Skills, templates and extensions go to pi like a message (pending bubble or queue).
-- **Chat settings:** internet access, automatic compaction, "Compact now" and the subagent limit, as in the gateway's
-  own UI. `useChatSettings` posts `…/internet`, `…/autocompact`, `…/subagents` (`{enabled}` / `{max}`) and `/compact`
+- **Chat settings:** internet access, automatic compaction and "Compact now", as in the gateway's
+  own UI. `useChatSettings` posts `…/internet`, `…/autocompact` (`{enabled}`) and `/compact`
   via `POST …/commands`; the returned chat goes to `updateChat` of the context (and, for controls inside `ChatView`, to
   `applyChat` of the stream), the gateway also publishes it as SSE `chat`. **Internet:** a globe (`InternetToggle`):
   in the panel it is itself the switch (`role="switch"`) next to the chat selector, because the panel header has no
@@ -144,10 +144,11 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   MCP `request_internet`) the approval of kind `internet_access` shows in `ApprovalCard` with its reason (the
   approval's `name`; the gateway's "(no reason given)" is hidden), who asks (agent or subagent by `session`) and
   "Allow internet" / "Reject". **Compaction:** switch and "Compact now" in the context popover; the button is locked
-  while the agent works, resumes or compacts; a 409 is explained inline. **Subagents:** `SubagentLimitButton` in the
-  row below the input ("Subagents 1 / 2", in the panel "1/2"), a popover with a stepper bounded by
-  `max_subagents_limit` from `GET /config` (loaded once in `AgentContext`). Texts and bounds are pure functions in
-  `src/agent/settings.ts`, unit-tested.
+  while the agent works, resumes or compacts; a 409 is explained inline. **Subagents:** no control; the gateway fixes the limit
+  at 5 subagents at the same time per chat (gateway API.md, *Limit for subagents*; issue #24 removed the former selector
+  "Subagents 1 / 2" below the input). Running subagents show in the task strip; the Status tab names the limit
+  (`subagentsAtOnce` in `src/agent/status.ts`, `max_subagents` of `GET /config`, falling back to an older gateway's
+  default). Texts are pure functions in `src/agent/settings.ts`, unit-tested.
 - **Files:** attachments, the chat's artifacts and display images, as in the gateway's own UI (API.md, *Attachments to
   messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files anywhere on the
   agent area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from

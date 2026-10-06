@@ -35,6 +35,7 @@ import {
     shortImage,
     sortApprovals,
     STATUS_REFRESH_MS,
+    subagentsAtOnce,
     Tone,
     VariantPool,
 } from '../status';
@@ -569,10 +570,8 @@ export default function StatusView({
                             <dd>{cfg.internet_default ? 'on' : 'off'}</dd>
                             <dt>Automatic compaction</dt>
                             <dd>{cfg.auto_compact_default === false ? 'off' : 'on'}</dd>
-                            <dt>Subagents per chat</dt>
-                            <dd>
-                                {cfg.max_subagents_default ?? '–'} (max {cfg.max_subagents_limit ?? '–'})
-                            </dd>
+                            <dt>Subagents at the same time</dt>
+                            <dd>{subagentsAtOnce(cfg)}</dd>
                             {cfg.approval_timeout_s !== undefined && (
                                 <>
                                     <dt>Approval expires after</dt>

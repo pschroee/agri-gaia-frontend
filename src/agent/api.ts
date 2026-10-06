@@ -80,7 +80,7 @@ const enc = encodeURIComponent;
 
 export const agentApi = {
     me: () => request<Me>('me'),
-    /** Defaults and limits (max_subagents_limit …). */
+    /** Defaults and limits (max_subagents …). */
     config: () => request<Config>('config'),
     models: () => request<Model[]>('models'),
     variants: () => request<Variant[]>('variants'),
@@ -125,8 +125,6 @@ export const agentApi = {
     setInternet: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/internet`, { enabled }),
     /** Automatic compaction on or off. */
     setAutoCompact: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/autocompact`, { enabled }),
-    /** Limit for subagents (0 … max_subagents_limit, 400 otherwise); takes effect immediately. */
-    setMaxSubagents: (id: string, max: number) => post<Chat>(`chats/${enc(id)}/subagents`, { max }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
     /** Lets the chat rest: saves the session and releases the sandbox (409 with an open approval or while running). */
     suspend: (id: string) => post<Chat>(`chats/${enc(id)}/suspend`),

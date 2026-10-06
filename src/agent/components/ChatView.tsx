@@ -26,7 +26,6 @@ import Conversation from './Conversation';
 import DelegationStrip from './DelegationStrip';
 import QueueList from './QueueList';
 import RunStatus from './RunStatus';
-import SubagentLimitButton from './SubagentLimitButton';
 import TaskStrip from './TaskStrip';
 
 type Props = {
@@ -213,16 +212,6 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                             onModel={stream.setModel}
                             onEffort={stream.setEffort}
                             tooLargeRequest={stream.commandTooLarge}
-                            extra={
-                                stream.chat && (
-                                    <SubagentLimitButton
-                                        chat={stream.chat}
-                                        config={agent?.config}
-                                        dense={dense}
-                                        onChat={stream.applyChat}
-                                    />
-                                )
-                            }
                         />
                     }
                 />
