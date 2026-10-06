@@ -179,7 +179,10 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
             id: rowState === 'delivered' ? undefined : e.id,
             text: e.text,
             label: system
-                ? noteLabel({ kind: 'system', type: e.note, refs: e.refs }) ?? 'note from the gateway'
+                ? noteLabel(
+                      { kind: 'system', type: e.note, refs: e.refs },
+                      e.text.split('\n').find((l) => l.trim() && !l.startsWith('[')),
+                  ) ?? 'note from the gateway'
                 : undefined,
             attachments: Array.isArray(e.attachments) ? e.attachments : [],
             system,

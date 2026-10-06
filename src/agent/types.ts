@@ -128,6 +128,8 @@ export type Chat = {
     queue_held?: boolean;
     /** Why the queue is held (only for an active chat with queue_held). */
     hold_reason?: HoldReason;
+    /** Running background tasks. */
+    background_running?: number;
 };
 
 export type HoldReason = 'abort' | 'wake_limit' | 'auto_turns';
@@ -286,6 +288,100 @@ export type ChatDetail = {
     socket_calls: SocketCall[];
     /** Open entries of the queue. */
     queue?: QueueEntry[];
+    /** Background tasks of the chat by seq. */
+    background?: BackgroundTask[];
+    /** Entries from the session files of the subagents. */
+    subagent_entries?: SubagentEntry[];
+    /** Name and state of the subagent runs (status files of pi-subagents). */
+    subagent_runs?: SubagentRunMeta[];
+};
+
+/** State of a background task (gateway API.md, *Background tasks*). */
+export type BackgroundState = 'running' | 'exited' | 'failed' | 'timeout' | 'stopped' | 'lost' | 'suspended' | 'closed';
+
+/** Background task: a command the agent started with bash and run_in_background (or the user moved there). */
+export type BackgroundTask = {
+    /** "bg-<seq>", consecutive per chat. */
+    id: string;
+    seq: number;
+    chat_id: string;
+    /** "main" or the run of the subagent that started it. */
+    session: string;
+    tool_call_id: string;
+    command: string;
+    cwd?: string;
+    log_path: string;
+    state: BackgroundState;
+    exit_code?: number;
+    error?: string;
+    stopped_by?: 'agent' | 'user' | string;
+    started_at: string;
+    ended_at?: string;
+    output_bytes: number;
+    output_lines: number;
+    /** Latest output (at most 4 KiB). */
+    tail?: string;
+    notified_at?: string;
+    woke?: boolean;
+    notice_pending?: boolean;
+};
+
+/** SSE event "background": output at most every 2 s per task. */
+export type BackgroundEvent = { change: 'started' | 'output' | 'ended'; task: BackgroundTask };
+
+export type SubagentEntryKind = 'task' | 'tool_call' | 'tool_result' | 'text';
+
+/**
+ * Entry from a subagent's session file (sandbox, not tamper-proof); confirmed: its response is recorded at the
+ * LLM proxy.
+ */
+export type SubagentEntry = {
+    chat_id: string;
+    run_id: string;
+    entry_id: string;
+    agent: string;
+    kind: SubagentEntryKind;
+    payload: {
+        text?: string;
+        name?: string;
+        arguments?: string;
+        is_error?: boolean;
+        id?: string;
+        tool_call_id?: string;
+    };
+    response_id?: string;
+    confirmed: boolean;
+    created_at: string;
+};
+
+/** Name and state of a subagent run (status files of pi-subagents); label: the name in the workflow. */
+export type SubagentRunMeta = {
+    chat_id: string;
+    run_id: string;
+    agent: string;
+    label?: string;
+    /** State according to pi-subagents: running, complete, failed, cancelled … */
+    state?: string;
+    pi_run_id?: string;
+    parent_run_id?: string;
+    started_at?: string;
+    ended_at?: string;
+    updated_at: string;
+};
+
+/** Model call recorded at the LLM proxy (subset); main: the main session's answer, otherwise subagent or compaction. */
+export type LLMCall = {
+    id: number;
+    model: string;
+    response_id: string;
+    input: number;
+    output: number;
+    cache_read: number;
+    cost: number;
+    peak: boolean;
+    started_at: string;
+    duration_ms: number;
+    main: boolean;
 };
 
 export type CreateChatRequest = {
@@ -356,6 +452,10 @@ export type ServerEvent =
     | { kind: 'socket_call'; data: SocketCall }
     | { kind: 'tool_execution'; data: ToolExecution }
     | { kind: 'queue'; data: QueueEvent }
+    | { kind: 'background'; data: BackgroundEvent }
+    | { kind: 'subagent'; data: SubagentEntry }
+    | { kind: 'subagent_run'; data: SubagentRunMeta }
+    | { kind: 'llm_call'; data: LLMCall }
     | { kind: 'resume'; data: ResumeStep }
     | { kind: 'auto_held'; data: { reason: 'wake_limit' | 'auto_turns'; limit: number; count: number } }
     | { kind: 'error'; data: { message: string } }

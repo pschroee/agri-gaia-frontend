@@ -27,6 +27,7 @@ import DelegationStrip from './DelegationStrip';
 import QueueList from './QueueList';
 import RunStatus from './RunStatus';
 import SubagentLimitButton from './SubagentLimitButton';
+import TaskStrip from './TaskStrip';
 
 type Props = {
     chatId: string;
@@ -116,6 +117,15 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                 {header}
                 {chat && <DelegationStrip chat={chat} socketCalls={stream.socketCalls} />}
                 <ArtifactStrip chatId={chatId} artifacts={stream.artifacts} onOpen={stream.refreshArtifacts} />
+                <TaskStrip
+                    chatId={chatId}
+                    chatRunning={!!chat?.running}
+                    background={stream.background}
+                    onStopBackground={stream.stopBackground}
+                    subagentEntries={stream.subagentEntries}
+                    subagentRuns={stream.subagentRuns}
+                    llmCalls={stream.llmCalls}
+                />
             </Box>
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
                 <Box

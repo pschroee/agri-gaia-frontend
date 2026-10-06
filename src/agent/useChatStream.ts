@@ -5,6 +5,15 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, eventsUrl } from './api';
+import {
+    applyBackgroundEvent,
+    backgroundStopErrorText,
+    controllableTools,
+    emptyRunning,
+    runningReducer,
+    toolActionErrorText,
+    upsertBackground,
+} from './background';
 import { mergeArtifacts } from './files';
 import { commandErrorText, commandProblem, commandResultText, isBuiltinCommand } from './commands';
 import type { CommandNotice } from './commands';
@@ -17,19 +26,25 @@ import { applyResumeStep, closeResumes } from './resume';
 import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
+import { mergeLLMCalls, mergeRunMeta, mergeSubagentEntries } from './subagents';
 import { compactingAfter } from './usage';
 import type { Compacting } from './usage';
 import type {
     Approval,
     Artifact,
+    BackgroundEvent,
+    BackgroundTask,
     Chat,
     Command,
     ContextTooLarge,
+    LLMCall,
     QueueEvent,
     ResumeStep,
     ServerEvent,
     SocketCall,
     StoredMessage,
+    SubagentEntry,
+    SubagentRunMeta,
     ToolExecution,
 } from './types';
 
@@ -95,7 +110,26 @@ export type ChatStream = {
     commandNotices: CommandNotice[];
     /** "/model x" did not fit the context: the model picker offers to compact first (new object per attempt). */
     commandTooLarge?: { details: ContextTooLarge };
+    /** Background tasks of the chat (GET chat, SSE "background"). */
+    background: BackgroundTask[];
+    /** Ends a running background task. Throws an Error with an explaining text. */
+    stopBackground: (id: string) => Promise<void>;
+    /** Running foreground commands (bash) that can be stopped or moved to the background, by tool call ID. */
+    runningTools: Set<string>;
+    /** Stops a running foreground command; the agent learns about it and continues. Throws with an explaining text. */
+    stopTool: (toolCallId: string) => Promise<void>;
+    /** Moves a running foreground command to the background; returns the new task. Throws with an explaining text. */
+    backgroundTool: (toolCallId: string) => Promise<BackgroundTask>;
+    /** Entries from the subagents' session files (GET chat, SSE "subagent"). */
+    subagentEntries: SubagentEntry[];
+    /** Name and state of the subagent runs (GET chat, SSE "subagent_run"). */
+    subagentRuns: SubagentRunMeta[];
+    /** Model calls at the LLM proxy, for the cost per subagent run (loaded once subagents exist, SSE "llm_call"). */
+    llmCalls: LLMCall[];
 };
+
+const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const errStatus = (e: unknown) => (e instanceof AgentApiError ? e.status : undefined);
 
 function upsert<T>(list: T[], item: T, key: (x: T) => string | number): T[] {
     const k = key(item);
@@ -130,6 +164,12 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [commands, setCommands] = useState<Command[]>([]);
     const [commandNotices, setCommandNotices] = useState<CommandNotice[]>([]);
     const [commandTooLarge, setCommandTooLarge] = useState<{ details: ContextTooLarge }>();
+    const [background, setBackground] = useState<BackgroundTask[]>([]);
+    const [running, dispatchRunning] = useReducer(runningReducer, emptyRunning);
+    const [subagentEntries, setSubagentEntries] = useState<SubagentEntry[]>([]);
+    const [subagentRuns, setSubagentRuns] = useState<SubagentRunMeta[]>([]);
+    const [llmCalls, setLLMCalls] = useState<LLMCall[]>([]);
+    const runningTimer = useRef<ReturnType<typeof setTimeout>>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
     const pendingClear = useRef<'ended' | 'all'>();
     const chatRef = useRef<Chat>();
@@ -153,7 +193,25 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             dispatchQueue({ type: 'loaded', entries: d.queue ?? [] });
             // delivered entries stay visible until their user message is stored
             dispatchQueue({ type: 'messages', messages: d.messages ?? [] });
+            if (Array.isArray(d.background)) setBackground(d.background);
+            if (Array.isArray(d.subagent_entries))
+                setSubagentEntries((l) => mergeSubagentEntries(l, d.subagent_entries ?? []));
+            if (Array.isArray(d.subagent_runs)) setSubagentRuns((l) => mergeRunMeta(l, d.subagent_runs ?? []));
             setError(undefined);
+            // commands started before this view was opened; without a run nothing can be running
+            if (d.chat?.running) {
+                agentApi.runningTools(chatId).then(
+                    (ids) => dispatchRunning({ type: 'server', ids }),
+                    () => undefined,
+                );
+            } else dispatchRunning({ type: 'server', ids: [] });
+            // cost per subagent run comes from the LLM proxy; only needed once there are subagents
+            if ((d.subagent_entries?.length ?? 0) > 0 || (d.subagent_runs?.length ?? 0) > 0 || (d.chat?.subagents ?? 0) > 0) {
+                agentApi.llmCalls(chatId).then(
+                    (l) => setLLMCalls((old) => mergeLLMCalls(old, l)),
+                    () => undefined,
+                );
+            }
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
@@ -196,6 +254,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setCommands([]);
         setCommandNotices([]);
         setCommandTooLarge(undefined);
+        setBackground([]);
+        dispatchRunning({ type: 'reset' });
+        setSubagentEntries([]);
+        setSubagentRuns([]);
+        setLLMCalls([]);
         if (!chatId) return;
 
         let stopped = false;
@@ -229,6 +292,17 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'pi': {
                         const d = ev.data as { type: string; message?: { role?: string }; [k: string]: unknown };
                         dispatchLive({ type: 'pi', event: d, now: Date.now() });
+                        dispatchRunning({ type: 'pi', event: d });
+                        // the gateway registers a foreground command a moment after pi reports it
+                        if (d.type === 'tool_execution_start' && d.toolName === 'bash') {
+                            if (runningTimer.current) clearTimeout(runningTimer.current);
+                            runningTimer.current = setTimeout(() => {
+                                agentApi.runningTools(chatId).then(
+                                    (ids) => !stopped && dispatchRunning({ type: 'server', ids }),
+                                    () => undefined,
+                                );
+                            }, 400);
+                        }
                         setResumes(closeResumes);
                         setCompacting((c) => compactingAfter(c, d, Date.now()));
                         // the compaction entry, its cost and the new context exist only in the stored chat
@@ -275,6 +349,24 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'tool_execution':
                         setExecutions((l) => upsert(l, ev.data as ToolExecution, (e) => e.id));
                         break;
+                    case 'background':
+                        setBackground((l) => applyBackgroundEvent(l, ev.data as BackgroundEvent));
+                        break;
+                    case 'subagent': {
+                        const e = ev.data as SubagentEntry;
+                        if (e?.run_id) setSubagentEntries((l) => mergeSubagentEntries(l, [e]));
+                        break;
+                    }
+                    case 'subagent_run': {
+                        const r = ev.data as SubagentRunMeta;
+                        if (r?.run_id) setSubagentRuns((l) => mergeRunMeta(l, [r]));
+                        break;
+                    }
+                    case 'llm_call': {
+                        const c = ev.data as LLMCall;
+                        if (c?.id !== undefined) setLLMCalls((l) => mergeLLMCalls(l, [c]));
+                        break;
+                    }
                     case 'error':
                         setError((ev.data as { message?: string })?.message);
                         break;
@@ -296,6 +388,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             stopped = true;
             if (retry) clearTimeout(retry);
             if (reloadTimer.current) clearTimeout(reloadTimer.current);
+            if (runningTimer.current) clearTimeout(runningTimer.current);
             es?.close();
         };
     }, [chatId, load, scheduleReload]);
@@ -482,6 +575,58 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         [chatId],
     );
 
+    const stopTool = useCallback(
+        async (toolCallId: string) => {
+            if (!chatId) return;
+            try {
+                await agentApi.stopTool(chatId, toolCallId);
+                dispatchRunning({ type: 'done', id: toolCallId });
+            } catch (e) {
+                if (errStatus(e) === 404) dispatchRunning({ type: 'done', id: toolCallId });
+                throw new Error(toolActionErrorText('stop', errStatus(e), errText(e)));
+            }
+        },
+        [chatId],
+    );
+
+    const backgroundTool = useCallback(
+        async (toolCallId: string) => {
+            if (!chatId) throw new Error('No chat');
+            try {
+                const t = await agentApi.backgroundTool(chatId, toolCallId);
+                dispatchRunning({ type: 'done', id: toolCallId });
+                setBackground((l) => upsertBackground(l, [t]));
+                return t;
+            } catch (e) {
+                if (errStatus(e) === 404) dispatchRunning({ type: 'done', id: toolCallId });
+                throw new Error(toolActionErrorText('background', errStatus(e), errText(e)));
+            }
+        },
+        [chatId],
+    );
+
+    const stopBackground = useCallback(
+        async (id: string) => {
+            if (!chatId) return;
+            try {
+                const t = await agentApi.stopBackground(chatId, id);
+                setBackground((l) => upsertBackground(l, [t]));
+            } catch (e) {
+                // 409: it ended meanwhile; the list shows the current state
+                if (errStatus(e) === 409) {
+                    agentApi.background(chatId).then(
+                        (l) => setBackground((old) => upsertBackground(old, l)),
+                        () => undefined,
+                    );
+                }
+                throw new Error(backgroundStopErrorText(errStatus(e), errText(e)));
+            }
+        },
+        [chatId],
+    );
+
+    const runningTools = useMemo(() => controllableTools(running), [running]);
+
     const decide = useCallback(async (approval: Approval, approve: boolean) => {
         const a = await agentApi.decide(approval.id, approve);
         setApprovals((l) => upsert(l, a, (x) => x.id));
@@ -522,5 +667,13 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         runCommand,
         commandNotices,
         commandTooLarge,
+        background,
+        stopBackground,
+        runningTools,
+        stopTool,
+        backgroundTool,
+        subagentEntries,
+        subagentRuns,
+        llmCalls,
     };
 }
