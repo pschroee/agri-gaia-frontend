@@ -20,7 +20,7 @@ import CloseIcon from '@mui/icons-material/Close';
 
 import { useAgent } from '../AgentContext';
 import { sectionOf } from '../format';
-import { runSince, runStateOf } from '../runState';
+import { isRunning, runSince, runStateOf } from '../runState';
 import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
@@ -125,10 +125,19 @@ export default function AgentContextPanel() {
                     borderColor: 'divider',
                 }}
             >
-                <AutoAwesomeIcon sx={{ fontSize: 20, color: agentColors.green }} />
-                <Typography sx={{ fontSize: 16, fontWeight: 500, color: agentColors.green }}>Agent</Typography>
+                <AutoAwesomeIcon
+                    aria-label="Agent"
+                    sx={{ fontSize: 20, color: agentColors.green, flex: 'none' }}
+                />
+                {/* during a run the "Agent" label gives its room to the state chip with the timer */}
+                {!(selectedState && isRunning(selectedState)) && (
+                    <Typography sx={{ fontSize: 16, fontWeight: 500, color: agentColors.green, flex: 'none' }}>
+                        Agent
+                    </Typography>
+                )}
+                {/* the chip is the part of the header that gives way on long runs; the close button always stays */}
                 {selectedState && (
-                    <Box sx={{ flex: 'none', display: 'inline-flex' }}>
+                    <Box data-testid="agent-panel-state" sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}>
                         <RunStateChip state={selectedState} since={runSince(selected)} short framed />
                     </Box>
                 )}
@@ -165,7 +174,7 @@ export default function AgentContextPanel() {
                     <IconButton
                         size="small"
                         onClick={() => setPanelOpen(false)}
-                        sx={{ ml: section || selected ? 0 : 'auto' }}
+                        sx={{ ml: section || selected ? 0 : 'auto', flex: 'none' }}
                         aria-label="Close agent panel"
                     >
                         <CloseIcon fontSize="small" />

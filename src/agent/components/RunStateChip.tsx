@@ -84,6 +84,10 @@ export default function RunStateChip({ state, since, short = false, framed = fal
                     alignItems: 'center',
                     gap: 0.6,
                     whiteSpace: 'nowrap',
+                    // in a tight header the label gives way (ellipsis), icon and timer stay
+                    maxWidth: '100%',
+                    minWidth: 0,
+                    boxSizing: 'border-box',
                     fontSize: framed ? 12 : 11,
                     color: state === 'idle' || state === 'dormant' ? 'text.secondary' : color,
                     ...(framed && {
@@ -97,16 +101,18 @@ export default function RunStateChip({ state, since, short = false, framed = fal
                 }}
             >
                 <RunStateIcon state={state} size={framed ? 8 : 7} />
-                {framed && state === 'waiting'
-                    ? 'needs approval'
-                    : short
-                    ? RUN_STATE_SHORT[state]
-                    : RUN_STATE_LABEL[state]}
+                <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {framed && state === 'waiting'
+                        ? 'needs approval'
+                        : short
+                        ? RUN_STATE_SHORT[state]
+                        : RUN_STATE_LABEL[state]}
+                </Box>
                 {running && since !== undefined && (
-                    <>
+                    <Box component="span" sx={{ flex: 'none', display: 'inline-flex', gap: 0.6 }}>
                         <span>·</span>
                         <Elapsed since={since} />
-                    </>
+                    </Box>
                 )}
             </Box>
         </Tooltip>
