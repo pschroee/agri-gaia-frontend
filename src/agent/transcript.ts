@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { compactNoteSummary, parseBackgroundNote } from './background';
+import type { BackgroundNote } from './background';
 import { splitAttachments } from './files';
 import { isBlocked } from './format';
 import { messageImageKey } from './images';
@@ -43,7 +45,8 @@ export type AgentPart =
 export type TranscriptItem =
     /** files: names of the attachments (inputs) that went with the message. */
     | { kind: 'user'; key: string; seq?: number; text: string; files?: string[] }
-    | { kind: 'notice'; key: string; seq?: number; text: string; label?: string }
+    /** note: a background task's end, parsed for the compact line (gateway type "background"). */
+    | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }
     | { kind: 'agent'; key: string; seq?: number; parts: AgentPart[]; error?: string; usage?: AnswerUsage }
     | {
           kind: 'compaction';
@@ -58,8 +61,11 @@ export type TranscriptItem =
 /** Fixed head of every gateway note inside a user message (agent gateway, internal/chat/origin.go). */
 const SYSTEM_HEADER = '[Note from the orchestrator, not from the user]';
 
-/** English one-liner for a gateway note with a known type; the gateway's text stays in the tooltip. */
-export function noteLabel(src: MessageSource): string | undefined {
+/**
+ * English one-liner for a gateway note with a known type; the gateway's text stays in the tooltip. summary: the
+ * orchestrator's header line, when known (background: "Background task bg-3 finished: exit 0, runtime 0:08").
+ */
+export function noteLabel(src: MessageSource, summary?: string): string | undefined {
     const refs = src.refs ?? [];
     switch (src.type) {
         case 'language':
@@ -67,6 +73,7 @@ export function noteLabel(src: MessageSource): string | undefined {
         case 'sandbox':
             return `background tasks ended with the previous sandbox${refs.length ? `: ${refs.join(', ')}` : ''}`;
         case 'background':
+            if (summary && /^Background task /.test(summary.trim())) return `background task ${compactNoteSummary(summary)}`;
             return `background task${refs[0] ? ` ${refs[0]}` : ''} ended`;
         default:
             return undefined;
@@ -218,14 +225,17 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             // the attachments block ends the message: it belongs to the user's text (or stands alone)
             if (files && lastUser < 0) items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, text: '', files });
             parts.forEach((p, i) => {
-                if (p.kind === 'system')
+                if (p.kind === 'system') {
+                    const note = p.source.type === 'background' ? parseBackgroundNote(p.text) : undefined;
                     items.push({
                         kind: 'notice',
                         key: `n${m.seq}-${i}`,
                         seq: m.seq,
                         text: p.text,
-                        label: noteLabel(p.source),
+                        label: noteLabel(p.source, note?.summary),
+                        note,
                     });
+                }
                 else
                     items.push({
                         kind: 'user',
