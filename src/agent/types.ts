@@ -247,6 +247,39 @@ export type SocketCall = {
     created_at: string;
     session?: string;
     tool_call_id?: string;
+    /** Platform calls: round trip to the platform in ms, without the approval's wait (missing: not measured). */
+    duration_ms?: number;
+};
+
+/** Outcome of a platform call as the gateway classifies it (GET /activity). */
+export type ActivityOutcome = 'ok' | 'error' | 'blocked' | 'logged' | 'rejected' | 'refused';
+
+/** Platform call of GET /activity, with its outcome and the approval it waited for. */
+export type ActivityCall = SocketCall & {
+    outcome: ActivityOutcome;
+    approval?: { id: string; state: Approval['state']; created_at: string; decided_at?: string };
+};
+
+/** What the activity view gets of a chat. */
+export type ActivityChat = { id: string; title: string; model: string; variant: string; delegation?: Delegation };
+
+/** Summary of all calls of the period (not limited by outcome or page). */
+export type ActivitySummary = {
+    total: number;
+    outcomes: Partial<Record<ActivityOutcome, number>>;
+    /** Chats with at least one platform call. */
+    chats: number;
+    /** Requests to the agent in the same chats and period. */
+    runs: number;
+    duration: { count: number; avg_ms?: number; p95_ms?: number; max_ms?: number };
+};
+
+/** One page of GET /activity, newest first; next_before continues it. */
+export type ActivityPage = {
+    calls: ActivityCall[];
+    chats: Record<string, ActivityChat>;
+    next_before?: number;
+    summary: ActivitySummary;
 };
 
 /** Operation the gateway ran for a tool in the execution sandbox. */

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import type {
+    ActivityPage,
     Approval,
     Artifact,
     ArtifactKind,
@@ -157,6 +158,8 @@ export const agentApi = {
     llmCalls: (id: string) =>
         request<LLMCall[]>(`chats/${enc(id)}/llm_calls`).then((l) => (Array.isArray(l) ? l : [])),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
+    /** Platform calls of the user's chats across all chats (query from activityQuery); 404 on older gateways. */
+    activity: (query: string) => request<ActivityPage>(`activity${query}`),
     decide: (id: string, approve: boolean) => post<Approval>(`approvals/${enc(id)}`, { approve }),
 };
 
