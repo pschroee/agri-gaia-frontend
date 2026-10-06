@@ -7,12 +7,68 @@ import { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 
+import { imageSource, MARKDOWN_IMAGE, parseMarkdownImage } from '../images';
+import ImagePreview, { ImageNote } from './ImagePreview';
+
 // A small Markdown renderer for agent answers: paragraphs, headings, lists, block quotes, fenced code,
-// tables and the inline forms code, bold, italic and links. It builds React elements, never HTML strings.
+// tables and the inline forms code, bold, italic, links and images. It builds React elements, never HTML strings.
+
+/** Where images of this text may come from: the chat and the ID of the stored answer (images.ts). */
+export type ImageContext = { chatId?: string; msgId?: string };
+
+/**
+ * An image of the answer. Foreign addresses are never loaded, only named: through the address, data from the
+ * sandbox could reach a foreign server (Markdown image exfiltration). Local paths go through the gateway once the
+ * answer is stored; data: raster images stay in the browser.
+ */
+function AnswerImage({ alt, src, ctx }: { alt: string; src: string; ctx?: ImageContext }) {
+    const s = imageSource(src, ctx);
+    switch (s.kind) {
+        case 'data':
+            return <ImagePreview src={s.url} alt={alt} label={alt || 'embedded image'} />;
+        case 'sandbox':
+            return <ImagePreview src={s.url} alt={alt} label={s.path} />;
+        case 'pending':
+            return (
+                <ImageNote
+                    text={`Image${alt ? `: ${alt}` : ''} · ${s.path}`}
+                    title="Shows once the answer is finished"
+                />
+            );
+        default:
+            return (
+                <ImageNote
+                    text={`Image not loaded${alt ? `: ${alt}` : ''} · ${s.src}`}
+                    title="Only images from the chat's sandbox are shown; other addresses are never loaded."
+                />
+            );
+    }
+}
 
 const MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
 
-function inline(text: string, keyBase: string): ReactNode[] {
+/**
+ * Inline forms of a line. Images are split off first, so that an underscore in an image path cannot start an
+ * italic run that swallows the image.
+ */
+function inline(text: string, keyBase: string, img?: ImageContext): ReactNode[] {
+    const re = new RegExp(MARKDOWN_IMAGE.source, 'g');
+    const out: ReactNode[] = [];
+    let last = 0;
+    let m: RegExpExecArray | null;
+    let i = 0;
+    while ((m = re.exec(text))) {
+        if (m.index > last) out.push(...inlineText(text.slice(last, m.index), `${keyBase}-t${i}`));
+        const im = parseMarkdownImage(m[0]);
+        out.push(im ? <AnswerImage key={`${keyBase}-i${i}`} alt={im.alt} src={im.src} ctx={img} /> : m[0]);
+        i++;
+        last = m.index + m[0].length;
+    }
+    if (last < text.length) out.push(...inlineText(last ? text.slice(last) : text, `${keyBase}-t${i}`));
+    return out;
+}
+
+function inlineText(text: string, keyBase: string): ReactNode[] {
     const out: ReactNode[] = [];
     // code | bold | italic | link
     const re = /(`[^`]+`)|(\*\*[^*]+\*\*|__[^_]+__)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))/g;
@@ -34,9 +90,9 @@ function inline(text: string, keyBase: string): ReactNode[] {
                 </Box>,
             );
         } else if (m[2]) {
-            out.push(<strong key={k}>{inline(s.slice(2, -2), k)}</strong>);
+            out.push(<strong key={k}>{inlineText(s.slice(2, -2), k)}</strong>);
         } else if (m[3]) {
-            out.push(<em key={k}>{inline(s.slice(1, -1), k)}</em>);
+            out.push(<em key={k}>{inlineText(s.slice(1, -1), k)}</em>);
         } else {
             const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s);
             const href = lm?.[2] ?? '';
@@ -66,7 +122,16 @@ const cells = (l: string) =>
         .split('|')
         .map((c) => c.trim());
 
-export default function Markdown({ text, dense = false }: { text: string; dense?: boolean }) {
+export default function Markdown({
+    text,
+    dense = false,
+    images,
+}: {
+    text: string;
+    dense?: boolean;
+    /** Chat and answer for local images; without it they stay a note. */
+    images?: ImageContext;
+}) {
     const lines = text.replace(/\r\n/g, '\n').split('\n');
     const blocks: ReactNode[] = [];
     let i = 0;
@@ -119,7 +184,7 @@ export default function Markdown({ text, dense = false }: { text: string; dense?
                     key={key}
                     sx={{ fontWeight: 500, fontSize: h[1].length <= 2 ? '1.1em' : '1em', mt: 0.5, mb: gap * 0.5 }}
                 >
-                    {inline(h[2], key)}
+                    {inline(h[2], key, images)}
                 </Box>,
             );
             i++;
@@ -151,7 +216,7 @@ export default function Markdown({ text, dense = false }: { text: string; dense?
                         <thead>
                             <tr>
                                 {head.map((c, j) => (
-                                    <th key={j}>{inline(c, `${key}h${j}`)}</th>
+                                    <th key={j}>{inline(c, `${key}h${j}`, images)}</th>
                                 ))}
                             </tr>
                         </thead>
@@ -159,7 +224,7 @@ export default function Markdown({ text, dense = false }: { text: string; dense?
                             {rows.map((r, ri) => (
                                 <tr key={ri}>
                                     {r.map((c, j) => (
-                                        <td key={j}>{inline(c, `${key}r${ri}c${j}`)}</td>
+                                        <td key={j}>{inline(c, `${key}r${ri}c${j}`, images)}</td>
                                     ))}
                                 </tr>
                             ))}
@@ -184,7 +249,7 @@ export default function Markdown({ text, dense = false }: { text: string; dense?
             blocks.push(
                 <Box key={key} component={ordered ? 'ol' : 'ul'} sx={{ m: 0, mb: gap, pl: 2.5 }}>
                     {items.map((it, j) => (
-                        <li key={j}>{inline(it, `${key}-${j}`)}</li>
+                        <li key={j}>{inline(it, `${key}-${j}`, images)}</li>
                     ))}
                 </Box>,
             );
@@ -199,7 +264,7 @@ export default function Markdown({ text, dense = false }: { text: string; dense?
                     key={key}
                     sx={{ borderLeft: 3, borderColor: 'divider', pl: 1.5, color: 'text.secondary', mb: gap }}
                 >
-                    {inline(body.join(' '), key)}
+                    {inline(body.join(' '), key, images)}
                 </Box>,
             );
             continue;
@@ -220,7 +285,7 @@ export default function Markdown({ text, dense = false }: { text: string; dense?
         }
         blocks.push(
             <Box key={key} component="p" sx={{ m: 0, mb: gap }}>
-                {inline(para.join(' '), key)}
+                {inline(para.join(' '), key, images)}
             </Box>,
         );
     }

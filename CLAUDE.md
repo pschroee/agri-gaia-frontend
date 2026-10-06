@@ -116,6 +116,27 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   row below the input ("Subagents 1 / 2", in the panel "1/2"), a popover with a stepper bounded by
   `max_subagents_limit` from `GET /config` (loaded once in `AgentContext`). Texts and bounds are pure functions in
   `src/agent/settings.ts`, unit-tested.
+- **Files:** attachments, the chat's artifacts and display images, as in the gateway's own UI (API.md, *Attachments to
+  messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files onto the
+  input area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
+  `GET /config` are refused before uploading and named. Uploaded files sit as chips above the field until sent; sending
+  posts their names as `attachments` with the text (text may be empty), also when the message is queued (the queue row
+  names the files); a failed send puts text and chips back; a slash command leaves the chips for the next message.
+  The gateway appends the block `[Attachments in /workspace/inputs/]` to the stored user message; `buildTranscript`
+  splits it off (`splitAttachments`) and the user bubble shows the files below it (images as tiles that enlarge, others as
+  chips downloading `…/artifacts/{name}?kind=input`). **Artifacts:** `ArtifactStrip` below the delegation strip (only with
+  files), collapsed "Files 2 results · 1 upload", opened results and uploads with download; opening reloads
+  `GET …/artifacts`, the SSE event `artifact` adds new ones. A pending approval of kind `artifact_upload` shows in
+  `ApprovalCard` with name, size, type and the text preview (none for images), "Allow" / "Reject". **Display images:**
+  `Markdown` renders `![alt](path)` through `src/agent/images.ts` (port of the gateway's `web/src/lib/images.ts`): local
+  paths under `/workspace`, `/tmp`, `/home/agent` load from `GET …/images?path=…&msg=…` once the answer is stored (`msg`
+  = `responseId`, else `ts-<timestamp>`, carried as `imageKey` on text parts); `data:` PNG/JPEG/GIF/WebP show directly;
+  **foreign addresses and SVG are never loaded** (they would leak sandbox data without internet approval), they show as a
+  muted note, as do local images of an answer still streaming. A click enlarges (`ImagePreview`, MUI Dialog with
+  download). Images are split off a line before the other inline forms, so underscores in a path cannot start italics.
+  `request` in `api.ts` sets the JSON content type only for string bodies; FormData brings its own boundary. The pure
+  logic is in `src/agent/files.ts` and `images.ts`, unit-tested. Render check: drop with a `DataTransfer` built in the
+  page and `dispatchEvent('dragenter'|'dragover'|'drop', {dataTransfer})` on `agent-chat-input`.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local

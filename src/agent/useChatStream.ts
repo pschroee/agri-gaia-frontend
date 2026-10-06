@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, eventsUrl } from './api';
+import { mergeArtifacts } from './files';
 import { commandErrorText, commandProblem, commandResultText, isBuiltinCommand } from './commands';
 import type { CommandNotice } from './commands';
 import { switchFailure } from './modelChoice';
@@ -20,6 +21,7 @@ import { compactingAfter } from './usage';
 import type { Compacting } from './usage';
 import type {
     Approval,
+    Artifact,
     Chat,
     Command,
     ContextTooLarge,
@@ -37,6 +39,12 @@ export type ChatStream = {
     approvals: Approval[];
     socketCalls: SocketCall[];
     executions: ToolExecution[];
+    /** Inputs and outputs of the chat (from the chat, GET …/artifacts, uploads and the SSE event "artifact"). */
+    artifacts: Artifact[];
+    /** Loads the artifact list again (GET …/artifacts). */
+    refreshArtifacts: () => Promise<void>;
+    /** Uploads files for the agent; returns the stored inputs. Throws AgentApiError. */
+    uploadFiles: (files: File[]) => Promise<Artifact[]>;
     /** Queued messages (gateway entries, then the ones still being sent). */
     queue: QueueRow[];
     /** Last failure of a queue action (removing, sending now); cleared by the next one. */
@@ -59,8 +67,8 @@ export type ChatStream = {
     reload: () => Promise<void>;
     /** Takes a newer chat state from an answer of the gateway (e.g. after switching a setting). */
     applyChat: (chat: Chat) => void;
-    /** Sends a message; while the agent works the gateway queues it. */
-    send: (text: string) => Promise<void>;
+    /** Sends a message with the names of uploaded attachments; while the agent works the gateway queues it. */
+    send: (text: string, attachments?: string[]) => Promise<void>;
     /** Removes a queued entry that has not been delivered yet. */
     unqueue: (id: string) => Promise<void>;
     /** Delivers held entries now (after an abort or with an idle chat). */
@@ -109,6 +117,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [approvals, setApprovals] = useState<Approval[]>([]);
     const [socketCalls, setSocketCalls] = useState<SocketCall[]>([]);
     const [executions, setExecutions] = useState<ToolExecution[]>([]);
+    const [artifacts, setArtifacts] = useState<Artifact[]>([]);
     const [liveState, dispatchLive] = useReducer(liveReducer, emptyLive);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>();
@@ -140,6 +149,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             setPending((p) => (p && pendingSettled(p, d.messages ?? []) ? undefined : p));
             setApprovals(d.approvals ?? []);
             setSocketCalls(d.socket_calls ?? []);
+            if (Array.isArray(d.artifacts)) setArtifacts(d.artifacts);
             dispatchQueue({ type: 'loaded', entries: d.queue ?? [] });
             // delivered entries stay visible until their user message is stored
             dispatchQueue({ type: 'messages', messages: d.messages ?? [] });
@@ -174,6 +184,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setApprovals([]);
         setSocketCalls([]);
         setExecutions([]);
+        setArtifacts([]);
         dispatchLive({ type: 'reset' });
         pendingClear.current = undefined;
         setError(undefined);
@@ -240,6 +251,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'approval':
                         setApprovals((l) => upsert(l, ev.data as Approval, (a) => a.id));
                         break;
+                    case 'artifact': {
+                        const a = ev.data as Artifact;
+                        if (a?.name) setArtifacts((l) => mergeArtifacts(l, [a]));
+                        break;
+                    }
                     case 'socket_call':
                         setSocketCalls((l) => upsert(l, ev.data as SocketCall, (c) => c.id));
                         break;
@@ -285,16 +301,19 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     }, [chatId, load, scheduleReload]);
 
     const deliver = useCallback(
-        async (text: string, asCommand: boolean) => {
+        async (text: string, asCommand: boolean, attachments: string[] = []) => {
             if (!chatId) return;
             const guessQueued = expectQueued(chatRef.current);
             const key = `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-            if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text } });
+            const files = attachments.length ? attachments : undefined;
+            if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text, attachments: files } });
             // shown greyed in the transcript until its user message is stored; resuming a dormant chat takes seconds
-            else setPending({ key, text, afterSeq: lastSeq(messagesRef.current) });
+            else setPending({ key, text, afterSeq: lastSeq(messagesRef.current), files });
             const dropPending = () => setPending((p) => (p?.key === key ? undefined : p));
             try {
-                const r = asCommand ? await agentApi.runCommand(chatId, text) : await agentApi.sendMessage(chatId, text);
+                const r = asCommand
+                    ? await agentApi.runCommand(chatId, text)
+                    : await agentApi.sendMessage(chatId, text, attachments);
                 if (r.queued) dropPending();
                 if (r.queued) {
                     // the SSE event "queue" carries the entry; fetch anyway in case the stream is reconnecting,
@@ -317,7 +336,30 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         [chatId, scheduleReload],
     );
 
-    const send = useCallback((text: string) => deliver(text, false), [deliver]);
+    const send = useCallback(
+        (text: string, attachments?: string[]) => deliver(text, false, attachments),
+        [deliver],
+    );
+
+    const refreshArtifacts = useCallback(async () => {
+        if (!chatId) return;
+        try {
+            setArtifacts(await agentApi.artifacts(chatId));
+        } catch {
+            // the list from the chat stays
+        }
+    }, [chatId]);
+
+    const uploadFiles = useCallback(
+        async (files: File[]) => {
+            if (!chatId || files.length === 0) return [];
+            const list = await agentApi.uploadFiles(chatId, files);
+            const stored = Array.isArray(list) ? list : [];
+            setArtifacts((l) => mergeArtifacts(l, stored));
+            return stored;
+        },
+        [chatId],
+    );
 
     const refreshCommands = useCallback(() => {
         if (!chatId) return;
@@ -451,6 +493,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         approvals,
         socketCalls,
         executions,
+        artifacts,
+        refreshArtifacts,
+        uploadFiles,
         queue,
         queueError,
         liveText,

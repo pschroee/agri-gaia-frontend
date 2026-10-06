@@ -164,6 +164,8 @@ export type ContentBlock = TextContent | ThinkingContent | ToolCallContent | Ima
 
 export type PiMessage = {
     role: string;
+    /** ID of the answer at the provider; keys the answer's display images (images.ts). */
+    responseId?: string;
     content?: string | ContentBlock[];
     toolCallId?: string;
     toolName?: string;
@@ -257,9 +259,29 @@ export type ToolExecution = {
     duration_ms: number;
 };
 
+/**
+ * File of a chat: `input` uploaded by the user (in the sandbox under /workspace/inputs/), `output` a result the agent
+ * handed over (after approval). tool_call_id: the tool call that uploaded the result.
+ */
+export type Artifact = {
+    chat_id: string;
+    kind: ArtifactKind;
+    name: string;
+    size: number;
+    sha256: string;
+    content_type: string;
+    created_at: string;
+    via: 'cli' | 'mcp' | 'ui';
+    tool_call_id?: string;
+};
+
+export type ArtifactKind = 'input' | 'output';
+
 export type ChatDetail = {
     chat: Chat;
     messages: StoredMessage[];
+    /** Inputs and outputs of the chat. */
+    artifacts?: Artifact[];
     approvals: Approval[];
     socket_calls: SocketCall[];
     /** Open entries of the queue. */
@@ -283,6 +305,8 @@ export type Config = {
     max_subagents_default?: number;
     /** Upper bound for max_subagents per chat. */
     max_subagents_limit?: number;
+    /** Size limit per uploaded or handed-over file in MB (AGW_ARTIFACT_MAX_MB). */
+    artifact_max_mb?: number;
 };
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };
@@ -328,6 +352,7 @@ export type ServerEvent =
     | { kind: 'pi'; data: PiEvent }
     | { kind: 'chat'; data: Chat }
     | { kind: 'approval'; data: Approval }
+    | { kind: 'artifact'; data: Artifact }
     | { kind: 'socket_call'; data: SocketCall }
     | { kind: 'tool_execution'; data: ToolExecution }
     | { kind: 'queue'; data: QueueEvent }

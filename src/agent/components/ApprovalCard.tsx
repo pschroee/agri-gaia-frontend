@@ -8,7 +8,10 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import PublicIcon from '@mui/icons-material/Public';
+import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 
+import { artifactApprovalView } from '../files';
 import { effectOf, splitCall } from '../format';
 import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
@@ -21,12 +24,6 @@ function describe(a: Approval): { title: string; subject: string; body?: string 
             const body = a.preview?.startsWith(a.name) ? a.preview.slice(a.name.length).trim() : a.preview;
             return { title: 'Platform call', subject: a.name, body: body || undefined };
         }
-        case 'artifact_upload':
-            return {
-                title: 'Hand over a result file',
-                subject: `${a.name} (${a.size.toLocaleString('en')} bytes)`,
-                body: a.preview,
-            };
         default:
             return { title: 'Approval', subject: a.name };
     }
@@ -84,6 +81,69 @@ function InternetItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                     onClick={() => void decide(true)}
                 >
                     Allow internet
+                </Button>
+                <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    disabled={busy}
+                    onClick={() => void decide(false)}
+                >
+                    Reject
+                </Button>
+            </Box>
+        </Box>
+    );
+}
+
+/** The agent wants to hand over a result file (kind artifact_upload): name, size, type and a text preview. */
+function ArtifactItem({ approval, onDecide }: { approval: Approval; onDecide: (approve: boolean) => Promise<void> }) {
+    const { busy, decide } = useDecide(onDecide);
+    const v = artifactApprovalView(approval);
+    const Icon = v.image ? ImageOutlinedIcon : InsertDriveFileOutlinedIcon;
+    return (
+        <Box data-testid="agent-artifact-approval" sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}>
+            <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 0.5 }}>
+                New result file from the agent
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
+                <Icon sx={{ fontSize: 20, color: agentColors.green, mt: '1px', flex: 'none' }} aria-hidden />
+                <Box sx={{ minWidth: 0 }}>
+                    <Typography sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'anywhere' }}>{v.name}</Typography>
+                    <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
+                        {v.size} · {v.type}
+                    </Typography>
+                </Box>
+            </Box>
+            {v.preview && (
+                <Box
+                    component="pre"
+                    sx={{
+                        fontFamily: MONO,
+                        fontSize: 11.5,
+                        lineHeight: 1.55,
+                        bgcolor: '#fafafa',
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 0.5,
+                        p: 1,
+                        mt: 0.75,
+                        mb: 0,
+                        maxHeight: 160,
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                    }}
+                >
+                    {v.preview}
+                </Box>
+            )}
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75 }}>
+                Allowing stores the file with the chat's files, where you can download it.
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
+                    Allow
                 </Button>
                 <Button
                     size="small"
@@ -185,6 +245,8 @@ export default function ApprovalCard({
             {approvals.map((a) =>
                 a.kind === 'internet_access' ? (
                     <InternetItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                ) : a.kind === 'artifact_upload' ? (
+                    <ArtifactItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ) : (
                     <ApprovalItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ),

@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { KeyboardEvent, ReactNode, useEffect, useId, useState } from 'react';
+import { DragEvent, KeyboardEvent, ReactNode, useEffect, useId, useReducer, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import TextField from '@mui/material/TextField';
@@ -12,14 +13,26 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import SendIcon from '@mui/icons-material/Send';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import AttachFileIcon from '@mui/icons-material/AttachFile';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 import { isSlashCommand } from '../commands';
-import type { Command } from '../types';
+import { canSend, checkSizes, emptyStaged, stagedReducer } from '../files';
+import type { Artifact, Command } from '../types';
 import { useSlashCommands } from '../useSlashCommands';
 import SlashCommandMenu, { optionId } from './SlashCommandMenu';
+import { StagedAttachments } from './Attachments';
+import { agentColors } from './tokens';
 
 type Props = {
-    onSend: (text: string) => Promise<void>;
+    /** Sends the text with the names of the uploaded attachments. */
+    onSend: (text: string, attachments: string[]) => Promise<void>;
+    /** Uploads files for the agent (button and drag and drop); without it the field takes no files. */
+    onUpload?: (files: File[]) => Promise<Artifact[]>;
+    /** Size limit per file in MB (gateway config), checked before uploading. */
+    maxFileMb?: number;
+    /** Chat of the field, for thumbnails of staged images. */
+    chatId?: string;
     /** The agent works: the input stays usable, sending queues the message. */
     running?: boolean;
     disabled?: boolean;
@@ -45,6 +58,9 @@ const NO_COMMANDS: Command[] = [];
  */
 export default function ChatInput({
     onSend,
+    onUpload,
+    maxFileMb,
+    chatId,
     running,
     disabled,
     placeholder,
@@ -59,6 +75,10 @@ export default function ChatInput({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+    const [staged, dispatchStaged] = useReducer(stagedReducer, emptyStaged);
+    const [dragging, setDragging] = useState(false);
+    const dragDepth = useRef(0);
+    const fileRef = useRef<HTMLInputElement>(null);
     const listId = `agent-slash-${useId().replace(/:/g, '')}`;
     const slash = useSlashCommands(onCommand ? commands ?? NO_COMMANDS : NO_COMMANDS, text, setText);
     const justSlash = text === '/';
@@ -66,24 +86,71 @@ export default function ChatInput({
         if (justSlash && onCommand) onCommandsOpen?.();
     }, [justSlash, onCommand, onCommandsOpen]);
 
+    const upload = async (files: File[]) => {
+        if (!onUpload || files.length === 0) return;
+        const { ok, error: tooBig } = checkSizes(files, maxFileMb);
+        if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
+        if (ok.length === 0) return;
+        dispatchStaged({ type: 'upload_start' });
+        try {
+            dispatchStaged({ type: 'upload_done', files: await onUpload(ok) });
+            // the size note stays visible next to the uploaded files
+            if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
+        } catch (e) {
+            dispatchStaged({ type: 'upload_failed', error: `Upload failed: ${e instanceof Error ? e.message : String(e)}` });
+        }
+    };
+
     const send = async () => {
         const t = text.trim();
-        if (!t || busy) return;
+        const command = !!onCommand && isSlashCommand(t);
+        // a command goes without the attachments; they stay for the next message
+        if (busy || (command ? !t : !canSend(t, staged))) return;
+        const attachments = command ? [] : staged.files;
         setBusy(true);
         setError(undefined);
         // cleared right away (the message shows in the history or the queue); restored when sending fails
         setText('');
+        if (attachments.length) dispatchStaged({ type: 'clear' });
         try {
-            if (onCommand && isSlashCommand(t)) {
+            if (command && onCommand) {
                 if (!(await onCommand(t))) setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
-            } else await onSend(t);
+            } else await onSend(t, attachments.map((a) => a.name));
         } catch (e) {
-            setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
+            if (t) setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
+            if (attachments.length) dispatchStaged({ type: 'restore', files: attachments });
             setError(e instanceof Error ? e.message : String(e));
         } finally {
             setBusy(false);
         }
     };
+
+    const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files');
+    const dropHandlers = onUpload
+        ? {
+              onDragEnter: (e: DragEvent) => {
+                  if (!hasFiles(e) || disabled) return;
+                  dragDepth.current++;
+                  setDragging(true);
+              },
+              onDragLeave: () => {
+                  dragDepth.current = Math.max(0, dragDepth.current - 1);
+                  if (dragDepth.current === 0) setDragging(false);
+              },
+              onDragOver: (e: DragEvent) => {
+                  if (hasFiles(e) && !disabled) e.preventDefault();
+              },
+              onDrop: (e: DragEvent) => {
+                  if (!hasFiles(e)) return;
+                  e.preventDefault();
+                  dragDepth.current = 0;
+                  setDragging(false);
+                  if (!disabled) void upload(Array.from(e.dataTransfer.files));
+              },
+          }
+        : {};
+    const uploading = staged.uploading > 0;
+    const sendable = onCommand && isSlashCommand(text.trim()) ? true : canSend(text, staged);
 
     const onKeyDown = (e: KeyboardEvent) => {
         if (slash.onKeyDown(e)) return;
@@ -94,7 +161,50 @@ export default function ChatInput({
     };
 
     return (
-        <Box sx={{ display: 'grid', gap: 0.75 }}>
+        <Box sx={{ display: 'grid', gap: 0.75, position: 'relative' }} data-testid="agent-chat-input" {...dropHandlers}>
+            {dragging && (
+                <Box
+                    data-testid="agent-drop-zone"
+                    sx={{
+                        position: 'absolute',
+                        inset: -4,
+                        zIndex: 2,
+                        pointerEvents: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: 1,
+                        border: `2px dashed ${agentColors.green}`,
+                        borderRadius: 1,
+                        bgcolor: 'rgba(238, 243, 240, 0.94)',
+                        color: agentColors.green,
+                        fontSize: 13,
+                        fontWeight: 500,
+                    }}
+                >
+                    <UploadFileIcon sx={{ fontSize: 20 }} />
+                    Drop files to attach them
+                </Box>
+            )}
+            {onUpload && (
+                <input
+                    ref={fileRef}
+                    type="file"
+                    multiple
+                    hidden
+                    data-testid="agent-file-input"
+                    onChange={(e) => {
+                        const files = Array.from(e.target.files ?? []);
+                        e.target.value = '';
+                        void upload(files);
+                    }}
+                />
+            )}
+            <StagedAttachments
+                chatId={chatId}
+                files={staged.files}
+                onRemove={(name) => dispatchStaged({ type: 'remove', name })}
+            />
             <TextField
                 size="small"
                 fullWidth
@@ -119,6 +229,32 @@ export default function ChatInput({
                     'aria-activedescendant': slash.open ? optionId(listId, slash.active) : undefined,
                 }}
                 InputProps={{
+                    startAdornment: onUpload ? (
+                        <InputAdornment position="start" sx={{ alignSelf: 'flex-end', mb: 1.5, mr: 0.25, ml: -0.75 }}>
+                            <Tooltip
+                                title={
+                                    maxFileMb
+                                        ? `Attach files (placed under /workspace/inputs/, at most ${maxFileMb} MB each)`
+                                        : 'Attach files (placed under /workspace/inputs/)'
+                                }
+                            >
+                                <span>
+                                    <IconButton
+                                        size="small"
+                                        disabled={disabled || uploading}
+                                        onClick={() => fileRef.current?.click()}
+                                        aria-label="Attach files"
+                                    >
+                                        {uploading ? (
+                                            <CircularProgress size={16} aria-label="Uploading" />
+                                        ) : (
+                                            <AttachFileIcon fontSize="small" />
+                                        )}
+                                    </IconButton>
+                                </span>
+                            </Tooltip>
+                        </InputAdornment>
+                    ) : undefined,
                     endAdornment: (
                         <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 1.5 }}>
                             <Tooltip
@@ -132,7 +268,7 @@ export default function ChatInput({
                                     <IconButton
                                         size="small"
                                         color="primary"
-                                        disabled={disabled || busy || !text.trim()}
+                                        disabled={disabled || busy || !sendable}
                                         onClick={() => void send()}
                                         aria-label={running ? 'Queue message' : 'Send'}
                                     >
@@ -145,7 +281,16 @@ export default function ChatInput({
                 }}
             />
             {onCommand && <SlashCommandMenu menu={slash} anchor={anchor} id={listId} />}
-            {error && <Typography sx={{ fontSize: 11.5, color: 'error.main' }}>{error}</Typography>}
+            {uploading && (
+                <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }} role="status">
+                    Uploading …
+                </Typography>
+            )}
+            {(error || staged.error) && (
+                <Typography role="alert" sx={{ fontSize: 11.5, color: 'error.main' }}>
+                    {error ?? staged.error}
+                </Typography>
+            )}
             {(toolbar || !error) && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: toolbar ? -0.5 : 0 }}>
                     {toolbar && <Box sx={{ flex: '1 1 auto', minWidth: 0, ml: -0.75 }}>{toolbar}</Box>}

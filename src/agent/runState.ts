@@ -115,7 +115,8 @@ export function suspendErrorText(status: number | undefined, message: string): s
 }
 
 /** A message sent outside the queue whose user message is not stored yet (shown greyed in the transcript). */
-export type PendingSend = { key: string; text: string; afterSeq: number };
+/** files: names of the attachments sent with it. */
+export type PendingSend = { key: string; text: string; afterSeq: number; files?: string[] };
 
 /** Has the pending message been stored (a user message after the send)? */
 export function pendingSettled(p: PendingSend, messages: StoredMessage[]): boolean {
