@@ -403,9 +403,68 @@ export type Config = {
     max_subagents_limit?: number;
     /** Size limit per uploaded or handed-over file in MB (AGW_ARTIFACT_MAX_MB). */
     artifact_max_mb?: number;
+    /** An approval expires after this many seconds. */
+    approval_timeout_s?: number;
+    /** An idle chat rests (releases its sandbox) after this many seconds. */
+    idle_timeout_s?: number;
 };
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };
+
+/** What a slot's agent is doing right now (GET /pool). */
+export type SlotActivity = {
+    kind:
+        | 'idle'
+        | 'thinking'
+        | 'writing'
+        | 'tool'
+        | 'waiting_approval'
+        | 'starting'
+        | 'preparing'
+        | 'compacting'
+        | string;
+    tool?: string;
+    since: string;
+};
+
+/** Slot of the warm pool: idle (free), assigned (busy) or starting; other users' chats show without chat_id. */
+export type Slot = {
+    id: string;
+    variant: VariantId;
+    state: 'starting' | 'idle' | 'assigned' | 'stopping';
+    container_id?: string;
+    container_name?: string;
+    image: string;
+    exec_image?: string;
+    created_at: string;
+    assigned_at?: string;
+    chat_id?: string;
+    chat_title?: string;
+    activity?: SlotActivity;
+    internet?: boolean;
+};
+
+/** Warm pool of the gateway (GET /pool): slots and the target size per variant. */
+export type Pool = {
+    slots: Slot[];
+    targets: Partial<Record<VariantId, number>>;
+    totals?: { cost: number; tokens: Tokens; chats_active: number };
+};
+
+/** Binding of the gateway to the platform API (GET /platform). */
+export type PlatformStatus = {
+    configured: boolean;
+    api_url?: string;
+    /** user: every chat acts with its owner's login; account: one configured account. */
+    login?: 'user' | 'account';
+    account?: string;
+    client_id?: string;
+    token_exchange?: boolean;
+    /** Unauthenticated request to the API base; any HTTP answer counts as reachable (cached 10 s). */
+    probe?: { reachable: boolean; http_status?: number; latency_ms: number; error?: string; checked_at: string };
+    /** Newest token exchange among the user's chats, also a failed one (in memory of the gateway only). */
+    last_exchange?: { chat_id: string; at: string; ok: boolean; error?: string };
+};
 
 /** Phase of resuming a dormant chat in a fresh sandbox (SSE "resume", API.md), in this order. */
 export type ResumePhase = 'acquire' | 'session' | 'settings' | 'workspace' | 'inputs' | 'ready' | 'failed';
