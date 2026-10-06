@@ -137,6 +137,23 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   `request` in `api.ts` sets the JSON content type only for string bodies; FormData brings its own boundary. The pure
   logic is in `src/agent/files.ts` and `images.ts`, unit-tested. Render check: drop with a `DataTransfer` built in the
   page and `dispatchEvent('dragenter'|'dragover'|'drop', {dataTransfer})` on `agent-chat-input`.
+- **Mermaid diagrams:** ```` ```mermaid ```` blocks in answers render as diagrams (`MermaidDiagram`), as in the
+  gateway's own UI (port of its `web/src/lib/mermaid.ts`). mermaid and DOMPurify are loaded only at the first diagram
+  (dynamic import of `src/agent/mermaidLoad.ts`, separate chunks); the main bundle grew by about 10 kB for the UI code
+  only. Config in `mermaidConfig` (`src/agent/mermaid.ts`): `securityLevel: 'strict'`, no HTML labels, theme `base`
+  with colours from the platform (`MERMAID_THEME_VARIABLES`), a system font (the SVG is shown as `<img>`, which cannot
+  use the page's web fonts, while mermaid measures labels in the page), compact spacing for the 400 px panel; `secure`
+  stops `%%{init}%%` from changing any of it. The SVG is sanitized a second time (no script, no outside references)
+  and shown as a `data:` `<img>`: it fits the width, a click or "Enlarge" opens a dialog (up to twice the natural size,
+  SVG download), "Code" toggles the source. A render error shows the code with a short note (line number, full message
+  as tooltip). While an answer streams (`streaming` on `Markdown`, the live `AgentBlock`), a block renders only once
+  its closing fence has arrived (`readFence`, CommonMark rules: same character, at least as long); stored answers render
+  unclosed blocks too. Large diagrams (over 4000 characters or 150 edges) and the sixth diagram of an answer onwards
+  render only on click. Diagrams the agent renders itself with `mmdc` arrive as PNG display images (see *Files*).
+  **TypeScript 4.9 cannot parse mermaid's types** (they pull in `@types/d3` with TypeScript 5 syntax): `mermaidLoad.ts`
+  imports `mermaid/dist/mermaid.core.mjs` by path (the package's own ESM entry), typed by `src/agent/mermaid-module.d.ts`;
+  importing `'mermaid'` breaks `tsc`. Render check: in the dev server the mermaid chunk only loads when a diagram
+  appears; the first visit after the lockfile changed re-optimizes dependencies.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
