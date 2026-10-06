@@ -5,11 +5,12 @@
 // Queue of a chat: messages sent while the agent works. The gateway keeps them and hands them to pi (steered in
 // during a run, or at its end; API.md, "Queue"). pi reads a steered message only after its current step, and the
 // user message is stored only then. The UI therefore keeps delivered entries visible above the input field
-// ("waiting for the agent") until the matching user message shows in the transcript.
+// ("waiting for the agent") until the matching user message shows in the transcript. After a page reload the gateway
+// lists them in `queue_delivered` of GET /chats/{id}, and they show the same way.
 // Pure state logic, used by useChatStream and QueueList.
 
 import { noteLabel, textOf } from './transcript';
-import type { Chat, HoldReason, QueueEntry, QueueEvent, StoredMessage } from './types';
+import type { Chat, HoldReason, QueueDelivery, QueueEntry, QueueEvent, StoredMessage } from './types';
 
 /** Sent while the agent works, the gateway's response is still pending (optimistic). */
 export type LocalQueued = { key: string; text: string; attachments?: string[] };
@@ -43,6 +44,11 @@ export type QueueAction =
     | { type: 'reset' }
     /** Entries from GET /chats/{id} or GET /chats/{id}/queue. */
     | { type: 'loaded'; entries: QueueEntry[] }
+    /**
+     * `queue_delivered` of GET /chats/{id}: deliveries pi has not read yet (after a page reload the SSE event
+     * "delivered" is gone); lastSeq: highest seq of the stored messages loaded with them.
+     */
+    | { type: 'delivered_loaded'; deliveries: QueueDelivery[]; lastSeq: number }
     /** SSE event "queue"; lastSeq: highest stored message seq known when the event arrived. */
     | { type: 'event'; event: QueueEvent; lastSeq: number }
     /** Stored messages (after a reload): delivered entries whose user message is there are done. */
@@ -66,6 +72,8 @@ export function queueReducer(state: QueueState, action: QueueAction): QueueState
             const next = { ...state, entries, removing: state.removing.filter((id) => open.has(id)) };
             return action.type === 'event' ? applyChange(next, state.entries, action.event, action.lastSeq) : next;
         }
+        case 'delivered_loaded':
+            return addLoadedDeliveries(state, action.deliveries, action.lastSeq);
         case 'messages':
             return settleDelivered(state, action.messages);
         case 'local_add':
@@ -106,6 +114,33 @@ function applyChange(state: QueueState, before: QueueEntry[], ev: QueueEvent, la
         default:
             return state;
     }
+}
+
+/**
+ * Adds the gateway's deliveries that the UI does not show yet, in the same form as after the SSE event; deliveries
+ * already known (live event before the response) stay as they are. The gateway lists them only until pi reports the
+ * user message, so only later stored user messages can settle them.
+ */
+function addLoadedDeliveries(state: QueueState, deliveries: QueueDelivery[], lastSeq: number): QueueState {
+    const known = new Set(state.delivered.flatMap((d) => d.ids));
+    const added = (Array.isArray(deliveries) ? deliveries : [])
+        .filter((d) => Array.isArray(d.ids) && d.ids.length > 0 && !d.ids.some((id) => known.has(id)))
+        .map(
+            (d): Delivered => ({
+                ids: d.ids,
+                entries: entriesOf(d.entries),
+                text: d.text ?? '',
+                afterSeq: lastSeq,
+            }),
+        );
+    if (added.length === 0) return state;
+    // an entry that is delivered is no longer open (in case the open list was older)
+    const ids = new Set(added.flatMap((d) => d.ids));
+    return {
+        ...state,
+        entries: state.entries.filter((e) => !ids.has(e.id)),
+        delivered: [...state.delivered, ...added],
+    };
 }
 
 const squash = (t: string) => t.split(/\s+/).filter(Boolean).join(' ');

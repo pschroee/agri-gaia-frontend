@@ -17,7 +17,7 @@ import {
     settleDelivered,
 } from './queue';
 import type { QueueState } from './queue';
-import type { QueueEntry, StoredMessage } from './types';
+import type { QueueDelivery, QueueEntry, StoredMessage } from './types';
 
 const entry = (id: string, text: string, extra: Partial<QueueEntry> = {}): QueueEntry => ({
     id,
@@ -316,5 +316,110 @@ describe('delivered entries (steered in, not yet read by the agent)', () => {
 
     it('says the agent reads it after the current step', () => {
         expect(queueStatusText(running, true)).toBe('waiting for the agent, will be read after the current step');
+    });
+});
+
+describe('delivered entries after a page reload (queue_delivered)', () => {
+    const delivery = (ids: string[], texts: string[]): QueueDelivery => ({
+        ids,
+        entries: ids.map((id, i) => entry(id, texts[i])),
+        text: texts.join('\n\n'),
+        delivered_at: '2026-10-06T10:00:01Z',
+        steered: true,
+    });
+
+    it('shows a delivery from the gateway like one from the live event', () => {
+        const loaded = queueReducer(queueReducer(emptyQueue, { type: 'loaded', entries: [] }), {
+            type: 'delivered_loaded',
+            deliveries: [delivery(['q1'], ['Also check the night images.'])],
+            lastSeq: 7,
+        });
+        const live = queueReducer(
+            queueReducer(emptyQueue, {
+                type: 'event',
+                event: { entries: [entry('q1', 'Also check the night images.')], change: 'queued', ids: ['q1'] },
+                lastSeq: 7,
+            }),
+            {
+                type: 'event',
+                event: { entries: [], change: 'delivered', ids: ['q1'], text: 'Also check the night images.' },
+                lastSeq: 7,
+            },
+        );
+        expect(loaded.delivered).toEqual(live.delivered);
+        expect(queueRows(loaded, running)).toEqual(queueRows(live, running));
+        expect(queueRows(loaded, running)[0]).toMatchObject({ key: 'q1', state: 'delivered' });
+        expect(queueStatusText(running, true)).toBe('waiting for the agent, will be read after the current step');
+    });
+
+    it('lists them before open entries and keeps the order of the gateway', () => {
+        let s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q3', 'Then train.')] });
+        s = queueReducer(s, {
+            type: 'delivered_loaded',
+            deliveries: [delivery(['q1', 'q2'], ['a', 'b'])],
+            lastSeq: 4,
+        });
+        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual([
+            'q1:delivered',
+            'q2:delivered',
+            'q3:waiting',
+        ]);
+    });
+
+    it('does not add a delivery the live event already showed', () => {
+        let s = queueReducer(emptyQueue, {
+            type: 'event',
+            event: { entries: [], change: 'delivered', ids: ['q1'], text: 'x' },
+            lastSeq: 3,
+        });
+        s = queueReducer(s, { type: 'delivered_loaded', deliveries: [delivery(['q1'], ['x'])], lastSeq: 5 });
+        expect(s.delivered).toHaveLength(1);
+        expect(s.delivered[0].afterSeq).toBe(3);
+    });
+
+    it('takes a delivered entry out of an older open list', () => {
+        let s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q1', 'x')] });
+        s = queueReducer(s, { type: 'delivered_loaded', deliveries: [delivery(['q1'], ['x'])], lastSeq: 2 });
+        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q1:delivered']);
+    });
+
+    it('is settled by the user message stored after the reload, not by older ones', () => {
+        let s = queueReducer(emptyQueue, {
+            type: 'delivered_loaded',
+            deliveries: [delivery(['q1'], ['Also check the night images.'])],
+            lastSeq: 7,
+        });
+        s = queueReducer(s, { type: 'messages', messages: [userMsg(6, 'Also check the night images.')] });
+        expect(s.delivered).toHaveLength(1);
+        s = queueReducer(s, { type: 'messages', messages: [userMsg(8, 'Also check the night images.')] });
+        expect(s.delivered).toEqual([]);
+    });
+
+    it('a restored event reopens it', () => {
+        let s = queueReducer(emptyQueue, { type: 'delivered_loaded', deliveries: [delivery(['q1'], ['x'])], lastSeq: 1 });
+        s = queueReducer(s, {
+            type: 'event',
+            event: { entries: [entry('q1', 'x')], change: 'restored', ids: ['q1'] },
+            lastSeq: 1,
+        });
+        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q1:waiting']);
+    });
+
+    it('ignores an empty or malformed list', () => {
+        expect(queueReducer(emptyQueue, { type: 'delivered_loaded', deliveries: [], lastSeq: 0 })).toBe(emptyQueue);
+        expect(
+            queueReducer(emptyQueue, {
+                type: 'delivered_loaded',
+                deliveries: null as unknown as QueueDelivery[],
+                lastSeq: 0,
+            }),
+        ).toBe(emptyQueue);
+        expect(
+            queueReducer(emptyQueue, {
+                type: 'delivered_loaded',
+                deliveries: [{ ids: [], entries: [], text: 'x', delivered_at: '' }],
+                lastSeq: 0,
+            }),
+        ).toBe(emptyQueue);
     });
 });

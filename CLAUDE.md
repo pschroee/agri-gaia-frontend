@@ -49,8 +49,11 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   The gateway steers user entries into pi right away (SSE `queue` with `change: "delivered"` milliseconds after
   `queued`), but pi reads them only after its current step, and the user message is stored only then. Delivered
   entries therefore stay in the list ("with the agent", greyed) until a later stored user message carries their text
-  or has `trigger: "queue"`; `restored` reopens them, `dropped` clears them. A page reload in that window loses them
-  (the gateway's queue no longer lists delivered entries).
+  or has `trigger: "queue"`; `restored` reopens them, `dropped` clears them. After a page reload the gateway lists
+  them in `queue_delivered` of `GET /chats/{id}` (gateway PR for issue #21; `QueueDelivery`, same content as the
+  `delivered` event plus the entries); the reducer action `delivered_loaded` adds them with the seq of the loaded
+  messages as anchor, so they show and settle exactly as before the reload. An older gateway without the field
+  changes nothing.
 - **Auto-scroll:** `useStickToBottom` (`src/agent/useStickToBottom.ts`) keeps the transcript of `ChatView` at its end
   while the user is within 32 px of the bottom. A ResizeObserver on the scrolling box and its content triggers it, so
   growing step lists and streamed text follow too, not only new messages. Only scrolling **up** releases the view
