@@ -9,7 +9,15 @@ import { isBlocked } from './format';
 import { messageImageKey } from './images';
 import { hasThinkingText, thinkingDuration, thinkingKey } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
-import type { Approval, ContentBlock, MessageSource, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
+import type {
+    Approval,
+    ContentBlock,
+    MessageSource,
+    PiMessage,
+    SocketCall,
+    StoredMessage,
+    ToolExecution,
+} from './types';
 import { answerUsage } from './usage';
 import type { AnswerUsage } from './usage';
 
@@ -121,7 +129,8 @@ export function noteLabel(src: MessageSource, summary?: string): string | undefi
         case 'sandbox':
             return `background tasks ended with the previous sandbox${refs.length ? `: ${refs.join(', ')}` : ''}`;
         case 'background':
-            if (summary && /^Background task /.test(summary.trim())) return `background task ${compactNoteSummary(summary)}`;
+            if (summary && /^Background task /.test(summary.trim()))
+                return `background task ${compactNoteSummary(summary)}`;
             return `background task${refs[0] ? ` ${refs[0]}` : ''} ended`;
         default:
             return undefined;
@@ -162,6 +171,15 @@ export function splitMessage(text: string, sources: MessageSource[] | undefined)
     }
     pushUser(text.slice(cursor));
     return parts;
+}
+
+/**
+ * A part the gateway marks as context for the model only (`audience: "agent"`, e.g. the preferred browser language):
+ * not shown in the chat. Decided by the gateway's mark alone, not by the type or the text (gateway API.md, *Origin of
+ * instructions*).
+ */
+export function isAgentOnly(p: Part): boolean {
+    return p.kind === 'system' && p.source.audience === 'agent';
 }
 
 /** Plain text of a message's content (text blocks joined by blank lines). */
@@ -269,7 +287,9 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                 items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, text, files });
                 continue;
             }
-            const parts = splitMessage(text, m.sources);
+            // notes the gateway marks as context for the model only (audience "agent", e.g. the preferred
+            // language) are cut out, never shown as user text
+            const parts = splitMessage(text, m.sources).filter((p) => !isAgentOnly(p));
             const lastUser = parts.map((p) => p.kind).lastIndexOf('user');
             // the attachments block ends the message: it belongs to the user's text (or stands alone)
             if (files && lastUser < 0) items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, text: '', files });
@@ -284,8 +304,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                         label: noteLabel(p.source, note?.summary),
                         note,
                     });
-                }
-                else
+                } else
                     items.push({
                         kind: 'user',
                         key: `u${m.seq}-${i}`,

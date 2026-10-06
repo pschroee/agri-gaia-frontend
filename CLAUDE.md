@@ -58,6 +58,10 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   (messages plus each tool call). Opening a chat (ChatView is keyed by chat id) and sending jump to the end. The
   decision logic is the pure `stickReducer`, unit-tested; measuring in a render check must wait for a painted frame
   (rAF, then `setTimeout`), because a measurement inside rAF runs before that frame's ResizeObserver.
+- **Gateway notes:** user messages are split along the gateway's `sources` (`splitMessage` in `src/agent/transcript.ts`);
+  a part with `audience: "agent"` (today the preferred browser language of the first message) is context for the model
+  only and is cut out (`isAgentOnly`), never shown as user text. Decide by that mark, not by `type` or the text; the
+  gateway fills it in for old rows too (gateway API.md, *Origin of instructions*).
 - **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
   `message_update` with `thinking_start|delta|end`) show as a collapsed muted line "Thinking · 4.2 s" between text and
   tool steps (`ThinkingBlock`), live as "Thinking … n s". The live message is assembled by the pure reducer
