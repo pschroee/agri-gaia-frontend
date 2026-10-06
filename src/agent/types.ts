@@ -207,6 +207,8 @@ export type MessageSource = {
     queue_id?: string;
     /** Marker of the fence around sandbox data inside the note. */
     marker?: string;
+    /** "agent": context for the model only (e.g. the preferred browser language); the chat does not show it. */
+    audience?: 'agent';
 };
 
 export type Approval = {

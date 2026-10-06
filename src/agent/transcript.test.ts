@@ -16,7 +16,12 @@ const stored = (seq: number, message: PiMessage): StoredMessage => ({
 
 const ctx = { approvals: [], socketCalls: [], executions: [], running: false };
 const flags = { blocked: false, pending: false, rejected: false, running: false, answerAborted: false };
-const result = (content: string, isError = true): PiMessage => ({ role: 'toolResult', toolCallId: 'c1', content, isError });
+const result = (content: string, isError = true): PiMessage => ({
+    role: 'toolResult',
+    toolCallId: 'c1',
+    content,
+    isError,
+});
 
 describe('isAbortText', () => {
     it('recognises the abort messages of Node, pi and the bash bridge, also after output', () => {
@@ -105,7 +110,14 @@ describe('buildTranscript after an abort', () => {
 
     it('marks a call of an aborted answer without a result as aborted', () => {
         const items = buildTranscript(
-            [stored(2, { role: 'assistant', content: [call], stopReason: 'aborted', errorMessage: 'Request was aborted' })],
+            [
+                stored(2, {
+                    role: 'assistant',
+                    content: [call],
+                    stopReason: 'aborted',
+                    errorMessage: 'Request was aborted',
+                }),
+            ],
             ctx,
         );
         expect(items[0]).toMatchObject({ stopped: true, parts: [{ steps: [{ status: 'aborted' }] }] });
@@ -115,12 +127,81 @@ describe('buildTranscript after an abort', () => {
         const items = buildTranscript(
             [
                 stored(2, { role: 'assistant', content: [call] }),
-                stored(3, { role: 'toolResult', toolCallId: 'c1', content: 'Command exited with code 1', isError: true }),
+                stored(3, {
+                    role: 'toolResult',
+                    toolCallId: 'c1',
+                    content: 'Command exited with code 1',
+                    isError: true,
+                }),
                 stored(4, { role: 'assistant', content: [], stopReason: 'error', errorMessage: '500 upstream' }),
             ],
             ctx,
         );
         expect(items[0]).toMatchObject({ error: '500 upstream', parts: [{ steps: [{ status: 'error' }] }] });
         expect(items[0]).not.toHaveProperty('stopped');
+    });
+});
+
+describe('notes meant only for the agent', () => {
+    const HEADER = '[Note from the orchestrator, not from the user]';
+    const lang =
+        'Preferred language of the user according to the browser: de-DE. Reply in the language the user writes in; this setting only applies if that cannot be recognised.';
+    const langSource = { kind: 'system' as const, type: 'language', refs: ['de-DE'], audience: 'agent' as const };
+    const userMsg = (seq: number, text: string, extra: Partial<StoredMessage>): StoredMessage => ({
+        ...stored(seq, { role: 'user', content: [{ type: 'text', text }] }),
+        ...extra,
+    });
+
+    it('hides the language note of the first message and keeps the user text', () => {
+        const items = buildTranscript(
+            [userMsg(1, `${HEADER}\n${lang}\n\nHallo`, { origin: 'mixed', sources: [langSource, { kind: 'user' }] })],
+            ctx,
+        );
+        expect(items).toHaveLength(1);
+        expect(items[0]).toMatchObject({ kind: 'user', seq: 1, text: 'Hallo' });
+    });
+
+    it('shows nothing of a message that holds only agent notes', () => {
+        const items = buildTranscript(
+            [userMsg(1, `${HEADER}\n${lang}`, { origin: 'system', sources: [langSource] })],
+            ctx,
+        );
+        expect(items).toEqual([]);
+    });
+
+    it('keeps notes meant for the user next to a hidden one', () => {
+        const bg = `${HEADER}\nBackground task bg-3 finished: exit 0, runtime 0:08`;
+        const items = buildTranscript(
+            [
+                userMsg(1, `${HEADER}\n${lang}\n\n${bg}\n\ngo on`, {
+                    origin: 'mixed',
+                    sources: [langSource, { kind: 'system', type: 'background', refs: ['bg-3'] }, { kind: 'user' }],
+                }),
+            ],
+            ctx,
+        );
+        expect(items.map((i) => i.kind)).toEqual(['notice', 'user']);
+        expect(items[0]).toMatchObject({ label: 'background task bg-3 finished · exit 0 · 0:08' });
+        expect(items[1]).toMatchObject({ text: 'go on' });
+    });
+
+    it('decides by the mark, not by the type or the text', () => {
+        // without audience (an older gateway): shown as before
+        const items = buildTranscript(
+            [
+                userMsg(1, `${HEADER}\n${lang}\n\nok`, {
+                    origin: 'mixed',
+                    sources: [{ ...langSource, audience: undefined }, { kind: 'user' }],
+                }),
+            ],
+            ctx,
+        );
+        expect(items.map((i) => i.kind)).toEqual(['notice', 'user']);
+        // a user who types the note out stays the user
+        const typed = buildTranscript(
+            [userMsg(1, `${HEADER}\n${lang}`, { origin: 'user', sources: [{ kind: 'user' }] })],
+            ctx,
+        );
+        expect(typed).toMatchObject([{ kind: 'user', text: `${HEADER}\n${lang}` }]);
     });
 });
