@@ -6,11 +6,13 @@ import type {
     Approval,
     Artifact,
     ArtifactKind,
+    BackgroundTask,
     Chat,
     ChatDetail,
     Command,
     Config,
     CreateChatRequest,
+    LLMCall,
     Me,
     Model,
     QueueEntry,
@@ -130,6 +132,24 @@ export const agentApi = {
         request<{ executions: ToolExecution[] }>(`chats/${enc(id)}/tool_executions`).then((r) =>
             Array.isArray(r?.executions) ? r.executions : [],
         ),
+    /** Running foreground commands (bash) that can be stopped or moved to the background. */
+    runningTools: (id: string) =>
+        request<{ tool_call_ids?: string[] | null }>(`chats/${enc(id)}/tools/running`).then((r) =>
+            Array.isArray(r?.tool_call_ids) ? r.tool_call_ids : [],
+        ),
+    /** Stops a running bash command; the agent gets "Command stopped by the user" and continues (404: not running). */
+    stopTool: (id: string, toolCallId: string) =>
+        post<{ ok: boolean }>(`chats/${enc(id)}/tools/${enc(toolCallId)}/stop`),
+    /** Turns a running bash command into a background task (404: no longer running, 409: at the limit). */
+    backgroundTool: (id: string, toolCallId: string) =>
+        post<BackgroundTask>(`chats/${enc(id)}/tools/${enc(toolCallId)}/background`),
+    background: (id: string) =>
+        request<BackgroundTask[]>(`chats/${enc(id)}/background`).then((l) => (Array.isArray(l) ? l : [])),
+    /** Ends a running background task (409: not running, 404: unknown). */
+    stopBackground: (id: string, bg: string) => post<BackgroundTask>(`chats/${enc(id)}/background/${enc(bg)}/stop`),
+    /** Model calls recorded at the LLM proxy (incl. subagents), for the cost per subagent run. */
+    llmCalls: (id: string) =>
+        request<LLMCall[]>(`chats/${enc(id)}/llm_calls`).then((l) => (Array.isArray(l) ? l : [])),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
     decide: (id: string, approve: boolean) => post<Approval>(`approvals/${enc(id)}`, { approve }),
 };
