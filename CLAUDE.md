@@ -179,6 +179,19 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `ContextTooLargeDialog`; "Compact first, then switch" posts `compact_first: true`, and `pending_model` shows
   "Compacting, then …" until the chat event brings the new model. The decisions are pure functions in
   `src/agent/modelChoice.ts`, unit-tested.
+- **Chat row of the panel and long titles (issue #38):** below the panel header sit the chat selector, "New chat" as a
+  plus (`NewChatButton compact`, tooltip and label "New chat") and the internet globe; plus and globe share
+  `rowIconButtonSx` (`tokens.ts`, 32 × 32 px). The selector takes the remaining room and ellipsizes the title; its
+  tooltip and the opened list show the full title (list left-aligned under the selector, at most 368 px wide, titles
+  wrap with `overflow-wrap: anywhere`). **The row's wrapper is a grid with `minmax(0, 1fr)`:** an `auto` column grows
+  to the title's min-content, and the old row ran past the 400 px panel although the `Select` had `minWidth: 0`
+  (856 px wide for a 110-character title). On `/ai-agent` the chat header wraps its controls (state chip, internet,
+  context, cost) as one group onto a second line before the title gets narrower than 200 px; history items break
+  words that are longer than the line (`overflow-wrap: anywhere`, else the line clamp only clips them) and carry the
+  full title as `title`; the approvals table on the Status tab breaks the title too. `chatTitle` in
+  `src/agent/format.ts` gives "Untitled chat" for an empty title. Render check: titles short, long and one word of
+  230 characters; per element `scrollWidth` against `clientWidth` (an intended `ellipsis` with `nowrap` excepted, and
+  MUI's switch, whose invisible checkbox is wider on purpose) and the box against its parent and the panel.
 - **New chat (no dialog, issue #30):** "New chat" (`NewChatButton`, panel and `/ai-agent`) posts `POST /chats` with only
   `{async: true, language}` (`newChatRequest` in `src/agent/newChat.ts`, unit-tested): model, thinking level and
   bindings are the gateway's defaults (`AGW_DEFAULT_MODEL`, `AGW_TOOLSETS`), no delegation, the gateway names the chat
@@ -223,7 +236,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   own UI. `useChatSettings` posts `…/internet`, `…/autocompact` (`{enabled}`) and `/compact`
   via `POST …/commands`; the returned chat goes to `updateChat` of the context (and, for controls inside `ChatView`, to
   `applyChat` of the stream), the gateway also publishes it as SSE `chat`. **Internet:** a globe (`InternetToggle`):
-  in the panel it is itself the switch (`role="switch"`) next to the chat selector, because the panel header has no
+  in the panel it is itself the switch (`role="switch"`) at the end of the chat row, after the "New chat" plus, because the panel header has no
   room left with a long run-state chip; on `/ai-agent` a labelled switch in the chat header. The tooltip says what on
   and off mean and that a dormant chat gets the change on resume. When the agent asks for internet (`agw-internet`,
   MCP `request_internet`) the approval of kind `internet_access` shows in `ApprovalCard` with its reason (the

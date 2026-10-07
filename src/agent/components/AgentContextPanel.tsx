@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -18,7 +19,7 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 
 import { useAgent } from '../AgentContext';
 import { expandToAgentPage } from '../expand';
-import { sectionOf } from '../format';
+import { chatTitle, sectionOf } from '../format';
 import { isRunning, runSince, runStateOf, runStateText } from '../runState';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
@@ -33,56 +34,97 @@ export const AGENT_PANEL_WIDTH = 400;
 /** Height of the fixed platform footer. */
 export const FOOTER_HEIGHT = 30;
 
-/** Chat selector with the open chat's internet switch (the globe) and "New chat" (creates the chat at once). */
+/**
+ * The panel's chat row (issue #38): the chat selector takes the remaining room and ellipsizes the title (full title
+ * in its tooltip and in the opened list), then "New chat" as a plus (creates the chat at once) and the open chat's
+ * internet switch (the globe). The row never grows past the panel, whatever the title.
+ */
 function ChatSelector() {
     const { chats, selectedChatId, selectChat } = useAgent();
     const selected = chats.find((c) => c.id === selectedChatId);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [tipOpen, setTipOpen] = useState(false);
     return (
-        <Box sx={{ display: 'grid', gap: 1 }}>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <Select
-                size="small"
-                value={selectedChatId && chats.some((c) => c.id === selectedChatId) ? selectedChatId : ''}
-                onChange={(e) => selectChat(String(e.target.value))}
-                displayEmpty
-                // the state of the selected chat shows in the panel header
-                renderValue={(id) => {
-                    const c = chats.find((x) => x.id === id);
-                    return c ? c.title || 'Untitled chat' : chats.length ? '' : 'No chats yet';
-                }}
-                sx={{ flex: 1, minWidth: 0, bgcolor: '#fff', fontSize: 13, '& .MuiSelect-select': { py: 0.75 } }}
-                inputProps={{ 'aria-label': 'Chat' }}
-            >
-                {chats.length === 0 && (
-                    <MenuItem value="" disabled>
-                        No chats yet
-                    </MenuItem>
-                )}
-                {chats.slice(0, 20).map((c) => {
-                    const state = runStateOf(c);
-                    return (
-                        <MenuItem key={c.id} value={c.id} sx={{ fontSize: 13, gap: 1 }}>
-                            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
-                                {c.title || 'Untitled chat'}
-                            </Box>
-                            {runStateText(state, 'list') && (
-                                <Box component="span" sx={{ ml: 'auto', flex: 'none', display: 'inline-flex' }}>
-                                    <RunStateChip state={state} />
-                                </Box>
-                            )}
-                            {c.pending_approvals > 0 && state !== 'waiting' && (
-                                <Box component="span" sx={{ color: agentColors.amberText, fontSize: 12, flex: 'none' }}>
-                                    · {c.pending_approvals} waiting
-                                </Box>
-                            )}
-                        </MenuItem>
-                    );
-                })}
-            </Select>
-            {selected && <InternetToggle chat={selected} compact />}
-            <NewChatButton sx={{ flex: 'none' }} />
-        </Box>
-        <NewChatError />
+        // minmax(0, 1fr): an auto column would grow to the title's full width and push the buttons out of the panel
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 1 }}>
+            <Box data-testid="agent-chat-picker-row" sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 0 }}>
+                <Tooltip
+                    title={selected ? chatTitle(selected) : ''}
+                    open={tipOpen && !menuOpen}
+                    onOpen={() => setTipOpen(true)}
+                    onClose={() => setTipOpen(false)}
+                >
+                    <Select
+                        size="small"
+                        value={selectedChatId && chats.some((c) => c.id === selectedChatId) ? selectedChatId : ''}
+                        onChange={(e) => selectChat(String(e.target.value))}
+                        open={menuOpen}
+                        onOpen={() => {
+                            setTipOpen(false);
+                            setMenuOpen(true);
+                        }}
+                        onClose={() => setMenuOpen(false)}
+                        displayEmpty
+                        // the state of the selected chat shows in the panel header
+                        renderValue={(id) => {
+                            const c = chats.find((x) => x.id === id);
+                            return c ? chatTitle(c) : chats.length ? '' : 'No chats yet';
+                        }}
+                        sx={{
+                            flex: 1,
+                            minWidth: 0,
+                            bgcolor: '#fff',
+                            fontSize: 13,
+                            '& .MuiSelect-select': { py: 0.75, minWidth: 0 },
+                        }}
+                        inputProps={{ 'aria-label': 'Chat' }}
+                        // the list opens left-aligned under the selector (MUI centres it), stays inside the panel
+                        // (14 px padding on the left, the popover's 16 px window margin on the right) and wraps long
+                        // titles in full
+                        MenuProps={{
+                            anchorOrigin: { vertical: 'bottom', horizontal: 'left' },
+                            transformOrigin: { vertical: 'top', horizontal: 'left' },
+                            PaperProps: { sx: { maxWidth: AGENT_PANEL_WIDTH - 32 } },
+                        }}
+                    >
+                        {chats.length === 0 && (
+                            <MenuItem value="" disabled>
+                                No chats yet
+                            </MenuItem>
+                        )}
+                        {chats.slice(0, 20).map((c) => {
+                            const state = runStateOf(c);
+                            return (
+                                <MenuItem
+                                    key={c.id}
+                                    value={c.id}
+                                    sx={{ fontSize: 13, gap: 1, whiteSpace: 'normal', alignItems: 'flex-start' }}
+                                >
+                                    <Box component="span" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                                        {chatTitle(c)}
+                                    </Box>
+                                    {runStateText(state, 'list') && (
+                                        <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
+                                            <RunStateChip state={state} />
+                                        </Box>
+                                    )}
+                                    {c.pending_approvals > 0 && state !== 'waiting' && (
+                                        <Box
+                                            component="span"
+                                            sx={{ color: agentColors.amberText, fontSize: 12, flex: 'none', whiteSpace: 'nowrap' }}
+                                        >
+                                            · {c.pending_approvals} waiting
+                                        </Box>
+                                    )}
+                                </MenuItem>
+                            );
+                        })}
+                    </Select>
+                </Tooltip>
+                <NewChatButton compact />
+                {selected && <InternetToggle chat={selected} compact />}
+            </Box>
+            <NewChatError />
         </Box>
     );
 }

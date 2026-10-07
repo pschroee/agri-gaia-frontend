@@ -43,3 +43,15 @@ export const codeBlockSx = {
     overflowX: 'auto',
     whiteSpace: 'pre',
 } as const;
+
+/**
+ * Square outlined icon button of the panel's chat row ("New chat" plus and the internet globe), 32 × 32 px. Both use
+ * it, so they keep the same size and look.
+ */
+export const rowIconButtonSx = {
+    flex: 'none',
+    border: 1,
+    borderColor: 'divider',
+    borderRadius: 1,
+    p: '6px',
+} as const;

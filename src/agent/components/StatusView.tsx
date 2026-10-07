@@ -18,7 +18,7 @@ import Typography from '@mui/material/Typography';
 
 import { useAgent } from '../AgentContext';
 import { agentApi } from '../api';
-import { formatClock, variantLabel } from '../format';
+import { chatTitle, formatClock, variantLabel } from '../format';
 import { effortLabel } from '../modelChoice';
 import {
     activeConnection,
@@ -225,6 +225,7 @@ function VariantCard({ p, onOpenChat }: { p: VariantPool; onOpenChat: (id: strin
                             component="button"
                             type="button"
                             onClick={() => onOpenChat(m.chatId)}
+                            title={m.title}
                             sx={{
                                 fontSize: 13.5,
                                 textAlign: 'left',
@@ -296,7 +297,7 @@ export default function StatusView({
     const totals = poolTotals(pools);
     const models = useMemo(() => modelRows(snap?.models ?? ctxModels, chats), [snap?.models, ctxModels, chats]);
     const approvals = sortApprovals(snap?.approvals ?? []);
-    const titleOf = (id: string) => chats.find((c) => c.id === id)?.title || 'Untitled chat';
+    const titleOf = (id: string) => chatTitle(chats.find((c) => c.id === id));
     const checks = snap
         ? [gatewayCheck(snap.gateway, me), ...platformChecks(snap.platform, snap.platformError, me, snap.at)]
         : [];
@@ -414,7 +415,8 @@ export default function StatusView({
                                             component="button"
                                             type="button"
                                             onClick={() => onOpenChat(a.chat_id)}
-                                            sx={{ fontSize: 14, textAlign: 'left' }}
+                                            // a title word longer than the cell breaks instead of widening the table
+                                            sx={{ fontSize: 14, textAlign: 'left', overflowWrap: 'anywhere' }}
                                         >
                                             {titleOf(a.chat_id)}
                                         </Link>
