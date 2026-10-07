@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     emptyPending,
     fabBadge,
+    navBadge,
     feedAction,
     FeedSource,
     pendingCount,
@@ -109,6 +110,18 @@ describe('fabBadge', () => {
         expect(fabBadge(1, false).label).toBe('AI agent · 1 approval waiting');
         expect(fabBadge(2, true).visible).toBe(false);
         expect(fabBadge(0, false)).toEqual({ visible: false, label: 'AI agent' });
+    });
+});
+
+describe('navBadge', () => {
+    it('shows the count whenever something waits, with an accessible label', () => {
+        expect(navBadge(0)).toEqual({ visible: false, label: 'Agent' });
+        expect(navBadge(1)).toEqual({ visible: true, label: 'Agent · 1 approval waiting' });
+        expect(navBadge(3)).toEqual({ visible: true, label: 'Agent · 3 approvals waiting' });
+    });
+
+    it('treats a negative count like none', () => {
+        expect(navBadge(-1)).toEqual({ visible: false, label: 'Agent' });
     });
 });
 
