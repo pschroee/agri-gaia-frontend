@@ -27,7 +27,6 @@ import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
 import QueueList from './QueueList';
-import RunStatus from './RunStatus';
 import TaskStrip from './TaskStrip';
 
 type Props = {
@@ -42,7 +41,7 @@ type Props = {
 /**
  * One chat: files and background tasks on top, the conversation and pending approvals in the middle (scrolls), queued messages and the input field at the bottom. The middle follows the end of the
  * transcript while the user is there; after scrolling up, a "Jump to latest" button counts the new entries.
- * Above the input, the run status shows what the agent does and offers "Stop".
+ * While a turn runs, Stop sits in the input field and the run state in the row below it (issue #39).
  */
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
     const stream = useChatStream(chatId);
@@ -197,14 +196,15 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     onRemove={stream.unqueue}
                     onSendNow={stream.sendQueueNow}
                 />
-                {/* open only while a turn runs (issue #35) */}
-                <RunStatus state={runState} since={since} onAbort={stream.abort} />
                 <ChatInput
                     onSend={onSend}
                     onUpload={stream.uploadFiles}
                     maxFileMb={agent?.config?.artifact_max_mb}
                     chatId={chatId}
                     running={stream.chat?.running}
+                    runState={runState}
+                    since={since}
+                    onAbort={stream.abort}
                     placeholder={placeholder}
                     dense={dense}
                     commands={commands}

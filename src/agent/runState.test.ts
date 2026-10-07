@@ -14,7 +14,8 @@ import {
     runSince,
     runStateOf,
     runStateText,
-    showRunStatus,
+    inputControls,
+    inputStatusText,
 } from './runState';
 import type { StatePlace } from './runState';
 import type { Chat, StoredMessage } from './types';
@@ -53,7 +54,7 @@ describe('runStateOf', () => {
 
     it('never shows the idle state of the gateway (issue #31): a dormant chat counts as idle', () => {
         expect(runStateOf(chat({ state: 'dormant' }))).toBe('idle');
-        const places: StatePlace[] = ['header', 'list', 'bar'];
+        const places: StatePlace[] = ['header', 'list', 'input'];
         const states = ['working', 'waiting', 'starting', 'resuming', 'idle'] as const;
         const texts = [
             ...places.flatMap((p) => states.map((s) => runStateText(s, p) ?? '')),
@@ -95,68 +96,113 @@ describe('runStateOf', () => {
 
 // issue #35: a state shows only while something happens
 describe('state display', () => {
-    const PLACES: StatePlace[] = ['header', 'list', 'bar'];
-    // what header, list and bar show for a chat, with the live options of the open view
+    const PLACES: StatePlace[] = ['header', 'list', 'input'];
+    // what header, list and input row show for a chat, with the live options of the open view
     const shown = (c: RunChat, opts: Parameters<typeof runStateOf>[1] = {}) => {
         const s = runStateOf(c, opts);
         return Object.fromEntries(PLACES.map((p) => [p, runStateText(s, p)]));
     };
-    const nothing = { header: undefined, list: undefined, bar: undefined };
+    const nothing = { header: undefined, list: undefined, input: undefined };
 
     it('shows nothing for a ready active chat: no "active", no "Idle"', () => {
         expect(shown(chat())).toEqual(nothing);
-        expect(showRunStatus(runStateOf(chat()))).toBe(false);
+        expect(inputControls(runStateOf(chat()), false).buttons).toEqual(['send']);
     });
 
     it('shows nothing for a ready dormant chat', () => {
         expect(shown(chat({ state: 'dormant' }))).toEqual(nothing);
-        expect(showRunStatus(runStateOf(chat({ state: 'dormant' })))).toBe(false);
+        expect(inputControls(runStateOf(chat({ state: 'dormant' })), false).buttons).toEqual(['send']);
     });
 
-    it('shows "loading" in header and lists while resuming, no status bar (steps are in the transcript)', () => {
-        const want = { header: 'loading', list: 'loading', bar: undefined };
+    it('shows "loading" in header and lists while resuming, nothing below the input (steps in the transcript)', () => {
+        const want = { header: 'loading', list: 'loading', input: undefined };
         expect(shown(chat({ state: 'dormant', resuming: true }))).toEqual(want);
         expect(shown(chat({ state: 'dormant' }), { resumeRunning: true })).toEqual(want);
         expect(isLoading('resuming')).toBe(true);
-        expect(showRunStatus('resuming')).toBe(false);
+        expect(inputControls('resuming', false).buttons).toEqual(['send']);
     });
 
     it('shows a new chat without a warm slot as loading too', () => {
         expect(shown(chat({ starting: true, resuming: true }))).toEqual({
             header: 'loading',
             list: 'loading',
-            bar: undefined,
+            input: undefined,
         });
         expect(isLoading('starting')).toBe(true);
-        expect(showRunStatus('starting')).toBe(false);
+        expect(inputControls('starting', true).buttons).toEqual(['send']);
     });
 
-    it('shows working everywhere, with the status bar', () => {
-        expect(shown(chat({ running: true }))).toEqual({ header: 'working', list: 'working', bar: 'Working' });
-        expect(showRunStatus('working')).toBe(true);
+    it('shows working everywhere, with Stop in the input', () => {
+        expect(shown(chat({ running: true }))).toEqual({ header: 'working', list: 'working', input: 'Working' });
+        expect(inputControls('working', false).buttons).toEqual(['stop']);
     });
 
-    it('shows a pending approval everywhere, with the status bar', () => {
+    it('shows a pending approval everywhere, with Stop in the input', () => {
         expect(shown(chat({ running: true }), { pendingApprovals: 1 })).toEqual({
             header: 'needs approval',
             list: 'waiting for approval',
-            bar: 'Waiting for approval',
+            input: 'Needs approval',
         });
-        expect(showRunStatus('waiting')).toBe(true);
+        expect(inputControls('waiting', false).buttons).toEqual(['stop']);
     });
 
-    it('keeps the status bar open for a failed stop, and shows no state after a failed resume', () => {
-        // a failed stop: the bar stays open as long as its message is there
-        expect(showRunStatus('working', 'Stopping failed: boom')).toBe(true);
-        expect(showRunStatus('idle', 'The agent had already stopped.')).toBe(true);
-        expect(showRunStatus('idle', '')).toBe(false);
-        // a failed resume: the chat is dormant again, the error stays in its ResumeBlock with "Try again"
+    it('shows no state after a failed resume', () => {
+        // the chat is dormant again, the error stays in its ResumeBlock with "Try again"
         expect(shown(chat({ state: 'dormant' }), { resumeRunning: false })).toEqual(nothing);
     });
 
     it('has no text without a chat', () => {
         expect(runStateText(undefined, 'header')).toBeUndefined();
-        expect(showRunStatus(undefined)).toBe(false);
+        expect(inputStatusText(undefined)).toBeUndefined();
+        expect(inputControls(undefined, true).buttons).toEqual(['send']);
+    });
+});
+
+// issue #39: Stop in the input field, no status bar above it
+describe('input controls', () => {
+    it('offers the send arrow while nothing runs, with or without text', () => {
+        for (const s of ['idle', 'starting', 'resuming', undefined] as const) {
+            expect(inputControls(s, false)).toEqual({ buttons: ['send'], enter: 'send' });
+            expect(inputControls(s, true)).toEqual({ buttons: ['send'], enter: 'send' });
+        }
+    });
+
+    it('turns the send arrow into Stop while the agent works and the field is empty', () => {
+        expect(inputControls('working', false)).toEqual({ buttons: ['stop'], enter: 'queue' });
+    });
+
+    it('puts the queue arrow last and Stop next to it when there is text: Enter queues', () => {
+        const c = inputControls('working', true);
+        expect(c).toEqual({ buttons: ['stop', 'queue'], enter: 'queue' });
+        // the last place (where the pointer goes after typing) never stops
+        expect(c.buttons.at(-1)).not.toBe('stop');
+    });
+
+    it('keeps Stop while waiting for an approval', () => {
+        expect(inputControls('waiting', false).buttons).toEqual(['stop']);
+        expect(inputControls('waiting', true).buttons).toEqual(['stop', 'queue']);
+    });
+
+    it('sends instead of queueing when the chat is not marked running (approval of an idle chat)', () => {
+        expect(inputControls('waiting', true, false)).toEqual({ buttons: ['stop', 'send'], enter: 'send' });
+        // a resuming chat that the gateway still marks running queues
+        expect(inputControls('resuming', true, true)).toEqual({ buttons: ['queue'], enter: 'queue' });
+    });
+
+    it('labels the run state below the input, "Stopping …" only while a turn runs', () => {
+        expect(inputStatusText('working')).toBe('Working');
+        expect(inputStatusText('waiting')).toBe('Needs approval');
+        expect(inputStatusText('working', true)).toBe('Stopping …');
+        expect(inputStatusText('waiting', true)).toBe('Stopping …');
+        // the turn has ended: nothing, not "Stopping …"
+        expect(inputStatusText('idle', true)).toBeUndefined();
+        expect(inputStatusText('idle')).toBeUndefined();
+        expect(inputStatusText('resuming')).toBeUndefined();
+    });
+
+    it('words a failed stop for the line below the input', () => {
+        expect(abortErrorText(502, 'gateway unreachable')).toBe('Stopping failed: gateway unreachable');
+        expect(abortErrorText(409, 'not running')).toBe('The agent had already stopped.');
     });
 });
 

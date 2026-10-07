@@ -140,21 +140,29 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   sending until the pointer has left the button (a disabled button fires no blur and its wrapper a fresh mouseover),
   and a hover counts only after a real mousemove, because the opening panel puts the send button under the pointer
   resting on the floating button and the browser fires a mouseover without movement. Keyboard focus still opens it.
-- **Run control:** `RunStatus` above the input shows the run state of the open chat with a running timer and is the
-  only place to stop the agent (`POST …/abort`; the input only sends). The state comes from the pure `runStateOf` in
-  `src/agent/runState.ts`: `working`, `waiting` (running with an open approval; the live approval list beats the
-  chat's counter), `starting`, `resuming` and `idle` (nothing running; the gateway's `dormant` counts as idle). The
-  timer uses `running_since`, otherwise the last user message. After an abort the queue is held (`QueueList`, "Send
-  now"). The open `ChatView` hands its chat to `updateChat` of the context, so the history list, the chat selector and
-  the panel header chip follow live, not only every 15 s.
+- **Run control (issue #39):** Stop sits in the input field again, there is no status bar above it (it took two
+  lines of the 400 px panel). While a turn runs (working or waiting for approval) the send arrow becomes Stop
+  (`POST …/abort`, tooltip and label "Stop"); with text in the field the queue arrow takes the last place and Stop sits
+  left of it, Enter queues ("Queue another message …"). The last place always fits the field's content, so a click
+  there after typing never stops the agent by mistake. Escape never stops (it only closes the slash menu). The pure
+  `inputControls` and `inputStatusText` in `src/agent/runState.ts` decide (unit-tested). The run state shows small in
+  the row below the field next to model and thinking level ("Working · 12 s", "Needs approval · 12 s", "Stopping …"
+  from the click until the turn has ended); there it gives way first (label ellipsized, dot and timer stay, the picker
+  keeps its width because a fraction of a pixel less wraps it), and in the panel the lock icon of the approval hint
+  steps aside meanwhile. A failed stop shows as one amber line above that row with a dismiss cross, until the state
+  changes. The state comes from the pure `runStateOf`: `working`, `waiting` (running with an open approval; the live
+  approval list beats the chat's counter), `starting`, `resuming` and `idle` (nothing running; the gateway's `dormant`
+  counts as idle). The timer uses `running_since`, otherwise the last user message. After an abort the queue is held
+  (`QueueList`, "Send now"). The open `ChatView` hands its chat to `updateChat` of the context, so the history list,
+  the chat selector and the panel header chip follow live, not only every 15 s. Measured in the render check: the area
+  below the transcript keeps its idle height while the agent works (panel 118 px, was 174; `/ai-agent` 82 px, was
+  120), a failed stop adds one line (23 px).
 - **A state shows only while something happens (issue #35):** `runStateText(state, place)` in `src/agent/runState.ts`
   (unit-tested) decides per place (`header`: panel header and the chat header of `/ai-agent`; `list`: history list and
-  the panel's chat selector; `bar`: `RunStatus`). A ready chat (idle, active or dormant) shows nothing anywhere, no
-  "active", "Idle" or "ready". Starting and resuming show a muted "loading" chip in header and lists, their steps in the
-  transcript (`ResumeBlock`, "Starting a sandbox …"), no status bar. Working and waiting show everywhere. The bar is
-  open only while a turn runs or a failed stop has its message (`showRunStatus`) and opens and closes with a short MUI
-  `Collapse` (180/220 ms) instead of reserving empty space, keeping its last text while it closes. `RunStateChip`
-  renders nothing where the place has no text. The Status tab still names states (`activityText` in `status.ts`).
+  the panel's chat selector; `input`: the row below the input field, issue #39). A ready chat (idle, active or dormant)
+  shows nothing anywhere, no "active", "Idle" or "ready". Starting and resuming show a muted "loading" chip in header
+  and lists, their steps in the transcript (`ResumeBlock`, "Starting a sandbox …"), nothing below the input. Working
+  and waiting show everywhere. `RunStateChip` renders nothing where the place has no text. The Status tab still names states (`activityText` in `status.ts`).
 - **Resuming a dormant chat:** sending to a dormant chat resumes it; the response to `POST …/messages` comes only after
   resuming. The SSE event `resume` (`ResumeStep`, phases acquire → session → settings → workspace → inputs, then
   `ready` or `failed`) feeds the pure `applyResumeStep` in `src/agent/resume.ts`; `ResumeBlock` shows the steps live
