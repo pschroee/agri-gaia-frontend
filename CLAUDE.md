@@ -26,7 +26,11 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   image, the user's chats with what the agent does; other users' chats only as a count), pending approvals oldest
   first with a link that opens the chat on the Chat tab, models (`GET /models`: provider, context window, prices per
   1M tokens in the tariff in effect now, peak hours in local time, thinking levels as far as the user's chats reported
-  them) and variants with the English labels of `variantLabel`, plus defaults from `GET /config`. Everything reloads
+  them) and the connection of new chats (CLI, MCP, REST API or a combination, fixed by the gateway's `AGW_TOOLSETS`,
+gateway issue #29: `toolsets` of `GET /config`, else the `active` entry of `GET /variants`; the pool card of that
+combination says "new chats", others "older chats only"; a gateway without it still gets the old table of variants
+with the English labels of `variantLabel`), plus defaults from `GET /config`. The New chat dialog has no connection
+choice any more. Everything reloads
   every 15 s and on the refresh button; a failed request empties only its section, a failed `GET /me` shows the error
   alert, and figures that could not be loaded show "–", not 0. `GET /platform` exists since gateway PR #6; an older
   gateway answers 404, shown as "Not reported by this gateway version". The probe is cached 10 s in the gateway, and

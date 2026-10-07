@@ -21,8 +21,10 @@ import { agentApi } from '../api';
 import { formatClock, variantLabel } from '../format';
 import { effortLabel } from '../modelChoice';
 import {
+    activeConnection,
     activityText,
     APPROVAL_KIND_LABEL,
+    bindingsText,
     approvalSubject,
     Check,
     formatAgo,
@@ -182,7 +184,18 @@ function VariantCard({ p, onOpenChat }: { p: VariantPool; onOpenChat: (id: strin
         <Box sx={{ ...blockSx, p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }} data-variant={p.variant}>
             <Box>
                 <Typography sx={{ fontSize: 14.5, fontWeight: 500 }}>{p.label}</Typography>
-                <Typography sx={{ fontSize: 12, color: 'text.disabled', fontFamily: MONO }}>{p.variant}</Typography>
+                <Typography sx={{ fontSize: 12, color: 'text.disabled', fontFamily: MONO }}>
+                    {p.variant}
+                    {p.active ? (
+                        <Box component="span" sx={{ fontFamily: 'inherit', color: agentColors.ok, ml: 1 }}>
+                            new chats
+                        </Box>
+                    ) : (
+                        <Box component="span" sx={{ fontFamily: 'inherit', ml: 1 }}>
+                            older chats only
+                        </Box>
+                    )}
+                </Typography>
             </Box>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1 }}>
                 <Count value={p.free} label="free" color={agentColors.ok} />
@@ -288,6 +301,7 @@ export default function StatusView({
         ? [gatewayCheck(snap.gateway, me), ...platformChecks(snap.platform, snap.platformError, me, snap.at)]
         : [];
     const cfg = snap?.config;
+    const connection = activeConnection(cfg, variants);
 
     if (!snap) {
         return (
@@ -336,7 +350,7 @@ export default function StatusView({
             </section>
 
             <section data-testid="agent-status-pool">
-                <SectionTitle aside="Sandboxes kept ready per connection variant">Warm pool</SectionTitle>
+                <SectionTitle aside="Sandboxes kept ready for the connection of new chats">Warm pool</SectionTitle>
                 {snap.poolError !== undefined ? (
                     <Alert severity="warning">Pool status unavailable: {errText(snap.poolError)}</Alert>
                 ) : pools.length === 0 ? (
@@ -510,43 +524,71 @@ export default function StatusView({
             </section>
 
             <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr)', gap: 3 }}>
-                <section data-testid="agent-status-variants">
-                    <SectionTitle>Connection variants</SectionTitle>
-                    {variants.length === 0 ? (
-                        <Empty>The gateway reports no variants.</Empty>
-                    ) : (
-                        <Table size="small" sx={{ '& td, & th': { fontSize: 14 } }}>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell sx={headSx}>Variant</TableCell>
-                                    <TableCell sx={headSx}>Tools</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {variants.map((v) => (
-                                    <TableRow key={v.id}>
-                                        <TableCell>
-                                            {variantLabel(v)}
-                                            <Typography sx={{ fontSize: 12, color: 'text.disabled', fontFamily: MONO }}>
-                                                {v.id}
-                                            </Typography>
-                                        </TableCell>
-                                        <TableCell>
-                                            <Tooltip title={(v.tools ?? []).join(', ')}>
-                                                <Box
-                                                    component="span"
-                                                    sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
-                                                >
-                                                    {(v.tools ?? []).length} tools
-                                                </Box>
-                                            </Tooltip>
-                                        </TableCell>
+                {connection ? (
+                    <section data-testid="agent-status-connection">
+                        <SectionTitle aside="Set by the gateway (AGW_TOOLSETS)">Connection of new chats</SectionTitle>
+                        <Box sx={{ ...blockSx, p: 2, display: 'grid', gap: 1 }}>
+                            <Box>
+                                <Typography sx={{ fontSize: 14.5, fontWeight: 500 }}>
+                                    {variantLabel(connection)}
+                                </Typography>
+                                <Typography sx={{ fontSize: 12, color: 'text.disabled', fontFamily: MONO }}>
+                                    {connection.id}
+                                </Typography>
+                            </Box>
+                            <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>
+                                Every new chat talks to the platform through {bindingsText(connection.id)}. Older chats
+                                keep the connection they were created with.
+                            </Typography>
+                            <Typography
+                                sx={{ fontSize: 12.5, color: 'text.secondary', overflowWrap: 'anywhere' }}
+                                data-testid="agent-status-connection-tools"
+                            >
+                                {(connection.tools ?? []).length} tools: {(connection.tools ?? []).join(', ')}
+                            </Typography>
+                        </Box>
+                    </section>
+                ) : (
+                    <section data-testid="agent-status-variants">
+                        <SectionTitle>Connection variants</SectionTitle>
+                        {variants.length === 0 ? (
+                            <Empty>The gateway reports no variants.</Empty>
+                        ) : (
+                            <Table size="small" sx={{ '& td, & th': { fontSize: 14 } }}>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell sx={headSx}>Variant</TableCell>
+                                        <TableCell sx={headSx}>Tools</TableCell>
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    )}
-                </section>
+                                </TableHead>
+                                <TableBody>
+                                    {variants.map((v) => (
+                                        <TableRow key={v.id}>
+                                            <TableCell>
+                                                {variantLabel(v)}
+                                                <Typography
+                                                    sx={{ fontSize: 12, color: 'text.disabled', fontFamily: MONO }}
+                                                >
+                                                    {v.id}
+                                                </Typography>
+                                            </TableCell>
+                                            <TableCell>
+                                                <Tooltip title={(v.tools ?? []).join(', ')}>
+                                                    <Box
+                                                        component="span"
+                                                        sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}
+                                                    >
+                                                        {(v.tools ?? []).length} tools
+                                                    </Box>
+                                                </Tooltip>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </section>
+                )}
                 <section data-testid="agent-status-defaults">
                     <SectionTitle>Defaults</SectionTitle>
                     {!cfg ? (
@@ -566,6 +608,12 @@ export default function StatusView({
                                 '& dd': { m: 0, textAlign: 'right' },
                             }}
                         >
+                            {connection && (
+                                <>
+                                    <dt>Connection of new chats</dt>
+                                    <dd>{bindingsText(connection.id)}</dd>
+                                </>
+                            )}
                             <dt>Internet for new chats</dt>
                             <dd>{cfg.internet_default ? 'on' : 'off'}</dd>
                             <dt>Automatic compaction</dt>

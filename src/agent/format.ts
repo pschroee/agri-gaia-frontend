@@ -15,15 +15,19 @@ export const EFFECT_LABEL: Record<Effect, string> = {
     irreversible: 'Irreversible',
 };
 
-/** Labels for the gateway's connection variants, more descriptive than the gateway's own. */
+/**
+ * Labels for the gateway's connections, more descriptive than the gateway's own. Combinations other than these keep
+ * the gateway's label ("Command line + REST API"); 'both' is the id of cli,mcp before gateway issue #29.
+ */
 const VARIANT_LABEL: Record<string, string> = {
     cli: 'Command line (bash, artifacts, subagents)',
     mcp: 'MCP (MCP tools only, read/write/ls, no bash)',
     api: 'REST API (platform_http only, no bash, no file tools)',
+    'cli,mcp': 'MCP and command line',
     both: 'MCP and command line',
 };
 
-/** Label of a connection variant; unknown ids keep the gateway's text. */
+/** Label of a connection; unknown ids keep the gateway's text. */
 export function variantLabel(v: Pick<Variant, 'id' | 'label'>): string {
     return VARIANT_LABEL[v.id] ?? v.label;
 }

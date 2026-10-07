@@ -6,7 +6,11 @@ import type { PageContext } from './pageContext';
 // Subset of the agent gateway API types (agri-gaia-agent-gateway, API.md and web/src/api/types.ts),
 // limited to what the platform UI shows.
 
-export type VariantId = 'cli' | 'mcp' | 'api' | 'both';
+/**
+ * Connection of a chat to the platform: a combination of cli, mcp and api as the gateway's canonical key ('cli',
+ * 'cli,api', 'cli,mcp,api'), or 'both' (= cli,mcp) for chats from before gateway issue #29.
+ */
+export type VariantId = string;
 
 /** Prices in US dollars per 1 M tokens (for DeepSeek the peak tariff, see Tariff). */
 export type Pricing = {
@@ -42,7 +46,15 @@ export type Model = {
 /** Details of a refused model switch (409 "context_too_large"): limit = context window minus reserve. */
 export type ContextTooLarge = { model: string; tokens: number; window: number; limit: number };
 
-export type Variant = { id: VariantId; label: string; tools: string[] };
+export type Variant = {
+    id: VariantId;
+    label: string;
+    /** The bindings of the combination in the order cli, mcp, api (newer gateways). */
+    bindings?: string[];
+    tools: string[];
+    /** The combination every new chat gets (AGW_TOOLSETS of the gateway). */
+    active?: boolean;
+};
 
 export type Tokens = { input: number; output: number; cache_read: number; total: number };
 
@@ -446,7 +458,6 @@ export type LLMCall = {
 
 export type CreateChatRequest = {
     model?: string;
-    variant?: VariantId;
     title?: string;
     message?: string;
     delegation?: Delegation;
@@ -469,6 +480,8 @@ export type Config = {
     approval_timeout_s?: number;
     /** An idle chat rests (releases its sandbox) after this many seconds. */
     idle_timeout_s?: number;
+    /** Connection of every new chat, fixed by the gateway (AGW_TOOLSETS); missing from older gateways. */
+    toolsets?: Variant;
 };
 
 export type Me = { mode: 'token' | 'oidc'; sub?: string; username?: string; name?: string };
@@ -510,6 +523,8 @@ export type Slot = {
 export type Pool = {
     slots: Slot[];
     targets: Partial<Record<VariantId, number>>;
+    /** Key of the combination kept warm for new chats (AGW_TOOLSETS); missing from older gateways. */
+    toolsets?: VariantId;
     totals?: { cost: number; tokens: Tokens; chats_active: number };
 };
 
