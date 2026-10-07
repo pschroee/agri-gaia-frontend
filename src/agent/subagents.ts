@@ -190,21 +190,27 @@ function meaningfulLine(task: string | undefined): string | undefined {
 }
 
 /**
- * Title of a run without a model call (issue #48): the workflow name (label), otherwise the first meaningful line of
- * the task shortened to `max` characters, otherwise the agent. The full task belongs in the tooltip (runTooltip).
+ * The workflow label when it names the run: empty labels and labels that only repeat the agent's name ("worker",
+ * "scout", issue #52) do not count.
+ */
+function ownLabel(run: Pick<SubagentRun, 'agent' | 'label'>): string | undefined {
+    const label = run.label?.trim();
+    if (!label) return undefined;
+    if (run.agent && label.toLowerCase() === run.agent.trim().toLowerCase()) return undefined;
+    return label;
+}
+
+/**
+ * Title of a run without a model call (issues #48, #52): the workflow label unless it is only the agent's name,
+ * otherwise the first meaningful line of the task shortened to `max` characters, otherwise the agent. The full task is
+ * not repeated in a tooltip; it is the first message of the subagent's transcript.
  */
 export function runTitle(run: Pick<SubagentRun, 'task' | 'agent' | 'label'>, max = 70): string {
-    if (run.label?.trim()) return run.label.trim();
+    const label = ownLabel(run);
+    if (label) return label;
     const line = meaningfulLine(run.task);
     if (!line) return run.agent || 'Subagent';
     return line.length > max ? `${line.slice(0, max - 1)}…` : line;
-}
-
-/** Tooltip of a run's title: the full task (with the name in front when the title is the name). */
-export function runTooltip(run: Pick<SubagentRun, 'task' | 'agent' | 'label'>): string {
-    const task = run.task?.trim();
-    if (!task) return runTitle(run, Infinity);
-    return run.label?.trim() ? `${run.label.trim()}\n\n${task}` : task;
 }
 
 /** Second line: agent and short run ID. */
@@ -314,8 +320,6 @@ export function runsSummary(statuses: RunStatus[]): string {
 export type SubagentNavItem = {
     runId: string;
     title: string;
-    /** Full task for the tooltip. */
-    tooltip: string;
     status: RunStatus;
 };
 
@@ -331,12 +335,10 @@ export function subagentNav(
     { chatRunning, now }: { chatRunning: boolean; now: number },
 ): SubagentNavItem[] {
     return runs.map((r) => {
-        const named = !!r.label?.trim() || !!meaningfulLine(r.task);
-        const title = named ? runTitle(r) : `${r.agent || 'Subagent'} · ${shortRunId(r.runId)}`;
+        const named = !!ownLabel(r) || !!meaningfulLine(r.task);
         return {
             runId: r.runId,
-            title,
-            tooltip: named ? runTooltip(r) : title,
+            title: named ? runTitle(r) : `${r.agent || 'Subagent'} · ${shortRunId(r.runId)}`,
             status: runStatus(r, { chatRunning, now }),
         };
     });
