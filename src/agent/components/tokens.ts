@@ -15,6 +15,7 @@ export const agentColors = {
     redTint: '#fdeceb',
     redLine: '#f0b4b0',
     ok: '#2e7d32',
+    muted: 'rgba(0, 0, 0, 0.6)',
     panelBg: '#fafafa',
 };
 
