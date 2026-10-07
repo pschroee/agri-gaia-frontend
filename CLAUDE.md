@@ -137,9 +137,10 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   stored messages into the same parts. **pi stores no timing per block:** the duration is measured only while the block
   streams, kept in memory by `timestamp:contentIndex`, and handed to the stored message; after a page reload, or for
   blocks never seen live, the header shows "Thinking" without a duration. Open state per block lives in
-  `Conversation`, so it survives the switch from live to stored. "Always show thinking" (switch inside an expanded
-  block) is stored per gateway user in `localStorage` (`agentAlwaysShowThinking:<sub>`, try/catch, memory fallback);
-  switching it resets the per-block choices.
+  `Conversation`, so it survives the switch from live to stored. Every block starts collapsed, also the one still
+  streaming (its header counts the time; opened, the text grows live), and opens per block on click. There is no
+  "Always show thinking" switch any more (issue #40); an old `agentAlwaysShowThinking:<sub>` value in `localStorage`
+  is ignored.
 - **Stopped steps:** a tool call ended by the user's stop (abort of the run or "Stop" on a command) shows as
   "stopped by you" with a muted stop icon, not as "failed"; an answer that ended with the abort gets a muted
   "Stopped by you" instead of "Error: This operation was aborted". The decision is pure in `src/agent/transcript.ts`
