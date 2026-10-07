@@ -22,7 +22,7 @@ import type { SubagentNavItem } from '../subagents';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
 import { useNow } from '../useNow';
 
-import { useChatStream } from '../useChatStream';
+import { useChatDraft, useSharedChatStream } from '../sharedChatStream';
 import { useStickToBottom } from '../useStickToBottom';
 import ApprovalCard from './ApprovalCard';
 import ArtifactStrip from './ArtifactStrip';
@@ -48,7 +48,9 @@ type Props = {
  * While a turn runs, Stop sits in the input field and the run state in the row below it (issue #39).
  */
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
-    const stream = useChatStream(chatId);
+    // the current chat's stream lives above page and panel, so it survives the move between them (issue #50)
+    const stream = useSharedChatStream(chatId);
+    const draft = useChatDraft(chatId);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
@@ -264,6 +266,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                         pageContext={pageContext}
                         start={start}
                         onStartTaken={onStartTaken}
+                        initialText={draft.initial}
+                        onTextChange={draft.save}
                         toolbar={
                             <ModelEffortPicker
                                 chat={stream.chat}

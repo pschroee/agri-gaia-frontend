@@ -70,6 +70,10 @@ type Props = {
     /** The chat was just created by "New chat": take the focus and upload its files, then call onStartTaken. */
     start?: FreshChat;
     onStartTaken?: () => void;
+    /** Text the field starts with (the chat's draft, carried between agent page and panel, issue #50). */
+    initialText?: string;
+    /** Called with the field's text whenever it changes (to keep the draft). */
+    onTextChange?: (text: string) => void;
 };
 
 const NO_COMMANDS: Command[] = [];
@@ -99,8 +103,11 @@ export default function ChatInput({
     pageContext,
     start,
     onStartTaken,
+    initialText,
+    onTextChange,
 }: Props) {
-    const [text, setText] = useState('');
+    const [text, setText] = useState(initialText ?? '');
+    useEffect(() => onTextChange?.(text), [text, onTextChange]);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
