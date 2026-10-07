@@ -13,13 +13,10 @@ import {
     compactingAfter,
     compactionReason,
     contextLevel,
-    costSplit,
     describeContext,
     formatAnswerUsage,
     formatPercent,
     formatTokensShort,
-    formatUsd,
-    tariffOf,
 } from './usage';
 
 // window 128,000, reserve 16,384 → auto-compaction from 111,616 tokens (87.2 %)
@@ -110,31 +107,13 @@ describe('describeContext', () => {
     });
 });
 
-describe('formatUsd and formatTokensShort', () => {
-    it('formats dollars as the gateway does', () => {
-        expect(formatUsd(0.01234)).toBe('$0.0123');
-        expect(formatUsd(0)).toBe('$0.0000');
-        expect(formatUsd(0.00001)).toBe('< $0.0001');
-        expect(formatUsd(1.23456)).toBe('$1.2346');
-        expect(formatUsd(1.23456, true)).toBe('$1.23');
-        expect(formatUsd(0.5, true)).toBe('$0.5000');
-        expect(formatUsd(undefined)).toBe('–');
-    });
+describe('formatTokensShort', () => {
     it('shortens token counts', () => {
         expect(formatTokensShort(950)).toBe('950');
         expect(formatTokensShort(12345)).toBe('12.3k');
         expect(formatTokensShort(128000)).toBe('128k');
         expect(formatTokensShort(1_250_000)).toBe('1.3M');
         expect(formatTokensShort(undefined)).toBe('0');
-    });
-});
-
-describe('tariffOf', () => {
-    it('names peak, off-peak or a mix', () => {
-        expect(tariffOf([true, true])).toBe('peak');
-        expect(tariffOf([false, undefined])).toBe('off-peak');
-        expect(tariffOf([true, false])).toBe('mixed');
-        expect(tariffOf([undefined])).toBeUndefined();
     });
 });
 
@@ -154,23 +133,18 @@ const user = (seq: number, text: string): StoredMessage => ({
 });
 
 describe('answerUsage', () => {
-    it('sums tokens and tariff cost over the model calls of an answer', () => {
+    it('sums the tokens over the model calls of an answer and leaves the cost out', () => {
         const u = answerUsage([
             assistant(2, { cost: 0.0011, peak: false }, { input: 1000, output: 200, cacheRead: 4000 } as never),
             assistant(4, { cost: 0.0004, peak: false }),
         ]);
-        expect(u).toEqual({ input: 2000, output: 400, cacheRead: 4000, cost: 0.0015, tariff: 'off-peak', calls: 2 });
-        expect(formatAnswerUsage(u as AnswerUsage)).toBe('2,000 in · 400 out · 4,000 cache · $0.0015 · off-peak tariff');
+        expect(u).toEqual({ input: 2000, output: 400, cacheRead: 4000, calls: 2 });
+        expect(formatAnswerUsage(u as AnswerUsage)).toBe('2,000 in · 400 out · 4,000 cache');
     });
-    it("falls back to pi's flat price, marked as approximate", () => {
+    it("ignores pi's flat price", () => {
         const u = answerUsage([assistant(2, {}, { input: 10, output: 5, cost: { total: 0.002 } } as never)]);
-        expect(u?.cost).toBeUndefined();
-        expect(u?.flatCost).toBe(0.002);
-        expect(formatAnswerUsage(u as AnswerUsage)).toBe('10 in · 5 out · ≈ $0.0020');
-    });
-    it('reports a mixed tariff', () => {
-        const u = answerUsage([assistant(1, { cost: 0.01, peak: true }), assistant(2, { cost: 0.002, peak: false })]);
-        expect(formatAnswerUsage(u as AnswerUsage)).toContain('peak and off-peak tariff');
+        expect(u).toEqual({ input: 10, output: 5, cacheRead: 0, calls: 1 });
+        expect(formatAnswerUsage(u as AnswerUsage)).toBe('10 in · 5 out');
     });
     it('is undefined without assistant messages', () => {
         expect(answerUsage([user(1, 'hi')])).toBeUndefined();
@@ -199,9 +173,16 @@ describe('buildTranscript with usage and compactions', () => {
         );
         expect(items.map((i) => i.kind)).toEqual(['user', 'agent', 'compaction', 'user', 'agent']);
         const first = items[1] as Extract<(typeof items)[number], { kind: 'agent' }>;
-        expect(first.usage).toMatchObject({ cost: 0.003, tariff: 'peak', calls: 2, input: 2000 });
-        expect(items[2]).toMatchObject({ reason: 'threshold', tokensBefore: 110000, tokensAfter: 9000, cost: 0.0005 });
-        expect((items[4] as typeof first).usage?.tariff).toBe('off-peak');
+        expect(first.usage).toEqual({ input: 2000, output: 400, cacheRead: 0, calls: 2 });
+        expect(items[2]).toEqual({
+            kind: 'compaction',
+            key: 'c4',
+            seq: 4,
+            reason: 'threshold',
+            tokensBefore: 110000,
+            tokensAfter: 9000,
+        });
+        expect((items[4] as typeof first).usage?.calls).toBe(1);
     });
     it('starts a new answer block after a compaction inside a turn', () => {
         const items = buildTranscript(
@@ -234,16 +215,7 @@ describe('compactingAfter', () => {
     });
 });
 
-describe('costSplit and cacheHitRate', () => {
-    it('splits the chat cost', () => {
-        expect(costSplit({ cost: 0.05, cost_other: 0.01, llm_calls: 12 })).toEqual({
-            total: 0.05,
-            other: 0.01,
-            main: 0.04,
-            calls: 12,
-        });
-        expect(costSplit({ cost: 0.01 })).toEqual({ total: 0.01, other: 0, main: 0.01, calls: 0 });
-    });
+describe('cacheHitRate', () => {
     it('computes the cache share', () => {
         expect(cacheHitRate(1000, 3000)).toBe(0.75);
         expect(cacheHitRate(0, 0)).toBeUndefined();

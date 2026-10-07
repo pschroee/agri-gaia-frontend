@@ -25,7 +25,7 @@ import { useAlwaysShowThinking } from '../thinkingPref';
 import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
-import { compactionReason, formatAnswerUsage, formatTokens, formatUsd, TARIFF_LABEL } from '../usage';
+import { compactionReason, formatAnswerUsage, formatTokens } from '../usage';
 import type { AnswerUsage } from '../usage';
 import { RefersTo } from './PageContextChip';
 import { MessageAttachments, ResultAttachments } from './Attachments';
@@ -180,14 +180,10 @@ function AgentBlock({
     );
 }
 
-/** Muted line under an answer: tokens, cost by tariff and the tariff it fell into. */
+/** Muted line under an answer: input, output and cache tokens. */
 function UsageLine({ usage }: { usage: AnswerUsage }) {
     const hint = [
-        usage.cost !== undefined
-            ? `Cost by tariff at the time of the answer${usage.tariff ? ` (${TARIFF_LABEL[usage.tariff]})` : ''}.`
-            : usage.flatCost !== undefined
-            ? "Approximate: pi's flat price, no tariff cost stored for this answer."
-            : 'No cost stored for this answer.',
+        'Tokens of this answer: input, output and read from the cache.',
         usage.calls > 1 ? `${usage.calls} model calls in this answer.` : undefined,
         'Subagents and compactions count only in the chat total.',
     ]
@@ -229,9 +225,7 @@ function CompactionLine({
                       item.tokensAfter !== undefined ? `≈ ${formatTokens(item.tokensAfter)}` : '?'
                   } tokens`
                 : '';
-        text = `Context compacted${reason ? ` (${reason})` : ''}${sizes}${
-            item?.cost !== undefined ? ` · ${formatUsd(item.cost)}` : ''
-        }`;
+        text = `Context compacted${reason ? ` (${reason})` : ''}${sizes}`;
     }
     return (
         <Box

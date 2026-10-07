@@ -113,7 +113,6 @@ export type TranscriptItem =
           reason?: string;
           tokensBefore?: number;
           tokensAfter?: number;
-          cost?: number;
       };
 
 /** Fixed head of every gateway note inside a user message (agent gateway, internal/chat/origin.go). */
@@ -260,7 +259,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
 
     const items: TranscriptItem[] = [];
     let agent: Extract<TranscriptItem, { kind: 'agent' }> | undefined;
-    // stored messages of each agent block, for its tokens and cost
+    // stored messages of each agent block, for its tokens
     const answerRows = new Map<Extract<TranscriptItem, { kind: 'agent' }>, StoredMessage[]>();
 
     const stepFor = (id: string, name: string, args: unknown, answerAborted: boolean): Step => {
@@ -342,7 +341,6 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                 reason: msg.reason,
                 tokensBefore: msg.tokensBefore,
                 tokensAfter: msg.estimatedTokensAfter,
-                cost: m.cost,
             });
             continue;
         }

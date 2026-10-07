@@ -20,12 +20,10 @@ import { useChatSettings } from '../useChatSettings';
 import {
     cacheHitRate,
     compactionReason,
-    costSplit,
     describeContext,
     formatPercent,
     formatTokens,
     formatTokensShort,
-    formatUsd,
 } from '../usage';
 import type { Compacting, ContextLevel } from '../usage';
 import { agentColors } from './tokens';
@@ -308,26 +306,25 @@ export function ContextMeter({
     );
 }
 
-/** Total cost of the chat by tariff; the tooltip splits it and names the tokens. */
-export function ChatCost({ chat, tokens = false }: { chat: Chat; tokens?: boolean }) {
-    const c = costSplit(chat);
+/** Tokens of the chat; the tooltip splits them and names the model calls. */
+export function ChatTokens({ chat }: { chat: Chat }) {
     const t = chat.tokens;
     const cache = cacheHitRate(t?.input, t?.cache_read);
     const rows: [string, ReactNode][] = [
-        ['Tokens', `${formatTokens(t?.total)} (${formatTokens(t?.input)} in · ${formatTokens(t?.output)} out)`],
+        ['Input', formatTokens(t?.input)],
+        ['Output', formatTokens(t?.output)],
         ['From cache', `${formatTokens(t?.cache_read)}${cache !== undefined ? ` (${formatPercent(cache * 100)})` : ''}`],
-        ['Main answers', formatUsd(c.main)],
-        ['Subagents, compaction', formatUsd(c.other)],
-        ['Model calls', String(c.calls)],
+        ['Model calls', String(chat.llm_calls ?? 0)],
     ];
     return (
         <Tooltip
             title={
                 <Box sx={tipSx}>
-                    <Box sx={{ fontWeight: 500, mb: 0.5 }}>Cost {formatUsd(c.total)}</Box>
+                    <Box sx={{ fontWeight: 500, mb: 0.5 }}>Tokens {formatTokens(t?.total)}</Box>
                     <Rows rows={rows} />
                     <Box sx={{ mt: 0.75, opacity: 0.85 }}>
-                        By tariff (peak or off-peak at the time of each call), counted at the gateway's model proxy.
+                        Tokens of the main answers and compactions; model calls counted at the gateway's model proxy,
+                        subagents included.
                     </Box>
                 </Box>
             }
@@ -335,12 +332,11 @@ export function ChatCost({ chat, tokens = false }: { chat: Chat; tokens?: boolea
             <Box
                 component="span"
                 tabIndex={0}
-                data-testid="agent-chat-cost"
-                aria-label={`Cost ${formatUsd(c.total)}`}
+                data-testid="agent-chat-tokens"
+                aria-label={`${formatTokens(t?.total)} tokens`}
                 sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 0.75,
                     flex: 'none',
                     whiteSpace: 'nowrap',
                     fontSize: 12,
@@ -352,17 +348,12 @@ export function ChatCost({ chat, tokens = false }: { chat: Chat; tokens?: boolea
                     '&:focus-visible': { boxShadow: `0 0 0 2px ${agentColors.greenLine}` },
                 }}
             >
-                {tokens && (
-                    <span>
-                        <Box component="span" sx={{ color: 'text.primary' }}>
-                            {formatTokensShort(t?.total)}
-                        </Box>{' '}
-                        tokens ·
-                    </span>
-                )}
-                <Box component="span" sx={{ color: 'text.primary' }}>
-                    {formatUsd(c.total, true)}
-                </Box>
+                <span>
+                    <Box component="span" sx={{ color: 'text.primary' }}>
+                        {formatTokensShort(t?.total)}
+                    </Box>{' '}
+                    tokens
+                </span>
             </Box>
         </Tooltip>
     );
