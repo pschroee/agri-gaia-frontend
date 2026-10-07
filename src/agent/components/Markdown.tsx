@@ -9,6 +9,7 @@ import Link from '@mui/material/Link';
 
 import { isAcceptanceFence } from '../acceptance';
 import { imageSource, MARKDOWN_IMAGE, parseMarkdownImage } from '../images';
+import { inlineTokens } from '../inline';
 import { isFenceOpen, mermaidReady, readFence } from '../mermaid';
 import AcceptanceReportBlock from './AcceptanceReportBlock';
 import ImagePreview, { ImageNote } from './ImagePreview';
@@ -16,7 +17,7 @@ import MermaidDiagram from './MermaidDiagram';
 import { codeBlockSx, MONO } from './tokens';
 
 // A small Markdown renderer for agent answers: paragraphs, headings, lists, block quotes, fenced code,
-// tables, Mermaid diagrams (MermaidDiagram), acceptance reports of subagents (AcceptanceReportBlock) and the inline forms code, bold, italic, links and images. It builds React elements, never HTML strings.
+// tables, Mermaid diagrams (MermaidDiagram), acceptance reports of subagents (AcceptanceReportBlock) and the inline forms code, bold, italic, links, bare http(s) URLs (inline.ts) and images. It builds React elements, never HTML strings.
 
 /** Where images of this text may come from: the chat and the ID of the stored answer (images.ts). */
 export type ImageContext = { chatId?: string; msgId?: string };
@@ -72,47 +73,46 @@ function inline(text: string, keyBase: string, img?: ImageContext): ReactNode[] 
 }
 
 function inlineText(text: string, keyBase: string): ReactNode[] {
-    const out: ReactNode[] = [];
-    // code | bold | italic | link
-    const re = /(`[^`]+`)|(\*\*[^*]+\*\*|__[^_]+__)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))/g;
-    let last = 0;
-    let m: RegExpExecArray | null;
-    let i = 0;
-    while ((m = re.exec(text))) {
-        if (m.index > last) out.push(text.slice(last, m.index));
-        const k = `${keyBase}-${i++}`;
-        const s = m[0];
-        if (m[1]) {
-            out.push(
-                <Box
-                    key={k}
-                    component="code"
-                    sx={{ fontFamily: MONO, fontSize: '0.9em', bgcolor: 'action.hover', px: 0.5, borderRadius: 0.5 }}
-                >
-                    {s.slice(1, -1)}
-                </Box>,
-            );
-        } else if (m[2]) {
-            out.push(<strong key={k}>{inlineText(s.slice(2, -2), k)}</strong>);
-        } else if (m[3]) {
-            out.push(<em key={k}>{inlineText(s.slice(1, -1), k)}</em>);
-        } else {
-            const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s);
-            const href = lm?.[2] ?? '';
-            if (lm && /^https?:\/\//i.test(href)) {
-                out.push(
-                    <Link key={k} href={href} target="_blank" rel="noopener noreferrer">
-                        {lm[1]}
-                    </Link>,
+    return inlineTokens(text).map((tok, i) => {
+        const k = `${keyBase}-${i}`;
+        switch (tok.t) {
+            case 'text':
+                return tok.s;
+            case 'code':
+                return (
+                    <Box
+                        key={k}
+                        component="code"
+                        sx={{
+                            fontFamily: MONO,
+                            fontSize: '0.9em',
+                            bgcolor: 'action.hover',
+                            px: 0.5,
+                            borderRadius: 0.5,
+                        }}
+                    >
+                        {tok.s}
+                    </Box>
                 );
-            } else {
-                out.push(lm?.[1] ?? s);
-            }
+            case 'bold':
+                return <strong key={k}>{inlineText(tok.s, k)}</strong>;
+            case 'italic':
+                return <em key={k}>{inlineText(tok.s, k)}</em>;
+            case 'link':
+                // A bare URL breaks anywhere, so a long address wraps in the 400 px panel instead of overflowing.
+                return (
+                    <Link
+                        key={k}
+                        href={tok.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        sx={tok.auto ? { overflowWrap: 'anywhere', wordBreak: 'break-all' } : undefined}
+                    >
+                        {tok.label}
+                    </Link>
+                );
         }
-        last = m.index + s.length;
-    }
-    if (last < text.length) out.push(text.slice(last));
-    return out;
+    });
 }
 
 const isTableRow = (l: string) => /^\s*\|.*\|\s*$/.test(l);

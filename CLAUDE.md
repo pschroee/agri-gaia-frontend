@@ -398,6 +398,13 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   **foreign addresses and SVG are never loaded** (they would leak sandbox data without internet approval), they show as a
   muted note, as do local images of an answer still streaming. A click enlarges (`ImagePreview`, MUI Dialog with
   download). Images are split off a line before the other inline forms, so underscores in a path cannot start italics.
+  **Links (issue #61 of the thesis repository):** the inline forms come from `inlineTokens` in `src/agent/inline.ts`
+  (unit-tested). Markdown links and bare URLs (GFM autolink literal, also `<https://…>`) become links only for
+  `http`/`https` with a host, always `target="_blank"` and `rel="noopener noreferrer"`; trailing punctuation and a
+  closing bracket without an opening one inside the URL stay outside (`(see https://a.org/x).`), balanced ones stay
+  in (`…/Poker_(card_game)`). Inline code and fenced blocks are never linked. Underscores inside a word do not start
+  emphasis (CommonMark), so `Card_counting` in a URL or `snake_case` stays intact. Bare URLs break anywhere, so long
+  addresses wrap in the 400 px panel.
   `request` in `api.ts` sets the JSON content type only for string bodies; FormData brings its own boundary. The pure
   logic is in `src/agent/files.ts` and `images.ts`, unit-tested. **Drop area:** `AgentDropZone` covers the whole context panel (from its header down) and the chat tab of
   `/ai-agent` (history and chat); while files are dragged over it, an overlay "Drop files to upload" covers the area,
