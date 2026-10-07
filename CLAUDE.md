@@ -101,6 +101,14 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   open and every 15 s while it is down; a poll answer is dropped when a stream event came in after it was sent), all
   unit-tested with a fake EventSource. An older gateway without the route answers 404 and the poll carries the count.
   Render check: a fake `EventSource` in an init script that exposes the `/agent/api/events` instance and emits events.
+- **Approvals on the side navigation (issue #36):** the "Agent" entry of `SideNav` carries the same red count on its
+  icon (`AgentNavIcon`, `useAgentNavBadge`, pure `navBadge` in `approvalFeed.ts`), on every page including `/ai-agent`,
+  where there is no floating button. Unlike the button it stays visible while the panel is open: the panel shows the
+  approvals of its selected chat only, so the entry is the one place that always counts all chats. It sits on the icon,
+  so the collapsed (70 px, icon-only) navigation shows it too ("99+" still fits); hidden at 0. The entry's
+  `aria-label` carries the count ("Agent · 2 approvals waiting"), the badge is `aria-hidden`. The change to the upstream
+  `SideNav` is the icon and an optional `ariaLabel` per item. Render check: as for the button; MUI scales a badge in
+  over 225 ms, so measure its box a moment after it appears.
 - **Gateway notes:** user messages are split along the gateway's `sources` (`splitMessage` in `src/agent/transcript.ts`);
   a part with `audience: "agent"` (today the preferred browser language of the first message) is context for the model
   only and is cut out (`isAgentOnly`), never shown as user text. Decide by that mark, not by `type` or the text; the
