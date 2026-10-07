@@ -184,9 +184,21 @@ export function startApprovalFeed(o: FeedOptions): () => void {
     };
 }
 
+function badgeLabel(name: string, count: number): string {
+    if (count <= 0) return name;
+    return `${name} · ${count} ${count === 1 ? 'approval' : 'approvals'} waiting`;
+}
+
 /** Badge of the floating button: shown only with the panel closed and something to approve. */
 export function fabBadge(count: number, panelOpen: boolean): { visible: boolean; label: string } {
-    const visible = !panelOpen && count > 0;
-    if (count <= 0) return { visible, label: 'AI agent' };
-    return { visible, label: `AI agent · ${count} ${count === 1 ? 'approval' : 'approvals'} waiting` };
+    return { visible: !panelOpen && count > 0, label: badgeLabel('AI agent', count) };
+}
+
+/**
+ * Badge of the "Agent" entry in the side navigation: shown whenever something waits for approval, also with the
+ * panel open and on the agent page. The open panel shows the approvals of its selected chat only, the agent page
+ * has no floating button, so the entry is the one place that always counts all of the user's chats.
+ */
+export function navBadge(count: number): { visible: boolean; label: string } {
+    return { visible: count > 0, label: badgeLabel('Agent', count) };
 }
