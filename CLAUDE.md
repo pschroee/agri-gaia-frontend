@@ -202,6 +202,28 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   streaming (its header counts the time; opened, the text grows live), and opens per block on click. There is no
   "Always show thinking" switch any more (issue #40); an old `agentAlwaysShowThinking:<sub>` value in `localStorage`
   is ignored.
+- **Tool step details (issue #58):** a click (or Enter) on a step's row in `StepList` opens its details below it
+  (`StepDetail.tsx`), a second click closes them; several can be open. The open state lives with the thinking blocks'
+  record in `Conversation` (keys `step:<id>`, `stepOpenKey`), so it survives reloads of the transcript; the task strip
+  keeps its own. Stop and "Move to background" sit in a wrapper that stops the click, so they never toggle the details.
+  `buildTranscript` keeps per step the tool `name`, the parsed `args`, pi's `result` (text, `isError`), the gateway's
+  `executions`, the platform calls of the socket log (`platformCalls`, op `platform`), the call's `approvals` and, while
+  it runs, `partial` (pi's `tool_execution_update.partialResult`, kept in `useChatStream` and shown at most every
+  250 ms, `partialsReducer`); subagent steps get args, result and the chat's executions by the call's ID. The mapping per
+  tool is pure in `src/agent/stepDetail.ts` (unit-tested): **bash** exit code (gateway first, else "Command exited with
+  code N"), duration, directory, timeout, the whole command (heredocs included), output from pi's result, else the
+  output so far, else the gateway's `output_excerpt` with a note that only the excerpt exists; **read/write/edit/grep/
+  find/ls** path and arguments, written content, each change as old and new, the start of the result; **platform calls**
+  (`agw-platform` in a bash command, read with a small shell tokenizer, or `mcp_platform_*`) method, path, effect chip,
+  status ("200 · ok", "404 · error", "rejected by you", "blocked: …"), duration, body (the approval's redacted preview
+  wins over the command's text), the approval (pending: "Go to approval" scrolls to its card, `data-approval-id` on
+  `ApprovalCard` items; decided: who and when plus a link to the Activity tab) and the response with its JSON
+  indented; **other tools** arguments as indented JSON and the result. Errors are red; command, output, body and
+  arguments have a copy button; long blocks show 20 lines or 3 000 characters with "Show all". Everything wraps
+  (`pre-wrap`, `overflow-wrap: anywhere`): nothing scrolls sideways in the 400 px panel. Nothing is unredacted: the
+  details show what the gateway delivered (the command text is the agent's own argument). Render check: mock
+  `socket_calls`, `approvals` and `tool_executions` of a chat, emit `tool_execution_update`, open every step and compare
+  each element's right edge with the transcript's.
 - **Stopped steps:** a tool call ended by the user's stop (abort of the run or "Stop" on a command) shows as
   "stopped by you" with a muted stop icon, not as "failed"; an answer that ended with the abort gets a muted
   "Stopped by you" instead of "Error: This operation was aborted". The decision is pure in `src/agent/transcript.ts`
