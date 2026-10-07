@@ -77,9 +77,12 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
 - **Idle chats are invisible (issue #31):** the gateway still lets an unused chat idle after `AGW_IDLE_TIMEOUT`
   (`state: "dormant"`), but the UI never shows it: `runStateOf` maps it to `idle`, there is no "resting" label, icon or
   hint and no manual "Let it rest" (suspend) button. Opening or selecting such a chat (panel, `/ai-agent`, also on page
-  load) calls `POST /agent/api/chats/{id}/resume` (gateway PR for #31) once per opened view, as soon as the SSE stream
-  has opened (or after 2 s without it): `shouldResumeOnOpen` in `src/agent/resume.ts`. When the gateway lets an open
-  chat idle again later, nothing is requested; the next message resumes it. The steps come over SSE `resume` and show in
+  load) calls `POST /agent/api/chats/{id}/resume` (gateway PR for #31). The decision is taken once per opened view
+  (`resumeOnOpen` in `src/agent/resume.ts`), after the first load of the chat with its messages and once the SSE stream
+  has opened (or after 2 s without it): the gateway sends a "chat" event when the stream subscribes, which can arrive
+  before the load, and a resume started then anchored its steps at seq 0, i.e. at the top of the transcript, out of
+  view. A chat that was active when opened is never resumed by this view: when the gateway lets it idle while it is
+  open, the next message resumes it (found live: deciding on every chat event woke such a chat at once). The steps come over SSE `resume` and show in
   `ResumeBlock` (live, then a collapsible "Resumed in … s"; a failed one stays with "Try again" on the latest block). A
   resume on opening is marked `opened` and sits before anything stored later, so a message typed meanwhile follows it;
   the message is sent at once and the gateway holds it until the sandbox is ready (`expectQueued` is only true while the

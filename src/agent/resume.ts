@@ -5,7 +5,7 @@
 // Resuming a chat in a fresh sandbox, from the SSE event "resume" (API.md, ResumeStep). The steps are only known
 // live: pi stores nothing about them, so after a page reload the block is gone. Pure state logic and texts, after the
 // gateway's web UI (web/src/lib/resume.ts, applyResumeStep in web/src/lib/stream.ts). Since issue #31 a chat the
-// gateway let idle is resumed as soon as it is opened (POST …/resume, `shouldResumeOnOpen`), not on the next message.
+// gateway let idle is resumed as soon as it is opened (POST …/resume, `resumeOnOpen`), not on the next message.
 
 import type { Chat, ResumePhase, ResumeStep } from './types';
 
@@ -164,13 +164,22 @@ export function resumeAnchor(items: { kind: string; seq?: number }[], r: Pick<Re
 }
 
 /**
- * Should opening this chat resume it (POST …/resume)? Only a chat the gateway let idle (`dormant`) that is not
- * being resumed or started already, and only once per opened view (`requested`): when the gateway lets an open chat
- * idle again later, the next message resumes it, so an open tab does not keep a sandbox busy.
+ * Should opening this chat resume it (POST …/resume)? Decided once per opened view, when both the first load of the
+ * chat (with its messages) and the event stream are there:
+ * - `wait` until then: a resume started earlier would place its steps before messages that are not loaded yet (the
+ *   gateway's "chat" event on subscribing can arrive before the load), and steps sent before the stream is open are lost;
+ * - `resume` when the chat is one the gateway let idle (`dormant`) and is not being resumed or started already;
+ * - `skip` otherwise, and for good once decided: when the gateway lets an open chat idle later, the next message
+ *   resumes it, so an open tab does not keep a sandbox busy.
  */
-export function shouldResumeOnOpen(
-    chat: Pick<Chat, 'state' | 'resuming' | 'starting'> | undefined,
-    requested: boolean,
-): boolean {
-    return !!chat && !requested && chat.state === 'dormant' && !chat.resuming && !chat.starting;
+export function resumeOnOpen(opts: {
+    chat: Pick<Chat, 'state' | 'resuming' | 'starting'> | undefined;
+    loaded: boolean;
+    streamReady: boolean;
+    decided: boolean;
+}): 'wait' | 'resume' | 'skip' {
+    const { chat, loaded, streamReady, decided } = opts;
+    if (decided) return 'skip';
+    if (!chat || !loaded || !streamReady) return 'wait';
+    return chat.state === 'dormant' && !chat.resuming && !chat.starting ? 'resume' : 'skip';
 }

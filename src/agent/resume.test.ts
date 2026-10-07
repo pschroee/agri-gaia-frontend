@@ -13,7 +13,7 @@ import {
     resumeAnchor,
     resumeRunning,
     resumeSummary,
-    shouldResumeOnOpen,
+    resumeOnOpen,
     stepDetail,
 } from './resume';
 import type { ResumeView } from './resume';
@@ -189,13 +189,28 @@ describe('resume on opening the chat (issue #31)', () => {
         expect(run([step('acquire', 'running')])[0].opened).toBeUndefined();
     });
 
-    it('resumes only a chat the gateway let idle, once per opened view', () => {
-        expect(shouldResumeOnOpen({ state: 'dormant' }, false)).toBe(true);
-        expect(shouldResumeOnOpen({ state: 'dormant' }, true)).toBe(false);
-        expect(shouldResumeOnOpen({ state: 'active' }, false)).toBe(false);
-        expect(shouldResumeOnOpen({ state: 'dormant', resuming: true }, false)).toBe(false);
-        expect(shouldResumeOnOpen({ state: 'dormant', resuming: true, starting: true }, false)).toBe(false);
-        expect(shouldResumeOnOpen(undefined, false)).toBe(false);
+    it('resumes only a chat the gateway let idle', () => {
+        const at = (chat: Parameters<typeof resumeOnOpen>[0]['chat']) =>
+            resumeOnOpen({ chat, loaded: true, streamReady: true, decided: false });
+        expect(at({ state: 'dormant' })).toBe('resume');
+        expect(at({ state: 'active' })).toBe('skip');
+        expect(at({ state: 'dormant', resuming: true })).toBe('skip');
+        expect(at({ state: 'dormant', resuming: true, starting: true })).toBe('skip');
+    });
+
+    it('waits for the loaded chat and the stream, then decides once', () => {
+        const chat = { state: 'dormant' as const };
+        // the gateway's "chat" event on subscribing can come before the load with the messages
+        expect(resumeOnOpen({ chat, loaded: false, streamReady: true, decided: false })).toBe('wait');
+        expect(resumeOnOpen({ chat, loaded: true, streamReady: false, decided: false })).toBe('wait');
+        expect(resumeOnOpen({ chat: undefined, loaded: true, streamReady: true, decided: false })).toBe('wait');
+        expect(resumeOnOpen({ chat, loaded: true, streamReady: true, decided: true })).toBe('skip');
+    });
+
+    it('does not resume a chat that the gateway lets idle while it is open', () => {
+        // opened active: decided "skip"; later the chat event says dormant, but the decision stands
+        expect(resumeOnOpen({ chat: { state: 'active' }, loaded: true, streamReady: true, decided: false })).toBe('skip');
+        expect(resumeOnOpen({ chat: { state: 'dormant' }, loaded: true, streamReady: true, decided: true })).toBe('skip');
     });
 
     it('never mentions resting in its texts', () => {

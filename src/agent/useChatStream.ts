@@ -23,7 +23,7 @@ import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
 import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
 import type { QueueRow } from './queue';
-import { applyResumeStep, closeResumes, shouldResumeOnOpen } from './resume';
+import { applyResumeStep, closeResumes, resumeOnOpen } from './resume';
 import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
@@ -160,6 +160,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [connected, setConnected] = useState(false);
     // the stream has been open once for this chat (or did not open within a moment): resume steps can be shown
     const [streamReady, setStreamReady] = useState(false);
+    // the chat and its messages have been loaded once for this view
+    const [loaded, setLoaded] = useState(false);
     const [queueState, dispatchQueue] = useReducer(queueReducer, emptyQueue);
     const [queueError, setQueueError] = useState<string>();
     const [resumes, setResumes] = useState<ResumeView[]>([]);
@@ -180,10 +182,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     chatRef.current = chat;
     const messagesRef = useRef<StoredMessage[]>([]);
     messagesRef.current = messages;
-    // resume on opening (issue #31): requested once per opened chat; `resumeAsked` marks the next resume that shows
-    // up over SSE as started by opening (or by retrying), so it sits before a message typed meanwhile
-    const resumeRequested = useRef(false);
-    const resumeAsked = useRef(false);
+    // resume on opening (issue #31): decided once per opened chat; `resumeAsked` holds the last stored seq when this
+    // view asked for a resume (opening or retrying), so the next resume over SSE sits there, before a message typed
+    // meanwhile
+    const resumeDecided = useRef(false);
+    const resumeAsked = useRef<number>();
 
     const load = useCallback(async (clearLive?: 'ended' | 'all') => {
         if (!chatId) return;
@@ -191,6 +194,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             const d = await agentApi.chat(chatId);
             setChat(d.chat);
             setMessages(d.messages ?? []);
+            setLoaded(true);
             // in the same render as the stored messages, so the answer is not shown twice
             if (clearLive) dispatchLive({ type: 'clear', onlyEnded: clearLive === 'ended' });
             messagesRef.current = d.messages ?? [];
@@ -270,9 +274,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setSubagentEntries([]);
         setSubagentRuns([]);
         setLLMCalls([]);
-        resumeRequested.current = false;
-        resumeAsked.current = false;
+        resumeDecided.current = false;
+        resumeAsked.current = undefined;
         setStreamReady(false);
+        setLoaded(false);
         if (!chatId) return;
 
         let stopped = false;
@@ -361,9 +366,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     }
                     case 'resume': {
                         const step = ev.data as ResumeStep;
-                        const opened = resumeAsked.current && !step.start;
-                        if (opened) resumeAsked.current = false;
-                        setResumes((l) => applyResumeStep(l, step, lastSeq(messagesRef.current), opened));
+                        const asked = step.start ? undefined : resumeAsked.current;
+                        const opened = asked !== undefined;
+                        if (opened) resumeAsked.current = undefined;
+                        setResumes((l) => applyResumeStep(l, step, asked ?? lastSeq(messagesRef.current), opened));
                         break;
                     }
                     case 'tool_execution':
@@ -577,26 +583,27 @@ export function useChatStream(chatId: string | undefined): ChatStream {
 
     const requestResume = useCallback(async () => {
         if (!chatId) return;
-        resumeAsked.current = true;
+        resumeAsked.current = lastSeq(messagesRef.current);
         try {
             // the state comes over SSE ("chat" when the resume begins and ends); the answer may already be older
             await agentApi.resume(chatId);
         } catch (e) {
-            resumeAsked.current = false;
+            resumeAsked.current = undefined;
             // an older gateway without the route: the next message resumes the chat as before
             if (errStatus(e) !== 404) setError(`Loading the chat failed: ${errText(e)}`);
         }
     }, [chatId]);
 
-    // a chat the gateway let idle is resumed as soon as it is opened, once the stream is there to show the steps
+    // a chat the gateway let idle is resumed as soon as it is opened, once it is loaded and the stream is there
     useEffect(() => {
-        if (!streamReady || !shouldResumeOnOpen(chat, resumeRequested.current)) return;
-        resumeRequested.current = true;
-        void requestResume();
-    }, [chat, streamReady, requestResume]);
+        const d = resumeOnOpen({ chat, loaded, streamReady, decided: resumeDecided.current });
+        if (d === 'wait') return;
+        resumeDecided.current = true;
+        if (d === 'resume') void requestResume();
+    }, [chat, loaded, streamReady, requestResume]);
 
     const retryResume = useCallback(async () => {
-        resumeRequested.current = true;
+        resumeDecided.current = true;
         await requestResume();
     }, [requestResume]);
 
