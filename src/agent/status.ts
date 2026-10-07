@@ -139,8 +139,6 @@ export function activityText(a: SlotActivity | undefined): string {
 /** Last path part of an image reference, shorter for tight cells ("registry/agwpoc/agw-pi:dev" → "agw-pi:dev"). */
 export const shortImage = (image: string) => image.split('/').pop() || image;
 
-export type TariffNow = 'peak' | 'off-peak';
-
 export type ModelRow = {
     id: string;
     name: string;
@@ -148,136 +146,21 @@ export type ModelRow = {
     isDefault: boolean;
     /** Context window in tokens; undefined when unknown. */
     window?: number;
-    /** Prices per 1 M tokens in the tariff in effect now (off-peak: peak price × factor). */
-    input?: number;
-    output?: number;
-    cacheRead?: number;
-    tariff?: TariffNow;
-    offpeakFactor?: number;
-    /** Peak hours in local time, e.g. "daily 18:30–02:30". */
-    peakHours?: string;
     /** Thinking levels the gateway reported for the user's chats on this model (empty: not known yet). */
     levels: string[];
 };
 
-const round = (n: number) => Math.round(n * 1e6) / 1e6;
-
-/** Rows of the model table; prices follow the tariff in effect now. */
-export function modelRows(models: Model[], chats: Chat[], timeZone?: string, at: Date = new Date()): ModelRow[] {
+/** Rows of the model table; the gateway's prices and tariff stay out (the platform shows no cost). */
+export function modelRows(models: Model[], chats: Chat[]): ModelRow[] {
     const levels = levelsByModel(chats);
-    return models.map((m) => {
-        const p = m.pricing;
-        const tariff: TariffNow | undefined =
-            m.tariff && m.peak_now !== undefined ? (m.peak_now ? 'peak' : 'off-peak') : undefined;
-        const factor = tariff === 'off-peak' ? m.tariff?.offpeak_factor ?? 1 : 1;
-        const peakHours =
-            m.tariff && m.tariff.peak_windows_utc?.length
-                ? formatPeakWindows(m.tariff.peak_windows_utc, timeZone, at)
-                : undefined;
-        return {
-            id: m.id,
-            name: m.name || m.id,
-            provider: m.provider,
-            isDefault: !!m.default,
-            window: m.context_window && m.context_window > 0 ? m.context_window : undefined,
-            input: p ? round(p.input * factor) : undefined,
-            output: p ? round(p.output * factor) : undefined,
-            cacheRead: p ? round(p.cache_read * factor) : undefined,
-            tariff,
-            offpeakFactor: m.tariff?.offpeak_factor,
-            peakHours,
-            levels: levels[m.id] ?? [],
-        };
-    });
-}
-
-/** Price per 1 M tokens without rounding away digits: "$0.028", "$1.095", "$2.50"; "–" without one. */
-export function formatPrice(v: number | undefined): string {
-    if (v === undefined) return '–';
-    const r = parseFloat(v.toFixed(4));
-    const decimals = (String(r).split('.')[1] ?? '').length;
-    return `$${r >= 1 && decimals < 2 ? r.toFixed(2) : String(r)}`;
-}
-
-// --- peak hours (port of the gateway's web/src/lib/tariff.ts) ---
-
-const DAY_KEYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-function parseDays(days: string): number[] | undefined {
-    const d = days.trim().toLowerCase();
-    if (d === 'daily' || d === 'all' || d === '*' || d === 'mon-sun') return [0, 1, 2, 3, 4, 5, 6];
-    const out = new Set<number>();
-    for (const part of d.split(',').map((p) => p.trim())) {
-        const range = part.split('-').map((p) => DAY_KEYS.indexOf(p.slice(0, 3)));
-        if (range.some((i) => i < 0) || range.length > 2 || part === '') return undefined;
-        const [a, b = a] = range;
-        for (let i = a; ; i = (i + 1) % 7) {
-            out.add(i);
-            if (i === b) break;
-        }
-    }
-    return [...out].sort((x, y) => x - y);
-}
-
-function formatDays(set: number[]): string {
-    if (set.length === 7) return 'daily';
-    if (set.length === 1) return DAY_NAMES[set[0]];
-    const inSet = new Set(set);
-    const start = set.find((d) => !inSet.has((d + 6) % 7));
-    if (start !== undefined) {
-        let len = 0;
-        while (inSet.has((start + len) % 7)) len++;
-        if (len === set.length && len >= 2) return `${DAY_NAMES[start]}–${DAY_NAMES[(start + len - 1) % 7]}`;
-    }
-    return set.map((d) => DAY_NAMES[d]).join(', ');
-}
-
-function tzOffsetMinutes(timeZone: string | undefined, at: Date): number {
-    const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone,
-        hourCycle: 'h23',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-    }).formatToParts(at);
-    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
-    const asUtc = Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'));
-    return Math.round((asUtc - Math.floor(at.getTime() / 60000) * 60000) / 60000);
-}
-
-const toMin = (hhmm: string) => {
-    const [h, m] = hhmm.split(':').map(Number);
-    return h * 60 + (m || 0);
-};
-const fmtMin = (min: number) => {
-    const m = ((min % 1440) + 1440) % 1440;
-    return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
-};
-
-/**
- * Peak hours (UTC windows of the tariff) in local time, e.g. "Mon–Fri 03:00–06:00 and 08:00–12:00". The offset applies
- * at `at`; a window that starts on another day in local time shifts its weekdays along. Without `timeZone` the
- * browser's time zone applies.
- */
-export function formatPeakWindows(
-    windows: { days: string; from: string; to: string }[],
-    timeZone?: string,
-    at: Date = new Date(),
-): string {
-    const offset = tzOffsetMinutes(timeZone, at);
-    const groups = new Map<string, string[]>();
-    for (const w of windows) {
-        const from = toMin(w.from) + offset;
-        const to = toMin(w.to) + offset;
-        const shift = Math.floor(from / 1440);
-        const days = parseDays(w.days);
-        const label = days ? formatDays(days.map((d) => (((d + shift) % 7) + 7) % 7).sort((a, b) => a - b)) : w.days;
-        groups.set(label, [...(groups.get(label) ?? []), `${fmtMin(from)}–${fmtMin(to)}`]);
-    }
-    return [...groups].map(([days, ranges]) => `${days} ${ranges.join(' and ')}`).join('; ');
+    return models.map((m) => ({
+        id: m.id,
+        name: m.name || m.id,
+        provider: m.provider,
+        isDefault: !!m.default,
+        window: m.context_window && m.context_window > 0 ? m.context_window : undefined,
+        levels: levels[m.id] ?? [],
+    }));
 }
 
 // --- approvals ---

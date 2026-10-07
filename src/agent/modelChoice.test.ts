@@ -11,7 +11,6 @@ import {
     levelsByModel,
     modelName,
     pickerState,
-    priceHint,
     switchFailure,
     tooLargeText,
 } from './modelChoice';
@@ -147,15 +146,4 @@ describe('texts', () => {
         expect(modelName([{ id: 'a/b', name: 'Bee' }], 'a/b')).toBe('Bee');
         expect(modelName([], 'a/b')).toBe('a/b');
     });
-
-    it('shows prices and the tariff in effect', () => {
-        const pricing = { input: 0.28, output: 0.42, cache_read: 0.028, cache_write: 0, currency: 'USD' as const };
-        expect(priceHint({ pricing })).toBe('$0.28 in · $0.42 out per 1M tokens');
-        const tariff = { peak_windows_utc: [], offpeak_factor: 0.5 };
-        expect(priceHint({ pricing, tariff, peak_now: true })).toMatch(/peak tariff now$/);
-        expect(priceHint({ pricing, tariff, peak_now: false })).toMatch(/off-peak now \(×0.5\)$/);
-        expect(priceHint({ pricing: { ...pricing, input: 2, output: 8 } })).toBe('$2.00 in · $8.00 out per 1M tokens');
-        expect(priceHint({})).toBeUndefined();
-    });
 });
-

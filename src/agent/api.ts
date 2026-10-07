@@ -162,7 +162,7 @@ export const agentApi = {
         request<BackgroundTask[]>(`chats/${enc(id)}/background`).then((l) => (Array.isArray(l) ? l : [])),
     /** Ends a running background task (409: not running, 404: unknown). */
     stopBackground: (id: string, bg: string) => post<BackgroundTask>(`chats/${enc(id)}/background/${enc(bg)}/stop`),
-    /** Model calls recorded at the LLM proxy (incl. subagents), for the cost per subagent run. */
+    /** Model calls recorded at the LLM proxy (incl. subagents), for the tokens per subagent run. */
     llmCalls: (id: string) =>
         request<LLMCall[]>(`chats/${enc(id)}/llm_calls`).then((l) => (Array.isArray(l) ? l : [])),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),

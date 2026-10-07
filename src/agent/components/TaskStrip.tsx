@@ -29,7 +29,7 @@ import { formatElapsed } from '../runState';
 import {
     groupRuns,
     RUN_STATUS_LABEL,
-    runCost,
+    runUsage,
     runDuration,
     runItems,
     runsSummary,
@@ -41,7 +41,7 @@ import {
 import type { RunStatus, SubagentRun } from '../subagents';
 import type { BackgroundTask, LLMCall, SubagentEntry, SubagentRunMeta } from '../types';
 import { useNow } from '../useNow';
-import { formatTokensShort, formatUsd } from '../usage';
+import { formatTokens, formatTokensShort } from '../usage';
 import Markdown from './Markdown';
 import StepList from './StepList';
 import { agentColors, blockSx, MONO } from './tokens';
@@ -236,7 +236,7 @@ function SubagentRow({
     chatId: string;
 }) {
     const [open, setOpen] = useState(false);
-    const cost = runCost(run, calls);
+    const usage = runUsage(run, calls);
     const live = status === 'running' || status === 'idle';
     const meta = [
         RUN_STATUS_LABEL[status],
@@ -282,15 +282,15 @@ function SubagentRow({
                         >
                             {runTitle(run)}
                         </Typography>
-                        {cost && (
+                        {usage && (
                             <Tooltip
-                                title={`${cost.calls} model call${cost.calls === 1 ? '' : 's'} · ${formatTokensShort(
-                                    cost.tokens,
-                                )} tokens, recorded at the LLM proxy`}
+                                title={`${usage.calls} model call${usage.calls === 1 ? '' : 's'} · ${formatTokens(
+                                    usage.tokens,
+                                )} tokens (input and output), recorded at the LLM proxy`}
                             >
                                 <Typography
                                     component="span"
-                                    data-testid="agent-subagent-cost"
+                                    data-testid="agent-subagent-tokens"
                                     sx={{
                                         ml: 'auto',
                                         flex: 'none',
@@ -299,7 +299,7 @@ function SubagentRow({
                                         fontVariantNumeric: 'tabular-nums',
                                     }}
                                 >
-                                    {formatUsd(cost.cost)}
+                                    {formatTokensShort(usage.tokens)} tokens
                                 </Typography>
                             </Tooltip>
                         )}
@@ -324,7 +324,7 @@ function SubagentRow({
 /**
  * Background tasks and subagent runs of the chat as a strip on top of the chat, like the files: collapsed one line
  * with the counts (and a spinner while something runs), opened the background tasks with state, runtime, last
- * lines and Stop, and the subagent runs with state, duration and cost, each opening its own steps.
+ * lines and Stop, and the subagent runs with state, duration and tokens, each opening its own steps.
  */
 export default function TaskStrip({
     chatId,

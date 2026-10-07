@@ -24,9 +24,9 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   reachability (gateway with round trip and the signed-in user from `GET /me`; platform API, platform login and the
   last token exchange from `GET /platform`), the warm pool per variant (`GET /pool`: free, busy, starting, target,
   image, the user's chats with what the agent does; other users' chats only as a count), pending approvals oldest
-  first with a link that opens the chat on the Chat tab, models (`GET /models`: provider, context window, prices per
-  1M tokens in the tariff in effect now, peak hours in local time, thinking levels as far as the user's chats reported
-  them) and the connection of new chats (CLI, MCP, REST API or a combination, fixed by the gateway's `AGW_TOOLSETS`,
+  first with a link that opens the chat on the Chat tab, models (`GET /models`: provider, context window, thinking
+  levels as far as the user's chats reported them; no prices or tariff, issue #43)
+  and the connection of new chats (CLI, MCP, REST API or a combination, fixed by the gateway's `AGW_TOOLSETS`,
 gateway issue #29: `toolsets` of `GET /config`, else the `active` entry of `GET /variants`; the pool card of that
 combination says "new chats", others "older chats only"; a gateway without it still gets the old table of variants
 with the English labels of `variantLabel`), plus defaults from `GET /config`. Everything reloads
@@ -172,7 +172,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   page reload the block is gone. On `failed` the request fails and `ChatInput` puts the text back.
 - **Model and thinking level:** `ModelEffortPicker` sits in the row below the input (small text buttons with menus,
   so they fit the 400 px panel; the approval hint shrinks to its lock icon there). Models come from `GET /models`
-  (loaded once in `AgentContext`, with prices and tariff as hint). **The model list carries no thinking levels:** the
+  (loaded once in `AgentContext`; each entry names the provider, no prices, issue #43). **The model list carries no
+  thinking levels:** the
   gateway reports them per chat (`thinking_levels` for the chat's current model, empty until pi has been asked), so
   only those are offered, and the picker is disabled with fewer than two. While the chat runs or resumes, both are
   disabled with a tooltip (the gateway answers 409). A 409 with `code: "context_too_large"` and `details` opens
@@ -186,7 +187,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   wrap with `overflow-wrap: anywhere`). **The row's wrapper is a grid with `minmax(0, 1fr)`:** an `auto` column grows
   to the title's min-content, and the old row ran past the 400 px panel although the `Select` had `minWidth: 0`
   (856 px wide for a 110-character title). On `/ai-agent` the chat header wraps its controls (state chip, internet,
-  context, cost) as one group onto a second line before the title gets narrower than 200 px; history items break
+  context, tokens) as one group onto a second line before the title gets narrower than 200 px; history items break
   words that are longer than the line (`overflow-wrap: anywhere`, else the line clamp only clips them) and carry the
   full title as `title`; the approvals table on the Status tab breaks the title too. `chatTitle` in
   `src/agent/format.ts` gives "Untitled chat" for an empty title. Render check: titles short, long and one word of
@@ -206,20 +207,25 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   gateway holds it until the sandbox is there, so it shows as the greyed pending bubble. An older gateway without
   `async` answers 503 on an empty pool, shown as "No free agent sandbox right now". Render check: answer `POST chats`
   once with an active chat and once with `starting: true, resuming: true`, measure click → focused textarea.
-- **Context, tokens and cost:** `ContextMeter` shows the chat's `context` (pi's usage, gateway API.md) as a ring with
+- **No cost in the platform (issue #43):** the frontend shows tokens, never dollar amounts, prices or tariffs
+  (peak/off-peak), not even in tooltips. The gateway still records and sends `cost`, `cost_other`, `peak`, `pricing`
+  and `tariff` (measurement data for the thesis, visible in its own web UI); `types.ts` keeps those fields, nothing
+  formats them. Render check: no `$`, "cost", "tariff" or "price" in the visible text or tooltips of the panel,
+  `/ai-agent` chat, Activity and Status.
+- **Context and tokens:** `ContextMeter` shows the chat's `context` (pi's usage, gateway API.md) as a ring with
   the percentage, a tick where auto-compaction starts (`threshold_tokens` = window minus reserve) and, on click, a
   popover with tokens, window, threshold, reserve and headroom plus the compaction settings (see *Chat settings*).
   The colour follows the distance to the threshold, not the share of the window: amber from 15 % of the window before it, red from 5 % (`contextLevel` in `src/agent/usage.ts`). After a
   compaction `tokens` is null until the next answer ("–"). A running compaction exists only live: SSE `pi`
   `compaction_start`/`compaction_end` (`compactingAfter`, also closed by `agent_start`); the open `ChatView` hands it to
   `setCompacting` of the context, so the panel header shows a spinner, and the transcript shows "Compacting the
-  context …", later the stored entry (role `compaction`, with sizes and cost). `ChatCost` shows `cost` (LLM proxy,
-  incl. subagents and compactions) with a split by `cost_other` and `llm_calls`. Each answer gets a muted line with
-  tokens, cost and tariff from the stored assistant messages (`cost`, `peak`; pi's flat `usage.cost.total` only as
-  "≈" fallback). Panel: ring and an "Open in agent page" button in the header, no cost (issue #33;
+  context …", later the stored entry (role `compaction`, with sizes). `ChatTokens` shows the chat's `tokens` (summed by the
+  gateway over the stored answers and compactions of the main session) with a tooltip: input, output, from cache with
+  its share, and `llm_calls` (LLM proxy, incl. subagents). Each answer gets a muted line "in · out · cache" from the
+  stored assistant messages. Panel: ring and an "Open in agent page" button in the header, no tokens figure (issue #33;
   the section chip then gives way; the input's placeholder names the section). The button (`expandToAgentPage` in
   `src/agent/expand.ts`, unit-tested) selects the chat, closes the panel and navigates to `/ai-agent` (Chat tab) with
-  react-router; without a selected chat there is no button. `/ai-agent`: a chat header with title, ring, tokens and cost.
+  react-router; without a selected chat there is no button. `/ai-agent`: a chat header with title, ring and tokens.
 - **Slash commands:** typing `/` at the start of the input opens `SlashCommandMenu` (MUI Popper right above the field,
   as wide as it; focus stays in the field, which is an ARIA combobox). The list comes from `GET /chats/{id}/commands`
   (loaded with the chat and again whenever the input is exactly `/`), `/todos` (terminal only) is hidden; `/model` and
@@ -320,7 +326,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   1 running · Subagents 1 running · 2 done" with a spinner while something runs; opened, the tasks (running first) with
   state, runtime, the last three lines of `tail` and Stop (`POST …/background/{bg}/stop`, 409 explained), and the runs
   with title (workflow label, else the task's first line), state, duration, tool count, agent and short run ID, and
-  the cost recorded at the LLM proxy (`GET …/llm_calls`, matched by the `response_id` of the run's entries, loaded once
+  the tokens recorded at the LLM proxy (`runUsage`, input plus output; `GET …/llm_calls`, matched by the `response_id` of the run's entries, loaded once
   subagents exist). A run opens to its own steps (`runItems`: task, step lists, text answers). Data: `background`,
   `subagent_entries`, `subagent_runs` of `GET /chats/{id}`, SSE `background` (a throttled `output` never overwrites an
   end), `subagent`, `subagent_run`, `llm_call`. A run's state comes from pi-subagents when known, otherwise it is

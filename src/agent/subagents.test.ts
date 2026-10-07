@@ -9,7 +9,7 @@ import {
     mergeLLMCalls,
     mergeRunMeta,
     mergeSubagentEntries,
-    runCost,
+    runUsage,
     runDuration,
     runItems,
     runsSummary,
@@ -138,12 +138,12 @@ describe('subagent runs', () => {
         expect(runDuration(a, 'running', T0 + 60_000)).toBe(59_000);
     });
 
-    it('sums the cost of the model calls whose responses occur in the run', () => {
+    it('sums the tokens of the model calls whose responses occur in the run, without their cost', () => {
         const [a, b] = groupRuns(entries);
         const calls = [call(1, 'r1', 0.0012), call(2, 'r2', 0.0008), call(3, 'main-1', 0.5)];
-        expect(runCost(a, calls)).toEqual({ calls: 2, tokens: 2400, cost: 0.002 });
-        expect(runCost(b, calls)).toBeUndefined();
-        expect(runCost(a, [])).toBeUndefined();
+        expect(runUsage(a, calls)).toEqual({ calls: 2, tokens: 2400 });
+        expect(runUsage(b, calls)).toBeUndefined();
+        expect(runUsage(a, [])).toBeUndefined();
     });
 
     it('builds the run steps: task, tool calls with their result, text', () => {

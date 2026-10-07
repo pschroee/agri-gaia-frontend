@@ -190,7 +190,7 @@ export default function AgentContextPanel() {
                     {selected && (
                         <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                             <ContextMeter chat={selected} compacting={compacting[selected.id]} />
-                            {/* the cost stays on /ai-agent and under each answer; here the chat moves to the full page */}
+                            {/* the tokens stay on /ai-agent and under each answer; here the chat moves to the full page */}
                             <Tooltip title="Open in agent page">
                                 <IconButton
                                     size="small"

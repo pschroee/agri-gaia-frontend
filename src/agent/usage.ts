@@ -2,10 +2,11 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Context usage, tokens and cost of a chat and of single answers, prepared for display. The gateway reports
-// the context per chat (pi's get_session_stats), the cost by tariff per chat (LLM proxy) and per stored answer.
+// Context usage and tokens of a chat and of single answers, prepared for display. The gateway reports the context
+// per chat (pi's get_session_stats) and the tokens per chat and per stored answer (pi's usage). It records costs as
+// well; the platform does not show them (issue #43).
 
-import type { Chat, ContextUsage, PiEvent, StoredMessage, Usage } from './types';
+import type { ContextUsage, PiEvent, StoredMessage, Usage } from './types';
 
 /** normal: plenty of room; warn: auto-compaction comes soon; danger: at or beyond the compaction threshold. */
 export type ContextLevel = 'normal' | 'warn' | 'danger';
@@ -16,8 +17,6 @@ export const WARN_MARGIN = 0.15;
 export const DANGER_MARGIN = 0.05;
 
 const intFmt = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
-const usdFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
-const usdShortFmt = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export const formatTokens = (v: number | null | undefined): string => intFmt.format(v ?? 0);
 
@@ -31,17 +30,6 @@ export function formatTokensShort(v: number | null | undefined): string {
     }
     const m = n / 1_000_000;
     return `${m < 100 ? Math.round(m * 10) / 10 : Math.round(m)}M`;
-}
-
-/**
- * US dollars with four decimals ("$0.0123"), as the gateway shows them; values above 0 but below a hundredth of
- * a cent as "< $0.0001". With `short`, amounts from one dollar on get two decimals.
- */
-export function formatUsd(v: number | null | undefined, short = false): string {
-    if (v === null || v === undefined || Number.isNaN(v)) return '–';
-    if (v > 0 && v < 0.00005) return '< $0.0001';
-    if (short && v >= 1) return `$${usdShortFmt.format(v)}`;
-    return `$${usdFmt.format(v)}`;
 }
 
 /** Percentage 0–100 as an integer; small values above 0 as "< 1 %". */
@@ -147,74 +135,34 @@ const REASON_LABEL: Record<string, string> = {
 export const compactionReason = (reason: string | undefined): string =>
     (reason && REASON_LABEL[reason]) ?? reason ?? '';
 
-/** Tariff of one or several answers. */
-export type TariffMix = 'peak' | 'off-peak' | 'mixed';
-
-export const TARIFF_LABEL: Record<TariffMix, string> = {
-    peak: 'peak tariff',
-    'off-peak': 'off-peak tariff',
-    mixed: 'peak and off-peak tariff',
-};
-
-export function tariffOf(peaks: (boolean | undefined)[]): TariffMix | undefined {
-    const known = peaks.filter((p): p is boolean => typeof p === 'boolean');
-    if (!known.length) return undefined;
-    if (known.every((p) => p)) return 'peak';
-    if (known.every((p) => !p)) return 'off-peak';
-    return 'mixed';
-}
-
-/** Tokens and cost of one answer (all assistant messages of a turn). */
+/** Tokens of one answer (all assistant messages of a turn). */
 export type AnswerUsage = {
     input: number;
     output: number;
     cacheRead: number;
-    /** Cost by tariff, summed over the messages that carry it. */
-    cost?: number;
-    /** pi's flat price, only when no message carries a tariff cost (older rows). */
-    flatCost?: number;
-    tariff?: TariffMix;
     /** Model calls (assistant messages) in the answer. */
     calls: number;
 };
 
 /** Sums the usage of the assistant messages of one answer. */
-export function answerUsage(messages: Pick<StoredMessage, 'message' | 'cost' | 'peak'>[]): AnswerUsage | undefined {
+export function answerUsage(messages: Pick<StoredMessage, 'message'>[]): AnswerUsage | undefined {
     const answers = messages.filter((m) => m.message.role === 'assistant');
     if (!answers.length) return undefined;
     const u: AnswerUsage = { input: 0, output: 0, cacheRead: 0, calls: answers.length };
-    let cost: number | undefined;
-    let flat: number | undefined;
     for (const m of answers) {
         const us: Usage | undefined = m.message.usage;
         u.input += us?.input ?? 0;
         u.output += us?.output ?? 0;
         u.cacheRead += us?.cacheRead ?? 0;
-        if (typeof m.cost === 'number') cost = (cost ?? 0) + m.cost;
-        const f = us?.cost?.total;
-        if (typeof f === 'number') flat = (flat ?? 0) + f;
     }
-    if (cost !== undefined) u.cost = round(cost);
-    else if (flat !== undefined) u.flatCost = round(flat);
-    u.tariff = tariffOf(answers.map((m) => m.peak));
     return u;
 }
 
-/** "1,234 in · 567 out · 8,900 cache · $0.0012 · off-peak tariff" for the muted line under an answer. */
+/** "1,234 in · 567 out · 8,900 cache" for the muted line under an answer. */
 export function formatAnswerUsage(u: AnswerUsage): string {
     const parts = [`${formatTokens(u.input)} in`, `${formatTokens(u.output)} out`];
     if (u.cacheRead) parts.push(`${formatTokens(u.cacheRead)} cache`);
-    if (u.cost !== undefined) parts.push(formatUsd(u.cost));
-    else if (u.flatCost !== undefined) parts.push(`≈ ${formatUsd(u.flatCost)}`);
-    if (u.tariff) parts.push(TARIFF_LABEL[u.tariff]);
     return parts.join(' · ');
-}
-
-/** Cost of a chat: total by the proxy, of it outside the main answers, and the number of model calls. */
-export function costSplit(chat: Pick<Chat, 'cost' | 'cost_other' | 'llm_calls'>) {
-    const total = chat.cost ?? 0;
-    const other = chat.cost_other ?? 0;
-    return { total, other, main: Math.max(0, round(total - other)), calls: chat.llm_calls ?? 0 };
 }
 
 /** Share of input served from the cache, cacheRead / (input + cacheRead); undefined without input. */
@@ -222,5 +170,3 @@ export function cacheHitRate(input: number | undefined, cacheRead: number | unde
     const total = (input ?? 0) + (cacheRead ?? 0);
     return total > 0 ? (cacheRead ?? 0) / total : undefined;
 }
-
-const round = (v: number) => Math.round(v * 1e9) / 1e9;

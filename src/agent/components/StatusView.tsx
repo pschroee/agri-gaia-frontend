@@ -28,7 +28,6 @@ import {
     approvalSubject,
     Check,
     formatAgo,
-    formatPrice,
     gatewayCheck,
     modelRows,
     platformChecks,
@@ -429,7 +428,7 @@ export default function StatusView({
             </section>
 
             <section data-testid="agent-status-models">
-                <SectionTitle aside="Prices per 1M tokens in the tariff in effect now">Models</SectionTitle>
+                <SectionTitle>Models</SectionTitle>
                 {models.length === 0 ? (
                     <Empty>The gateway offers no models.</Empty>
                 ) : (
@@ -439,10 +438,6 @@ export default function StatusView({
                                 <TableCell sx={headSx}>Model</TableCell>
                                 <TableCell sx={headSx}>Provider</TableCell>
                                 <TableCell sx={{ ...headSx, textAlign: 'right' }}>Context window</TableCell>
-                                <TableCell sx={{ ...headSx, textAlign: 'right' }}>Input</TableCell>
-                                <TableCell sx={{ ...headSx, textAlign: 'right' }}>Cached input</TableCell>
-                                <TableCell sx={{ ...headSx, textAlign: 'right' }}>Output</TableCell>
-                                <TableCell sx={headSx}>Tariff now</TableCell>
                                 <TableCell sx={headSx}>Thinking levels</TableCell>
                             </TableRow>
                         </TableHead>
@@ -476,40 +471,6 @@ export default function StatusView({
                                     </TableCell>
                                     <TableCell>{m.provider}</TableCell>
                                     <TableCell sx={numSx}>{m.window ? formatTokensShort(m.window) : '–'}</TableCell>
-                                    <TableCell sx={numSx}>{formatPrice(m.input)}</TableCell>
-                                    <TableCell sx={numSx}>{formatPrice(m.cacheRead)}</TableCell>
-                                    <TableCell sx={numSx}>{formatPrice(m.output)}</TableCell>
-                                    <TableCell>
-                                        {m.tariff ? (
-                                            <Tooltip
-                                                title={m.peakHours ? `Peak hours (local time): ${m.peakHours}` : ''}
-                                            >
-                                                <Box
-                                                    component="span"
-                                                    sx={{
-                                                        whiteSpace: 'nowrap',
-                                                        color:
-                                                            m.tariff === 'peak'
-                                                                ? agentColors.amberText
-                                                                : agentColors.ok,
-                                                    }}
-                                                >
-                                                    {m.tariff === 'peak'
-                                                        ? 'Peak'
-                                                        : `Off-peak ×${Math.round((m.offpeakFactor ?? 1) * 100) / 100}`}
-                                                </Box>
-                                            </Tooltip>
-                                        ) : (
-                                            <Box component="span" sx={{ color: 'text.secondary' }}>
-                                                Flat
-                                            </Box>
-                                        )}
-                                        {m.peakHours && (
-                                            <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-                                                peak {m.peakHours}
-                                            </Typography>
-                                        )}
-                                    </TableCell>
                                     <TableCell sx={{ color: m.levels.length ? 'text.primary' : 'text.secondary' }}>
                                         {m.levels.length ? m.levels.map(effortLabel).join(', ') : 'not known yet'}
                                     </TableCell>
