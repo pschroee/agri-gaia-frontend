@@ -6,7 +6,7 @@ import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
 
-import { RUN_STATE_HINT, RUN_STATE_LABEL, RUN_STATE_SHORT, formatElapsed, isRunning } from '../runState';
+import { RUN_STATE_HINT, formatElapsed, isLoading, isRunning, runStateText } from '../runState';
 import type { RunState } from '../runState';
 import { useNow } from '../useNow';
 import { agentColors } from './tokens';
@@ -14,15 +14,17 @@ import { agentColors } from './tokens';
 export const RUN_STATE_COLOR: Record<RunState, string> = {
     working: agentColors.green,
     waiting: agentColors.amberText,
-    starting: agentColors.green,
-    resuming: agentColors.green,
+    // loading is subtle: grey, the steps show in the transcript
+    starting: agentColors.muted,
+    resuming: agentColors.muted,
+    // never shown (issue #35)
     idle: agentColors.ok,
 };
 
 /** Dot or spinner in front of the state. Working pulses. */
 export function RunStateIcon({ state, size = 8 }: { state: RunState; size?: number }) {
     const color = RUN_STATE_COLOR[state];
-    if (state === 'resuming' || state === 'starting') return <CircularProgress size={size + 3} sx={{ color, flex: 'none' }} />;
+    if (isLoading(state)) return <CircularProgress size={size + 3} sx={{ color, flex: 'none' }} />;
     return (
         <Box
             component="span"
@@ -32,8 +34,7 @@ export function RunStateIcon({ state, size = 8 }: { state: RunState; size?: numb
                 width: size,
                 height: size,
                 borderRadius: '50%',
-                bgcolor: state === 'idle' ? 'transparent' : color,
-                border: state === 'idle' ? `1.5px solid ${color}` : undefined,
+                bgcolor: color,
                 boxSizing: 'border-box',
                 ...(isRunning(state) && {
                     animation: 'agentRunPulse 1.6s ease-in-out infinite',
@@ -59,17 +60,20 @@ export function Elapsed({ since }: { since?: number }) {
 }
 
 type Props = {
-    state: RunState;
+    state: RunState | undefined;
     /** Start of the running turn (ms), for the timer. */
     since?: number;
-    /** Lower-case short label for lists. */
-    short?: boolean;
-    /** Framed chip (panel header) instead of plain text (lists); its waiting label is shorter ("needs approval"). */
+    /** Framed chip (panel header, chat header) instead of plain text (lists); its waiting label is shorter. */
     framed?: boolean;
 };
 
-/** State of a chat with its timer, for the chat list, the chat selector and the panel header. */
-export default function RunStateChip({ state, since, short = false, framed = false }: Props) {
+/**
+ * State of a chat with its timer, for the chat list, the chat selector, the panel header and the chat header of
+ * /ai-agent. Renders nothing for a ready chat (issue #35): only working, waiting for approval and loading show.
+ */
+export default function RunStateChip({ state, since, framed = false }: Props) {
+    const label = runStateText(state, framed ? 'header' : 'list');
+    if (!state || !label) return null;
     const color = RUN_STATE_COLOR[state];
     const running = isRunning(state);
     return (
@@ -87,7 +91,7 @@ export default function RunStateChip({ state, since, short = false, framed = fal
                     minWidth: 0,
                     boxSizing: 'border-box',
                     fontSize: framed ? 12 : 11,
-                    color: state === 'idle' ? 'text.secondary' : color,
+                    color,
                     ...(framed && {
                         border: 1,
                         borderColor: state === 'waiting' ? agentColors.amberLine : 'divider',
@@ -100,11 +104,7 @@ export default function RunStateChip({ state, since, short = false, framed = fal
             >
                 <RunStateIcon state={state} size={framed ? 8 : 7} />
                 <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {framed && state === 'waiting'
-                        ? 'needs approval'
-                        : short
-                        ? RUN_STATE_SHORT[state]
-                        : RUN_STATE_LABEL[state]}
+                    {label}
                 </Box>
                 {running && since !== undefined && (
                     <Box component="span" sx={{ flex: 'none', display: 'inline-flex', gap: 0.6 }}>

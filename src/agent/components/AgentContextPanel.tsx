@@ -19,7 +19,7 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { useAgent } from '../AgentContext';
 import { expandToAgentPage } from '../expand';
 import { sectionOf } from '../format';
-import { isRunning, runSince, runStateOf } from '../runState';
+import { isRunning, runSince, runStateOf, runStateText } from '../runState';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
@@ -65,9 +65,9 @@ function ChatSelector() {
                             <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', minWidth: 0 }}>
                                 {c.title || 'Untitled chat'}
                             </Box>
-                            {state && state !== 'idle' && (
+                            {runStateText(state, 'list') && (
                                 <Box component="span" sx={{ ml: 'auto', flex: 'none', display: 'inline-flex' }}>
-                                    <RunStateChip state={state} short />
+                                    <RunStateChip state={state} />
                                 </Box>
                             )}
                             {c.pending_approvals > 0 && state !== 'waiting' && (
@@ -139,9 +139,10 @@ export default function AgentContextPanel() {
                         </Typography>
                     )}
                     {/* the chip is the part of the header that gives way on long runs; the close button always stays */}
-                    {selectedState && (
+                    {/* only while something happens (issue #35): no chip for a ready chat */}
+                    {runStateText(selectedState, 'header') && (
                         <Box data-testid="agent-panel-state" sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}>
-                            <RunStateChip state={selectedState} since={runSince(selected)} short framed />
+                            <RunStateChip state={selectedState} since={runSince(selected)} framed />
                         </Box>
                     )}
                     {selected && (

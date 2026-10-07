@@ -95,7 +95,7 @@ function History() {
                             }}
                         >
                             <span>{formatRelativeDay(c.updated_at)}</span>
-                            {state && <RunStateChip state={state} since={runSince(c)} short />}
+                            <RunStateChip state={state} since={runSince(c)} />
                             {c.pending_approvals > 0 && state !== 'waiting' && (
                                 <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
                             )}
@@ -107,11 +107,12 @@ function History() {
     );
 }
 
-/** Head of the open chat: title, internet switch, context ring, tokens and cost. */
+/** Head of the open chat: title, run state while something happens, internet switch, context ring, tokens and cost. */
 function ChatHeader() {
     const { chats, selectedChatId, compacting } = useAgent();
     const chat = chats.find((c) => c.id === selectedChatId);
     if (!chat) return null;
+    const state = runStateOf(chat);
     return (
         <Box
             data-testid="agent-chat-header"
@@ -130,6 +131,8 @@ function ChatHeader() {
             >
                 {chat.title || 'Untitled chat'}
             </Typography>
+            {/* the same chip as in the panel header, only while something happens (issue #35) */}
+            <RunStateChip state={state} since={runSince(chat)} framed />
             <InternetToggle chat={chat} />
             <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
             <ChatCost chat={chat} tokens />

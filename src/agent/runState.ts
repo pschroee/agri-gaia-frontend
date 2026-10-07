@@ -4,7 +4,8 @@
 
 // Run state of a chat for the status line, the chat list and the panel header, plus the texts of the run control
 // (stop). Pure functions, unit-tested. The gateway's idle state (`dormant`: session saved, sandbox released after
-// AGW_IDLE_TIMEOUT) is never shown (issue #31): such a chat counts as idle, and opening it resumes it at once.
+// AGW_IDLE_TIMEOUT) is never shown (issue #31): such a chat counts as idle, and opening it resumes it at once. Idle
+// itself is not shown either (issue #35): a state appears only while something happens (`runStateText`).
 
 import type { Chat, StoredMessage } from './types';
 import type { PageContext } from './pageContext';
@@ -38,22 +39,38 @@ export function runStateOf(
     return 'idle';
 }
 
-export const RUN_STATE_LABEL: Record<RunState, string> = {
-    working: 'Working',
-    waiting: 'Waiting for approval',
-    starting: 'Starting',
-    resuming: 'Resuming',
-    idle: 'Idle',
+/**
+ * Where a state can show: `header` is the chip in the panel header and the chat header of /ai-agent, `list` the
+ * history list and the panel's chat selector, `bar` the status bar above the input.
+ */
+export type StatePlace = 'header' | 'list' | 'bar';
+
+/** Loading the chat into a sandbox, for a dormant chat (resuming) or a new one without a warm slot (starting). */
+export const isLoading = (s: RunState | undefined) => s === 'starting' || s === 'resuming';
+
+/** Does the state count as a running turn (timer, stop button)? */
+export const isRunning = (s: RunState | undefined) => s === 'working' || s === 'waiting';
+
+const TEXT: Record<StatePlace, Partial<Record<RunState, string>>> = {
+    header: { working: 'working', waiting: 'needs approval', starting: 'loading', resuming: 'loading' },
+    list: { working: 'working', waiting: 'waiting for approval', starting: 'loading', resuming: 'loading' },
+    // loading has its steps in the transcript (ResumeBlock, "Starting a sandbox …"), not in the bar
+    bar: { working: 'Working', waiting: 'Waiting for approval' },
 };
 
-/** Short label for chat lists (lower case, next to the date). */
-export const RUN_STATE_SHORT: Record<RunState, string> = {
-    working: 'working',
-    waiting: 'waiting for approval',
-    starting: 'starting',
-    resuming: 'resuming',
-    idle: 'active',
-};
+/**
+ * Label of a state at a place, or nothing when the place shows no state (issue #35). A state shows only while
+ * something happens: a ready chat (the gateway's `active` or `dormant`, nothing running) shows nowhere, there is no
+ * "active" or "Idle". Loading shows as "loading" in header and lists, its steps in the transcript; working and
+ * waiting show everywhere. Errors are not a run state: a failed resume stays in its block in the transcript, a failed
+ * stop in the status bar (`showRunStatus`).
+ */
+export function runStateText(state: RunState | undefined, place: StatePlace): string | undefined {
+    return state ? TEXT[place][state] : undefined;
+}
+
+/** Is the status bar above the input open? While a turn runs, and as long as a failed stop has its message. */
+export const showRunStatus = (state: RunState | undefined, error?: string) => isRunning(state) || !!error;
 
 export const RUN_STATE_HINT: Record<RunState, string> = {
     working: 'The agent works on your request. Messages you send now are queued.',
@@ -62,9 +79,6 @@ export const RUN_STATE_HINT: Record<RunState, string> = {
     resuming: 'The chat is being loaded into a sandbox. You can type already: your message goes to the agent once it is ready.',
     idle: 'Ready for your next message.',
 };
-
-/** Does the state count as a running turn (timer, stop button)? */
-export const isRunning = (s: RunState | undefined) => s === 'working' || s === 'waiting';
 
 /**
  * Start of the running turn in ms: the gateway's `running_since`, otherwise the time of the last user message

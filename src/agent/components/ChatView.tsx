@@ -197,9 +197,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     onRemove={stream.unqueue}
                     onSendNow={stream.sendQueueNow}
                 />
-                {runState && (
-                    <RunStatus state={runState} since={since} onAbort={stream.abort} />
-                )}
+                {/* open only while a turn runs (issue #35) */}
+                <RunStatus state={runState} since={since} onAbort={stream.abort} />
                 <ChatInput
                     onSend={onSend}
                     onUpload={stream.uploadFiles}
