@@ -405,8 +405,15 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   use the page's web fonts, while mermaid measures labels in the page), compact spacing for the 400 px panel; `secure`
   stops `%%{init}%%` from changing any of it. The SVG is sanitized a second time (no script, no outside references)
   and shown as a `data:` `<img>`: it fits the width, a click or "Enlarge" opens a dialog (up to twice the natural size,
-  SVG download), "Code" toggles the source. A render error shows the code with a short note (line number, full message
-  as tooltip). While an answer streams (`streaming` on `Markdown`, the live `AgentBlock`), a block renders only once
+  SVG download), "Code" toggles the source. A render error shows a short note (line number, full message as tooltip)
+  with the source collapsed under "Show source" and a "Copy" button (issue #59). **HTML in flowchart labels is
+  tolerated** (`tolerateHtmlLabels`, issue #59): `<br>`, `<br/>`, `<br />` in node labels (all shapes, subgraph titles)
+  and `|…|` edge labels become a real line break of a quoted label, other tags are removed, nothing outside labels and
+  nothing in other diagram types changes; if the adjusted source still fails, the original is rendered so the error's
+  line number matches what the user sees. Measured with mermaid 12 in strict mode without HTML labels: `<br/>` alone
+  already breaks lines and `<b>` shows literally; what fails to parse are brackets or quotes in unquoted labels
+  (`A[Training (CPU)]`), which quoting the label fixes. `#quot;` renders literally as `&quot;`, so a stray `"` becomes
+  `'`. While an answer streams (`streaming` on `Markdown`, the live `AgentBlock`), a block renders only once
   its closing fence has arrived (`readFence`, CommonMark rules: same character, at least as long); stored answers render
   unclosed blocks too. Large diagrams (over 4000 characters or 150 edges) and the sixth diagram of an answer onwards
   render only on click. Diagrams the agent renders itself with `mmdc` arrive as PNG display images (see *Files*).
