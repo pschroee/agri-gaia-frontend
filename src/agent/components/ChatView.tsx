@@ -242,7 +242,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
             >
                 {/* read-only: no input and no stop per subagent; the chat's input stays mounted (hidden), so a draft
                     and staged files are still there after "Back to chat" */}
-                {subRun && subStatus && <SubagentReadOnlyBar status={subStatus} onBack={backToChat} />}
+                {subRun && subStatus && <SubagentReadOnlyBar onBack={backToChat} />}
                 <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
                     <QueueList
                         chat={stream.chat}
