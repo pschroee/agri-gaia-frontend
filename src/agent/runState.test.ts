@@ -12,8 +12,8 @@ import {
     RUN_STATE_HINT,
     RUN_STATE_LABEL,
     runSince,
+    RUN_STATE_SHORT,
     runStateOf,
-    suspendErrorText,
 } from './runState';
 import type { Chat, StoredMessage } from './types';
 
@@ -45,10 +45,19 @@ describe('runStateOf', () => {
         expect(RUN_STATE_HINT.starting).toMatch(/type already/);
     });
 
-    it('distinguishes idle, working and dormant', () => {
+    it('distinguishes idle and working', () => {
         expect(runStateOf(chat())).toBe('idle');
         expect(runStateOf(chat({ running: true }))).toBe('working');
-        expect(runStateOf(chat({ state: 'dormant' }))).toBe('dormant');
+    });
+
+    it('never shows the idle state of the gateway (issue #31): a dormant chat counts as idle', () => {
+        expect(runStateOf(chat({ state: 'dormant' }))).toBe('idle');
+        const texts = [
+            ...Object.values(RUN_STATE_LABEL),
+            ...Object.values(RUN_STATE_SHORT),
+            ...Object.values(RUN_STATE_HINT),
+        ].join(' ');
+        expect(texts).not.toMatch(/rest|dormant|sleep/i);
     });
 
     it('is waiting while a running turn has an open approval', () => {
@@ -64,7 +73,7 @@ describe('runStateOf', () => {
 
     it('shows an open approval of an active chat that is not marked running as waiting', () => {
         expect(runStateOf(chat({ pending_approvals: 2 }))).toBe('waiting');
-        expect(runStateOf(chat({ state: 'dormant', pending_approvals: 2 }))).toBe('dormant');
+        expect(runStateOf(chat({ state: 'dormant', pending_approvals: 2 }))).toBe('idle');
     });
 
     it('is resuming while the gateway rebuilds the sandbox or resume steps come in', () => {
@@ -78,7 +87,6 @@ describe('runStateOf', () => {
         expect(isRunning('waiting')).toBe(true);
         expect(isRunning('resuming')).toBe(false);
         expect(isRunning('idle')).toBe(false);
-        expect(isRunning('dormant')).toBe(false);
         expect(isRunning(undefined)).toBe(false);
     });
 });
@@ -124,18 +132,7 @@ describe('formatElapsed', () => {
 });
 
 describe('error texts', () => {
-    it('explains a refused rest with an open approval', () => {
-        const t = suspendErrorText(409, 'chat has a pending approval');
-        expect(t).toMatch(/approval is open/);
-        expect(t).toMatch(/Approve or reject it first/);
-    });
-
-    it('explains a refused rest while the agent works', () => {
-        expect(suspendErrorText(409, 'agent is working')).toMatch(/The agent is working/);
-    });
-
     it('passes other failures on', () => {
-        expect(suspendErrorText(500, 'boom')).toBe('Could not let the chat rest: boom');
         expect(abortErrorText(500, 'boom')).toBe('Stopping failed: boom');
         expect(abortErrorText(409, 'not running')).toBe('The agent had already stopped.');
     });

@@ -253,8 +253,10 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
  * gateway's response (`queued`) decides.
  */
 export function expectQueued(chat: Pick<Chat, 'running' | 'resuming' | 'starting'> | undefined): boolean {
-    // a new chat waiting for its sandbox takes the message directly (the gateway holds it until the sandbox is there)
-    return !!chat?.running || (!!chat?.resuming && !chat?.starting);
+    // a chat being resumed or started takes the message directly: the gateway holds it until the sandbox is there
+    // (issue #30 for new chats, #31 for the resume on opening). Only a second message during a resume that a message
+    // triggered is queued; the answer (`queued`) moves it into the queue then.
+    return !!chat?.running;
 }
 
 /** Single-line preview of a queued text. */

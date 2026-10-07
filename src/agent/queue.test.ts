@@ -167,14 +167,14 @@ describe('held state and texts', () => {
         expect(isHeld(undefined)).toBe(false);
     });
 
-    it('expects queueing while the agent runs or is resumed', () => {
+    it('expects queueing only while the agent runs', () => {
         expect(expectQueued({ running: true })).toBe(true);
-        expect(expectQueued({ running: false, resuming: true })).toBe(true);
+        expect(expectQueued({ running: false, resuming: true })).toBe(false);
         expect(expectQueued({ running: false })).toBe(false);
         expect(expectQueued(undefined)).toBe(false);
     });
 
-    it('sends directly to a new chat waiting for its sandbox (the gateway holds the message, it is not queued)', () => {
+    it('sends directly to a chat being resumed or started (the gateway holds the message, it is not queued)', () => {
         expect(expectQueued({ running: false, resuming: true, starting: true })).toBe(false);
     });
 

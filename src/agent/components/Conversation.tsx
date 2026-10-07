@@ -332,23 +332,35 @@ export default function Conversation({
         }),
         [runningTools, stopTool, backgroundTool, background],
     );
-    // resume blocks sit after the user message that triggered them; not stored yet: at the end. The start of a new
-    // chat's first sandbox comes before everything.
+    // resume blocks sit after the user message that triggered them; not stored yet: at the end. A resume on opening
+    // the chat sits where it started, before anything stored later and before a message still on its way. The start of
+    // a new chat's first sandbox comes before everything.
     const placed = useMemo(() => {
         const after = new Map<number, ResumeView[]>();
+        const before = new Map<number, ResumeView[]>();
         const end: ResumeView[] = [];
+        const beforePending: ResumeView[] = [];
         const top: ResumeView[] = [];
         for (const r of resumes) {
             if (r.start) {
                 top.push(r);
                 continue;
             }
+            if (r.opened) {
+                const i = noticeAnchor(items, r.afterSeq);
+                if (i < 0) beforePending.push(r);
+                else before.set(i, [...(before.get(i) ?? []), r]);
+                continue;
+            }
             const i = resumeAnchor(items, r);
             if (i < 0) end.push(r);
             else after.set(i, [...(after.get(i) ?? []), r]);
         }
-        return { after, end, top };
+        return { after, before, end, beforePending, top };
     }, [items, resumes]);
+    // only the latest resume can be tried again; an earlier failed one stays visible as history
+    const lastResume = resumes[resumes.length - 1]?.id;
+    const retryOf = (r: ResumeView) => (r.id === lastResume ? stream.retryResume : undefined);
     const resuming = resumeRunning(resumes);
     // command notes sit before the first message stored after the command ran; nothing stored since: at the end
     const notes = useMemo(() => {
@@ -373,7 +385,7 @@ export default function Conversation({
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 1.5 : 1.75 }}>
             {placed.top.map((r) => (
-                <ResumeBlock key={`resume-${r.id}`} resume={r} />
+                <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
             ))}
             {/* a new chat waiting for its sandbox, before the first step arrives over SSE */}
             {chat?.starting && resumes.length === 0 && (
@@ -399,6 +411,9 @@ export default function Conversation({
             {items.map((it, i) => (
                 <Fragment key={it.key}>
                     {notes.before.get(i)?.map((n) => <CommandLine key={n.key} notice={n} />)}
+                    {placed.before.get(i)?.map((r) => (
+                        <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
+                    ))}
                     {it.kind === 'user' ? (
                         <UserBubble
                             text={it.text}
@@ -418,8 +433,13 @@ export default function Conversation({
                     ) : (
                         <AgentBlock item={it} dense={dense} thinking={thinking} chatId={chat?.id} controls={controls} />
                     )}
-                    {placed.after.get(i)?.map((r) => <ResumeBlock key={`resume-${r.id}`} resume={r} />)}
+                    {placed.after.get(i)?.map((r) => (
+                        <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
+                    ))}
                 </Fragment>
+            ))}
+            {placed.beforePending.map((r) => (
+                <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
             ))}
             {pending && (
                 <UserBubble
@@ -438,7 +458,7 @@ export default function Conversation({
                 />
             )}
             {placed.end.map((r) => (
-                <ResumeBlock key={`resume-${r.id}`} resume={r} />
+                <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
             ))}
             {notes.end.map((n) => (
                 <CommandLine key={n.key} notice={n} />

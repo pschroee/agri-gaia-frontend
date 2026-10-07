@@ -21,8 +21,8 @@ describe('internetHint', () => {
         expect(internetHint({ internet: false, state: 'active' })).toMatch(/^Internet access off.*ask for internet/);
     });
     it('says when a change reaches a dormant chat', () => {
-        expect(internetHint({ internet: false, state: 'dormant' })).toMatch(/when the chat resumes\.$/);
-        expect(internetHint({ internet: false, state: 'active' })).not.toMatch(/resumes/);
+        expect(internetHint({ internet: false, state: 'dormant' })).toMatch(/once the chat has loaded\.$/);
+        expect(internetHint({ internet: false, state: 'active' })).not.toMatch(/loaded/);
     });
 });
 
@@ -65,10 +65,10 @@ describe('compactNowState', () => {
         expect(compactNowState(idle, undefined, true).disabled).toBe(true);
         expect(compactNowState(undefined, undefined).disabled).toBe(true);
     });
-    it('says that a dormant chat resumes first', () => {
+    it('says that a chat the gateway let idle loads first', () => {
         const s = compactNowState({ ...idle, state: 'dormant' }, undefined);
         expect(s.disabled).toBe(false);
-        expect(s.hint).toMatch(/Resumes the chat/);
+        expect(s.hint).toMatch(/Loads the chat/);
     });
 });
 

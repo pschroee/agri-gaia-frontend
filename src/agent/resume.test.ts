@@ -13,6 +13,7 @@ import {
     resumeAnchor,
     resumeRunning,
     resumeSummary,
+    shouldResumeOnOpen,
     stepDetail,
 } from './resume';
 import type { ResumeView } from './resume';
@@ -105,7 +106,7 @@ describe('start of a new chat', () => {
         expect(resumeSummary(r, formatMs)).toBe('Starting a sandbox for the chat …');
         expect(resumeSummary({ ...r, state: 'done', totalMs: 16200 }, formatMs)).toBe('Started in a fresh sandbox · 16.2 s');
         expect(resumeSummary({ ...r, state: 'failed', error: 'No free slot in the pool' }, formatMs)).toBe(
-            'Starting the sandbox failed: No free slot in the pool. Your next message tries again.',
+            'Starting the sandbox failed: No free slot in the pool',
         );
     });
 
@@ -175,5 +176,36 @@ describe('resumeAnchor', () => {
     it('places it at the end while that message is not stored yet', () => {
         expect(resumeAnchor(items, { afterSeq: 9 })).toBe(-1);
         expect(resumeAnchor([{ kind: 'agent' }], { afterSeq: 0 })).toBe(-1);
+    });
+});
+
+describe('resume on opening the chat (issue #31)', () => {
+    it('marks a resume started by opening the chat, and keeps the mark for its later steps', () => {
+        let l = applyResumeStep([], step('acquire', 'running'), 4, true);
+        l = applyResumeStep(l, step('acquire', 'done'), 6);
+        l = applyResumeStep(l, step('ready', 'done', { ms: 3100 }), 6);
+        expect(l).toHaveLength(1);
+        expect(l[0]).toMatchObject({ opened: true, afterSeq: 4, state: 'done', totalMs: 3100 });
+        expect(run([step('acquire', 'running')])[0].opened).toBeUndefined();
+    });
+
+    it('resumes only a chat the gateway let idle, once per opened view', () => {
+        expect(shouldResumeOnOpen({ state: 'dormant' }, false)).toBe(true);
+        expect(shouldResumeOnOpen({ state: 'dormant' }, true)).toBe(false);
+        expect(shouldResumeOnOpen({ state: 'active' }, false)).toBe(false);
+        expect(shouldResumeOnOpen({ state: 'dormant', resuming: true }, false)).toBe(false);
+        expect(shouldResumeOnOpen({ state: 'dormant', resuming: true, starting: true }, false)).toBe(false);
+        expect(shouldResumeOnOpen(undefined, false)).toBe(false);
+    });
+
+    it('never mentions resting in its texts', () => {
+        const [r] = run([step('acquire', 'running')]);
+        const texts = [
+            resumeSummary(r, formatMs),
+            resumeSummary({ ...r, state: 'done', totalMs: 9000 }, formatMs),
+            resumeSummary({ ...r, state: 'failed', error: 'x' }, formatMs),
+            resumeSummary({ ...r, start: true }, formatMs),
+        ].join(' ');
+        expect(texts).not.toMatch(/rest\b|resting|dormant/i);
     });
 });

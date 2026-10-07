@@ -570,7 +570,7 @@ export type ResumeStep = {
     files?: number;
     at: string;
     ms?: number;
-    /** The first sandbox of a new chat (created with `async`), not a resume of a resting chat. */
+    /** The first sandbox of a new chat (created with `async`), not a resume of an idle chat. */
     start?: boolean;
 };
 

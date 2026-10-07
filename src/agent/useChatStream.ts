@@ -23,7 +23,7 @@ import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
 import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
 import type { QueueRow } from './queue';
-import { applyResumeStep, closeResumes } from './resume';
+import { applyResumeStep, closeResumes, shouldResumeOnOpen } from './resume';
 import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
@@ -71,9 +71,9 @@ export type ChatStream = {
     live?: LiveMessage;
     /** Thinking blocks measured while streaming, by thinkingKey (pi stores no timing). */
     thinkingTimes: Record<string, ThinkingTime>;
-    /** Resumes of a dormant chat seen live in this view (SSE "resume"), in order. */
+    /** Resumes (and starts) of the chat seen live in this view (SSE "resume"), in order. */
     resumes: ResumeView[];
-    /** Sent outside the queue, not stored yet (e.g. while a dormant chat resumes). */
+    /** Sent outside the queue, not stored yet (e.g. while the chat is being resumed). */
     pending?: PendingSend;
     /** Compaction running right now (SSE compaction_start until compaction_end), seen live in this view. */
     compacting?: Compacting;
@@ -92,8 +92,8 @@ export type ChatStream = {
     sendQueueNow: () => Promise<void>;
     /** Stops the running turn; queued entries are held afterwards. Throws AgentApiError. */
     abort: () => Promise<void>;
-    /** Lets the chat rest (409 with an open approval or while running). Throws AgentApiError. */
-    suspend: () => Promise<void>;
+    /** Resumes the chat again after a failed resume or start (POST …/resume); a failure lands in `error`. */
+    retryResume: () => Promise<void>;
     decide: (approval: Approval, approve: boolean) => Promise<void>;
     /** Switches the model; with compactFirst after a compaction (pending_model until then). Throws AgentApiError. */
     setModel: (model: string, compactFirst?: boolean) => Promise<void>;
@@ -158,6 +158,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string>();
     const [connected, setConnected] = useState(false);
+    // the stream has been open once for this chat (or did not open within a moment): resume steps can be shown
+    const [streamReady, setStreamReady] = useState(false);
     const [queueState, dispatchQueue] = useReducer(queueReducer, emptyQueue);
     const [queueError, setQueueError] = useState<string>();
     const [resumes, setResumes] = useState<ResumeView[]>([]);
@@ -178,6 +180,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     chatRef.current = chat;
     const messagesRef = useRef<StoredMessage[]>([]);
     messagesRef.current = messages;
+    // resume on opening (issue #31): requested once per opened chat; `resumeAsked` marks the next resume that shows
+    // up over SSE as started by opening (or by retrying), so it sits before a message typed meanwhile
+    const resumeRequested = useRef(false);
+    const resumeAsked = useRef(false);
 
     const load = useCallback(async (clearLive?: 'ended' | 'all') => {
         if (!chatId) return;
@@ -264,6 +270,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setSubagentEntries([]);
         setSubagentRuns([]);
         setLLMCalls([]);
+        resumeRequested.current = false;
+        resumeAsked.current = false;
+        setStreamReady(false);
         if (!chatId) return;
 
         let stopped = false;
@@ -278,6 +287,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             () => undefined, // without the list only the suggestions are missing; typing a command still works
         );
 
+        // without a stream the chat is resumed anyway, only its steps are not shown live
+        const readyTimer = setTimeout(() => !stopped && setStreamReady(true), 2000);
+
         const connect = () => {
             if (stopped) return;
             es = new EventSource(eventsUrl(chatId), { withCredentials: true });
@@ -285,6 +297,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                 if (attempt > 0) void load();
                 attempt = 0;
                 setConnected(true);
+                setStreamReady(true);
             };
             es.onmessage = (msg: MessageEvent<string>) => {
                 let ev: ServerEvent;
@@ -348,7 +361,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     }
                     case 'resume': {
                         const step = ev.data as ResumeStep;
-                        setResumes((l) => applyResumeStep(l, step, lastSeq(messagesRef.current)));
+                        const opened = resumeAsked.current && !step.start;
+                        if (opened) resumeAsked.current = false;
+                        setResumes((l) => applyResumeStep(l, step, lastSeq(messagesRef.current), opened));
                         break;
                     }
                     case 'tool_execution':
@@ -391,6 +406,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
 
         return () => {
             stopped = true;
+            clearTimeout(readyTimer);
             if (retry) clearTimeout(retry);
             if (reloadTimer.current) clearTimeout(reloadTimer.current);
             if (runningTimer.current) clearTimeout(runningTimer.current);
@@ -559,10 +575,30 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         scheduleReload('all');
     }, [chatId, scheduleReload]);
 
-    const suspend = useCallback(async () => {
+    const requestResume = useCallback(async () => {
         if (!chatId) return;
-        setChat(await agentApi.suspend(chatId));
+        resumeAsked.current = true;
+        try {
+            // the state comes over SSE ("chat" when the resume begins and ends); the answer may already be older
+            await agentApi.resume(chatId);
+        } catch (e) {
+            resumeAsked.current = false;
+            // an older gateway without the route: the next message resumes the chat as before
+            if (errStatus(e) !== 404) setError(`Loading the chat failed: ${errText(e)}`);
+        }
     }, [chatId]);
+
+    // a chat the gateway let idle is resumed as soon as it is opened, once the stream is there to show the steps
+    useEffect(() => {
+        if (!streamReady || !shouldResumeOnOpen(chat, resumeRequested.current)) return;
+        resumeRequested.current = true;
+        void requestResume();
+    }, [chat, streamReady, requestResume]);
+
+    const retryResume = useCallback(async () => {
+        resumeRequested.current = true;
+        await requestResume();
+    }, [requestResume]);
 
     const setModel = useCallback(
         async (model: string, compactFirst = false) => {
@@ -663,7 +699,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         unqueue,
         sendQueueNow,
         abort,
-        suspend,
+        retryResume,
         decide,
         setModel,
         setEffort,

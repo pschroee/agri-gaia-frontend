@@ -5,6 +5,7 @@
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
@@ -88,11 +89,21 @@ function Steps({ steps }: { steps: ResumeStepView[] }) {
 }
 
 /**
- * Resuming a dormant chat in the transcript: while it runs (or when it failed) a block with the steps live;
- * afterwards one line that can be expanded again.
+ * Resuming a chat (or starting its first sandbox) in the transcript: while it runs (or when it failed) a block with the
+ * steps live; afterwards one line that can be expanded again. A failed one offers "Try again" (`onRetry`).
  */
-export default function ResumeBlock({ resume }: { resume: ResumeView }) {
+export default function ResumeBlock({ resume, onRetry }: { resume: ResumeView; onRetry?: () => Promise<void> }) {
     const [open, setOpen] = useState(false);
+    const [retrying, setRetrying] = useState(false);
+    const retry = async () => {
+        if (!onRetry) return;
+        setRetrying(true);
+        try {
+            await onRetry();
+        } finally {
+            setRetrying(false);
+        }
+    };
     const summary = resumeSummary(resume, formatMs);
 
     if (resume.state === 'done') {
@@ -170,16 +181,39 @@ export default function ResumeBlock({ resume }: { resume: ResumeView }) {
             </Box>
             {!failed && (
                 <Typography sx={{ fontSize: 11.5, color: 'text.secondary', mt: 0.25 }}>
-                    The chat was resting; its sandbox is being rebuilt.
+                    {resume.start
+                        ? 'No sandbox was free; one is being started for this chat.'
+                        : 'Loading the chat into a sandbox.'}{' '}
+                    You can type already: your message goes to the agent once it is ready.
                 </Typography>
             )}
             <Box sx={{ mt: 1 }}>
                 <Steps steps={resume.steps} />
             </Box>
             {failed && (
-                <Typography sx={{ fontSize: 11.5, mt: 1 }}>
-                    Your message was not sent and is not lost: it is back in the input field and can be sent again.
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+                    <Typography sx={{ fontSize: 11.5, flex: 1 }}>
+                        Nothing is lost: a message sent meanwhile is back in the input field. Sending tries again too.
+                    </Typography>
+                    {onRetry && (
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            disabled={retrying}
+                            onClick={() => void retry()}
+                            startIcon={
+                                retrying ? (
+                                    <CircularProgress size={12} color="inherit" />
+                                ) : (
+                                    <ReplayIcon sx={{ fontSize: '16px !important' }} />
+                                )
+                            }
+                            sx={{ py: 0, fontSize: 12, flex: 'none', bgcolor: '#fff' }}
+                        >
+                            Try again
+                        </Button>
+                    )}
+                </Box>
             )}
         </Box>
     );

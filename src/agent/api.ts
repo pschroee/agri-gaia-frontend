@@ -132,8 +132,11 @@ export const agentApi = {
     /** Automatic compaction on or off. */
     setAutoCompact: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/autocompact`, { enabled }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
-    /** Lets the chat rest: saves the session and releases the sandbox (409 with an open approval or while running). */
-    suspend: (id: string) => post<Chat>(`chats/${enc(id)}/suspend`),
+    /**
+     * Resumes a chat the gateway let idle, in the background (gateway issue #31); returns at once, steps via SSE
+     * "resume". Harmless for an active, running, starting or resuming chat. 404 on a gateway without the route.
+     */
+    resume: (id: string) => post<Chat>(`chats/${enc(id)}/resume`),
     queue: (id: string) => request<QueueEntry[]>(`chats/${enc(id)}/queue`),
     /** Removes an entry as long as it has not been delivered (409 afterwards, 404 when unknown). */
     unqueue: (id: string, queueId: string) =>

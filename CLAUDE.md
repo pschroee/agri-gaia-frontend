@@ -74,6 +74,16 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (messages plus each tool call). Opening a chat (ChatView is keyed by chat id) and sending jump to the end. The
   decision logic is the pure `stickReducer`, unit-tested; measuring in a render check must wait for a painted frame
   (rAF, then `setTimeout`), because a measurement inside rAF runs before that frame's ResizeObserver.
+- **Idle chats are invisible (issue #31):** the gateway still lets an unused chat idle after `AGW_IDLE_TIMEOUT`
+  (`state: "dormant"`), but the UI never shows it: `runStateOf` maps it to `idle`, there is no "resting" label, icon or
+  hint and no manual "Let it rest" (suspend) button. Opening or selecting such a chat (panel, `/ai-agent`, also on page
+  load) calls `POST /agent/api/chats/{id}/resume` (gateway PR for #31) once per opened view, as soon as the SSE stream
+  has opened (or after 2 s without it): `shouldResumeOnOpen` in `src/agent/resume.ts`. When the gateway lets an open
+  chat idle again later, nothing is requested; the next message resumes it. The steps come over SSE `resume` and show in
+  `ResumeBlock` (live, then a collapsible "Resumed in … s"; a failed one stays with "Try again" on the latest block). A
+  resume on opening is marked `opened` and sits before anything stored later, so a message typed meanwhile follows it;
+  the message is sent at once and the gateway holds it until the sandbox is ready (`expectQueued` is only true while the
+  agent runs). An older gateway without the route answers 404, which is ignored (the next message resumes as before).
 - **Gateway notes:** user messages are split along the gateway's `sources` (`splitMessage` in `src/agent/transcript.ts`);
   a part with `audience: "agent"` (today the preferred browser language of the first message) is context for the model
   only and is cut out (`isAgentOnly`), never shown as user text. Decide by that mark, not by `type` or the text; the

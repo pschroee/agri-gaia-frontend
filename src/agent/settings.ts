@@ -25,7 +25,7 @@ export function internetHint(chat: Pick<Chat, 'internet' | 'state'>): string {
     const base = chat.internet
         ? 'Internet access on: the sandbox can reach the web. The language model and the gateway are always reachable.'
         : 'Internet access off: the sandbox reaches only the language model and the gateway. The agent can ask for internet; you approve it in the chat.';
-    const when = chat.state === 'dormant' ? ' The change takes effect when the chat resumes.' : '';
+    const when = chat.state === 'dormant' ? ' The change takes effect once the chat has loaded.' : '';
     return `${base}${when}`;
 }
 
@@ -45,8 +45,8 @@ export function compactErrorText(e: unknown): string {
 }
 
 /**
- * State of the "Compact now" button. Locked while the agent works or a compaction runs, and while a dormant chat
- * resumes; for a dormant chat the hint says that compacting resumes it first.
+ * State of the "Compact now" button. Locked while the agent works or a compaction runs, and while the chat is being
+ * resumed; for a chat the gateway let idle the hint says that compacting loads it first.
  */
 export function compactNowState(
     chat: Pick<Chat, 'running' | 'resuming' | 'starting' | 'state'> | undefined,
@@ -58,7 +58,7 @@ export function compactNowState(
     if (chat.running) return { disabled: true, hint: 'Only possible while the agent is not working.' };
     if (chat.starting) return { disabled: true, hint: 'The sandbox of the chat is being prepared; nothing to compact yet.' };
     if (chat.resuming) return { disabled: true, hint: 'The chat is resuming; try again in a moment.' };
-    if (chat.state === 'dormant') return { disabled: false, hint: 'Resumes the chat in a sandbox, then compacts.' };
+    if (chat.state === 'dormant') return { disabled: false, hint: 'Loads the chat into a sandbox, then compacts.' };
     return { disabled: false, hint: 'Summarises older parts of the conversation now.' };
 }
 
