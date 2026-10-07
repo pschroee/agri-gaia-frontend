@@ -41,10 +41,10 @@ export function runStateOf(
 
 /**
  * Where a state can show: `header` is the chip in the panel header and the chat header of /ai-agent, `list` the
- * history list and the panel's chat selector, `input` the row below the input field (next to model and thinking
- * level; issue #39, there is no status bar above the input any more).
+ * history list and the panel's chat selector. Since issue #54 the input field shows no state (decision: the state
+ * stays in the header); Stop in the field still says that a turn runs.
  */
-export type StatePlace = 'header' | 'list' | 'input';
+export type StatePlace = 'header' | 'list';
 
 /** Loading the chat into a sandbox, for a dormant chat (resuming) or a new one without a warm slot (starting). */
 export const isLoading = (s: RunState | undefined) => s === 'starting' || s === 'resuming';
@@ -55,9 +55,6 @@ export const isRunning = (s: RunState | undefined) => s === 'working' || s === '
 const TEXT: Record<StatePlace, Partial<Record<RunState, string>>> = {
     header: { working: 'working', waiting: 'needs approval', starting: 'loading', resuming: 'loading' },
     list: { working: 'working', waiting: 'waiting for approval', starting: 'loading', resuming: 'loading' },
-    // loading has its steps in the transcript (ResumeBlock, "Starting a sandbox …"), not below the input
-    // short enough to sit next to model and thinking level in the 400 px panel
-    input: { working: 'Working', waiting: 'Needs approval' },
 };
 
 /**
@@ -94,12 +91,6 @@ export function inputControls(state: RunState | undefined, hasText: boolean, que
     const enter = queued ? 'queue' : 'send';
     if (!isRunning(state)) return { buttons: [enter], enter };
     return { buttons: hasText ? ['stop', enter] : ['stop'], enter };
-}
-
-/** Text of the run state below the input field: "Stopping …" from the click until the turn has ended. */
-export function inputStatusText(state: RunState | undefined, stopping = false): string | undefined {
-    if (stopping && isRunning(state)) return 'Stopping …';
-    return runStateText(state, 'input');
 }
 
 export const RUN_STATE_HINT: Record<RunState, string> = {

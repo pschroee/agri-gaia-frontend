@@ -6,22 +6,24 @@ import { describe, expect, it } from 'vitest';
 
 import {
     artifactApprovalView,
-    artifactsOfCalls,
-    artifactSummary,
     attachHint,
     canSend,
     checkSizes,
     emptyStaged,
+    fileMeta,
     fileTypeOf,
+    fileTypeTag,
     formatBytes,
     mergeArtifacts,
+    pastedFiles,
+    placeOutputs,
     previewKind,
     READABLE_FORMATS,
-    splitArtifacts,
     splitAttachments,
     splitFileName,
     stagedReducer,
     truncateMiddle,
+    uploadingText,
     uploadErrorText,
     withAttachments,
 } from './files';
@@ -141,45 +143,63 @@ describe('Office documents (issue #42)', () => {
 });
 
 describe('stagedReducer', () => {
-    it('counts uploads and stages the uploaded files, replacing same names', () => {
-        let s = stagedReducer(emptyStaged, { type: 'upload_start' });
+    const start = (id: string, name = `${id}.csv`) =>
+        ({ type: 'upload_start', upload: { id, name, size: 100 } }) as const;
+
+    it('tracks uploads with their progress and stages the uploaded files, replacing same names', () => {
+        let s = stagedReducer(emptyStaged, start('u1', 'a.csv'));
         expect(canSend('', s)).toBe(false);
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv'), art('b.png')] });
-        s = stagedReducer(s, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv', { size: 5 })] });
-        expect(s.uploading).toBe(0);
+        expect(s.uploads).toEqual([{ id: 'u1', name: 'a.csv', size: 100, progress: 0 }]);
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 0.71 });
+        expect(uploadingText(s.uploads[0].progress)).toBe('Uploading 71%');
+        // a late, smaller value does not move it back; values outside 0..1 are clamped
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 0.5 });
+        expect(s.uploads[0].progress).toBe(0.71);
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 7 });
+        expect(s.uploads[0].progress).toBe(1);
+        // an unknown id changes nothing
+        expect(stagedReducer(s, { type: 'upload_progress', id: 'x', progress: 0.2 })).toBe(s);
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv'), art('b.png')] });
+        s = stagedReducer(s, start('u2', 'a.csv'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u2', files: [art('a.csv', { size: 5 })] });
+        expect(s.uploads.length).toBe(0);
         expect(s.files.map((f) => `${f.name}:${f.size}`)).toEqual(['b.png:100', 'a.csv:5']);
         expect(canSend('', s)).toBe(true);
     });
 
     it('keeps staged files on a failed upload and blocks sending while one is in flight', () => {
-        let s = stagedReducer(emptyStaged, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv')] });
-        s = stagedReducer(s, { type: 'upload_start' });
+        let s = stagedReducer(emptyStaged, start('u1'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv')] });
+        s = stagedReducer(s, start('u2'));
+        s = stagedReducer(s, start('u3'));
+        expect(s.uploads.length).toBe(2);
         expect(canSend('text', s)).toBe(false);
-        s = stagedReducer(s, { type: 'upload_failed', error: 'Upload failed: 413' });
-        expect(s).toMatchObject({ uploading: 0, error: 'Upload failed: 413' });
+        s = stagedReducer(s, { type: 'upload_failed', id: 'u2', error: 'Upload failed: 413' });
+        expect(s).toMatchObject({ error: 'Upload failed: 413' });
+        expect(s.uploads.map((u) => u.id)).toEqual(['u3']);
+        s = stagedReducer(s, { type: 'upload_failed', id: 'u3', error: 'Upload failed: 500' });
+        expect(s.uploads.length).toBe(0);
         expect(s.files).toHaveLength(1);
     });
 
     it('removes, clears after sending and restores after a failed send', () => {
-        let s = stagedReducer(emptyStaged, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv'), art('b.csv')] });
+        let s = stagedReducer(emptyStaged, start('u1'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv'), art('b.csv')] });
         s = stagedReducer(s, { type: 'remove', name: 'a.csv' });
         expect(s.files.map((f) => f.name)).toEqual(['b.csv']);
         const sent = s.files;
         s = stagedReducer(s, { type: 'clear' });
         expect(s.files).toEqual([]);
         // a new file staged while the send was in flight stays behind the restored ones
-        s = stagedReducer(s, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('c.csv')] });
+        s = stagedReducer(s, start('u2'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u2', files: [art('c.csv')] });
         s = stagedReducer(s, { type: 'restore', files: sent });
         expect(s.files.map((f) => f.name)).toEqual(['b.csv', 'c.csv']);
     });
 
     it('notes refused files without touching the staged ones', () => {
         const s = stagedReducer(emptyStaged, { type: 'refused', error: 'Too large' });
-        expect(s).toEqual({ files: [], uploading: 0, error: 'Too large' });
+        expect(s).toEqual({ files: [], uploads: [], error: 'Too large' });
         expect(canSend('  ', s)).toBe(false);
     });
 });
@@ -201,23 +221,12 @@ describe('artifact list', () => {
         art('new.png', { kind: 'output', created_at: '2026-10-06T11:00:00Z' }),
     ];
 
-    it('splits results and uploads, newest first', () => {
-        const { outputs, inputs } = splitArtifacts(list);
-        expect(outputs.map((a) => a.name)).toEqual(['new.png', 'old.png']);
-        expect(inputs.map((a) => a.name)).toEqual(['in.csv']);
-        expect(splitArtifacts(undefined)).toEqual({ outputs: [], inputs: [] });
-    });
-
     it('merges by kind and name', () => {
         const merged = mergeArtifacts(list, [art('old.png', { kind: 'output', size: 1 }), art('old.png')]);
         expect(merged).toHaveLength(4);
         expect(merged.find((a) => a.kind === 'output' && a.name === 'old.png')?.size).toBe(1);
     });
 
-    it('summarises the counts', () => {
-        expect(artifactSummary(list)).toBe('2 results · 1 upload');
-        expect(artifactSummary([])).toBe('No files yet');
-    });
 });
 
 describe('artifactApprovalView', () => {
@@ -247,12 +256,14 @@ describe('transcript with files', () => {
 
     it('puts the attachments on the user item, text without the block', () => {
         const items = buildTranscript([user(1, withAttachments('Count rows', ['a.csv', 'b.png']))], ctx);
-        expect(items).toEqual([{ kind: 'user', key: 'u1', seq: 1, text: 'Count rows', files: ['a.csv', 'b.png'] }]);
+        expect(items).toEqual([
+            { kind: 'user', key: 'u1', seq: 1, at: '2026-10-06T10:00:00Z', text: 'Count rows', files: ['a.csv', 'b.png'] },
+        ]);
     });
 
     it('keeps a message with attachments only', () => {
         const items = buildTranscript([user(1, withAttachments('', ['a.csv']))], ctx);
-        expect(items).toEqual([{ kind: 'user', key: 'u1', seq: 1, text: '', files: ['a.csv'] }]);
+        expect(items).toEqual([{ kind: 'user', key: 'u1', seq: 1, at: '2026-10-06T10:00:00Z', text: '', files: ['a.csv'] }]);
     });
 
     it('gives the attachments of a mixed message to its last user part', () => {
@@ -356,17 +367,80 @@ describe('fileTypeOf', () => {
     });
 });
 
-describe('artifactsOfCalls', () => {
-    it('picks the outputs of the given tool calls, oldest first', () => {
+describe('file cards', () => {
+    it('show size and a short type', () => {
+        expect(fileMeta({ name: 'fall1 (durchsuchbar).pdf', size: 731 * 1024 })).toBe('731 KB · PDF');
+        expect(fileMeta({ name: 'Bildschirmfoto.png', size: 1.2 * 1024 * 1024 })).toBe('1.2 MB · PNG');
+        expect(fileMeta({ name: 'notes' })).toBe('File');
+        expect(fileMeta({ name: 'upload', content_type: 'image/png', size: 10 })).toBe('10 B · Image');
+        // a long "extension" is no type tag
+        expect(fileTypeTag({ name: 'archive.backup2026' })).toBe('File');
+    });
+});
+
+describe('placeOutputs', () => {
+    const answer = (key: string, at: string | undefined, ids: string[]) => ({
+        kind: 'agent',
+        key,
+        at,
+        parts: [{ type: 'steps', steps: ids.map((id) => ({ id })) }],
+    });
+    const items = [
+        { kind: 'user', key: 'u1', at: '2026-10-06T10:00:00Z' },
+        answer('a1', '2026-10-06T10:00:05Z', ['t1']),
+        { kind: 'user', key: 'u2', at: '2026-10-06T10:05:00Z' },
+        answer('a2', '2026-10-06T10:05:05Z', ['t2', 't3']),
+    ];
+
+    it('puts each result under the answer whose tool call handed it over, oldest first', () => {
         const list = [
-            art('b.png', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:00:02Z' }),
-            art('a.pdf', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:00:01Z' }),
-            art('c.txt', { kind: 'output', tool_call_id: 't2' }),
+            art('b.png', { kind: 'output', tool_call_id: 't3', created_at: '2026-10-06T10:06:02Z' }),
+            art('a.pdf', { kind: 'output', tool_call_id: 't2', created_at: '2026-10-06T10:06:01Z' }),
+            art('c.txt', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:01:00Z' }),
             art('in.txt', { kind: 'input', tool_call_id: 't1' }),
-            art('d.txt', { kind: 'output' }),
         ];
-        expect(artifactsOfCalls(list, ['t1']).map((a) => a.name)).toEqual(['a.pdf', 'b.png']);
-        expect(artifactsOfCalls(list, [])).toEqual([]);
-        expect(artifactsOfCalls(undefined, ['t1'])).toEqual([]);
+        const { byItem, unplaced } = placeOutputs(items, list);
+        expect(byItem.get('a1')?.map((a) => a.name)).toEqual(['c.txt']);
+        expect(byItem.get('a2')?.map((a) => a.name)).toEqual(['a.pdf', 'b.png']);
+        expect(byItem.has('u1')).toBe(false);
+        expect(unplaced).toEqual([]);
+    });
+
+    it('places results without a known call by time, never under the live answer', () => {
+        const list = [
+            art('late.csv', { kind: 'output', created_at: '2026-10-06T10:07:00Z' }),
+            art('mid.csv', { kind: 'output', tool_call_id: 'gone', created_at: '2026-10-06T10:02:00Z' }),
+            art('early.csv', { kind: 'output', created_at: '2026-10-06T09:00:00Z' }),
+        ];
+        const live = [...items, answer('live', undefined, ['t9'])];
+        const { byItem } = placeOutputs(live, list);
+        expect(byItem.get('a1')?.map((a) => a.name)).toEqual(['early.csv', 'mid.csv']);
+        expect(byItem.get('a2')?.map((a) => a.name)).toEqual(['late.csv']);
+        expect(byItem.has('live')).toBe(false);
+        // the live answer takes the results of its own calls
+        const own = placeOutputs(live, [art('now.png', { kind: 'output', tool_call_id: 't9' })]);
+        expect(own.byItem.get('live')?.map((a) => a.name)).toEqual(['now.png']);
+    });
+
+    it('returns what it cannot place', () => {
+        const list = [art('x.csv', { kind: 'output' })];
+        expect(placeOutputs([{ kind: 'user', key: 'u1' }], list).unplaced.map((a) => a.name)).toEqual(['x.csv']);
+        expect(placeOutputs(items, undefined).byItem.size).toBe(0);
+    });
+});
+
+describe('pastedFiles', () => {
+    const file = (name: string) => ({ name }) as File;
+    it('takes the clipboard files, else its file items, nothing for text', () => {
+        const a = file('a.png');
+        expect(pastedFiles({ files: [a] as unknown as FileList, items: [] as unknown as DataTransferItemList })).toEqual([a]);
+        const items = [
+            { kind: 'string', getAsFile: () => null },
+            { kind: 'file', getAsFile: () => a },
+            { kind: 'file', getAsFile: () => null },
+        ] as unknown as DataTransferItemList;
+        expect(pastedFiles({ files: [] as unknown as FileList, items })).toEqual([a]);
+        expect(pastedFiles({ files: [] as unknown as FileList, items: [] as unknown as DataTransferItemList })).toEqual([]);
+        expect(pastedFiles(null)).toEqual([]);
     });
 });

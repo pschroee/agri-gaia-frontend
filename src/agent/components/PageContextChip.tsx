@@ -5,6 +5,10 @@
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Tooltip from '@mui/material/Tooltip';
+import { alpha } from '@mui/material/styles';
+import DatasetOutlinedIcon from '@mui/icons-material/DatasetOutlined';
+import DeveloperBoardOutlinedIcon from '@mui/icons-material/DeveloperBoardOutlined';
+import ModelTrainingOutlinedIcon from '@mui/icons-material/ModelTrainingOutlined';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 
 import { PageContext, contextLabel, contextObjects, contextTitle } from '../pageContext';
@@ -36,31 +40,50 @@ function ChipTip({ context }: { context: PageContext }) {
  * selection out of the next message.
  */
 export function PageContextChip({ context, onRemove }: { context: PageContext; onRemove: () => void }) {
-    const single = contextObjects(context).length === 1;
+    const objects = contextObjects(context);
+    const single = objects.length === 1;
+    // the kind's symbol (design: "dataset"); a page without a known kind keeps the pin
+    const Icon =
+        objects[0]?.kind === 'dataset'
+            ? DatasetOutlinedIcon
+            : objects[0]?.kind === 'model'
+            ? ModelTrainingOutlinedIcon
+            : objects[0]?.kind === 'edge_device'
+            ? DeveloperBoardOutlinedIcon
+            : PlaceOutlinedIcon;
     return (
         <Tooltip title={<ChipTip context={context} />}>
             <Chip
                 data-testid="agent-context-chip"
                 size="small"
-                variant="outlined"
-                icon={<PlaceOutlinedIcon sx={{ fontSize: 15 }} />}
+                icon={<Icon sx={{ fontSize: 16 }} />}
                 label={
-                    <Box component="b" sx={{ fontFamily: single ? MONO : undefined, fontWeight: 500 }}>
+                    <Box
+                        component="span"
+                        sx={{ fontFamily: single ? MONO : undefined, fontSize: single ? 12.5 : 13 }}
+                    >
                         {contextLabel(context)}
                     </Box>
                 }
                 onDelete={onRemove}
                 aria-label={`Sent with your message: ${contextLabel(context)}`}
+                // design: 28 px pill tinted in the primary colour, name in mono, filled cross
                 sx={{
                     justifySelf: 'start',
                     maxWidth: '100%',
-                    height: 24,
-                    fontSize: 12,
-                    color: 'text.secondary',
-                    bgcolor: agentColors.greenTint,
-                    borderColor: agentColors.greenLine,
-                    '& .MuiChip-icon': { color: agentColors.green },
-                    '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' },
+                    height: 28,
+                    borderRadius: '14px',
+                    fontSize: 13,
+                    color: agentColors.green,
+                    bgcolor: alpha(agentColors.green, 0.08),
+                    '& .MuiChip-icon': { color: agentColors.green, ml: 1, mr: -0.25 },
+                    '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis', px: 0.75 },
+                    '& .MuiChip-deleteIcon': {
+                        fontSize: 18,
+                        color: alpha(agentColors.green, 0.5),
+                        mr: 0.5,
+                        '&:hover': { color: agentColors.green },
+                    },
                 }}
             />
         </Tooltip>

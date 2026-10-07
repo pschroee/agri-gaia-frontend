@@ -93,7 +93,8 @@ export type AgentPart =
 export type TranscriptItem =
     /** files: names of the attachments (inputs) that went with the message. */
     /** context: page context the message was sent with (structured, from the gateway's source); not shown since issue #46. */
-    | { kind: 'user'; key: string; seq?: number; text: string; files?: string[]; context?: PageContext }
+    /** at: when the message was stored (to place files that name no message, issue #54). */
+    | { kind: 'user'; key: string; seq?: number; at?: string; text: string; files?: string[]; context?: PageContext }
     /** note: a background task's end, parsed for the compact line (gateway type "background"). */
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }
     /** stopped: the answer was aborted by the user (shown muted, not as an error). */
@@ -101,6 +102,8 @@ export type TranscriptItem =
           kind: 'agent';
           key: string;
           seq?: number;
+          /** When the first message of the answer was stored. */
+          at?: string;
           parts: AgentPart[];
           error?: string;
           stopped?: boolean;
@@ -285,7 +288,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                 continue;
             }
             if (m.origin !== 'system' && m.origin !== 'mixed') {
-                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, text, files });
+                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, at: m.created_at, text, files });
                 continue;
             }
             // notes the gateway marks as context for the model only (audience "agent", e.g. the preferred
@@ -308,7 +311,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             const lastUser = parts.map((p) => p.kind).lastIndexOf('user');
             // the attachments block ends the message: it belongs to the user's text (or stands alone)
             if (files && lastUser < 0)
-                items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, text: '', files, context: ctx });
+                items.push({ kind: 'user', key: `u${m.seq}-f`, seq: m.seq, at: m.created_at, text: '', files, context: ctx });
             parts.forEach((p, i) => {
                 if (p.kind === 'system') {
                     const note = p.source.type === 'background' ? parseBackgroundNote(p.text) : undefined;
@@ -325,6 +328,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                         kind: 'user',
                         key: `u${m.seq}-${i}`,
                         seq: m.seq,
+                        at: m.created_at,
                         text: p.text,
                         files: i === lastUser ? files : undefined,
                         context: contexts.get(i),
@@ -346,7 +350,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
         }
         if (msg.role !== 'assistant') continue;
         if (!agent) {
-            agent = { kind: 'agent', key: `a${m.seq}`, seq: m.seq, parts: [] };
+            agent = { kind: 'agent', key: `a${m.seq}`, seq: m.seq, at: m.created_at, parts: [] };
             items.push(agent);
             answerRows.set(agent, []);
         }

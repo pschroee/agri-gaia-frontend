@@ -5,13 +5,11 @@
 import { useState } from 'react';
 
 import Box from '@mui/material/Box';
-import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import BlockIcon from '@mui/icons-material/Block';
 import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
@@ -25,8 +23,6 @@ import type { BackgroundTask } from '../types';
 import { formatMs } from '../format';
 import type { SubagentNavItem } from '../subagents';
 import type { Step, StepStatus } from '../transcript';
-import EllipsisText from './EllipsisText';
-import { SubagentIcon, SubagentState } from './SubagentState';
 import { agentColors, blockSx, MONO } from './tokens';
 
 const STATUS_LABEL: Record<StepStatus, string> = {
@@ -74,44 +70,9 @@ export type StepControls = {
     onBackground: (toolCallId: string) => Promise<BackgroundTask>;
     /** Background task per tool call that started it. */
     background: Map<string, BackgroundTask>;
-    /** The runs each `subagent` call started, opened read-only on click (issue #48). */
+    /** The runs each `subagent` call started, listed in a card below the answer and opened on click (#48, #54). */
     subagents?: { byCall: Map<string, SubagentNavItem[]>; onOpen: (runId: string) => void };
 };
-
-/** Under a `subagent` call: one link per run it started, opening the subagent's view. */
-function SubagentLinks({ items, onOpen }: { items: SubagentNavItem[]; onOpen: (runId: string) => void }) {
-    return (
-        <Box sx={{ display: 'grid', rowGap: 0.25, pl: 3, pt: 0.5, minWidth: 0 }}>
-            {items.map((it) => (
-                <ButtonBase
-                    key={it.runId}
-                    data-testid="agent-step-subagent"
-                    data-run-id={it.runId}
-                    onClick={() => onOpen(it.runId)}
-                    aria-label={`Open subagent ${it.title}`}
-                    sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 0.75,
-                        minWidth: 0,
-                        justifyContent: 'flex-start',
-                        textAlign: 'left',
-                        borderRadius: 0.75,
-                        px: 0.5,
-                        py: 0.25,
-                        fontSize: 12,
-                        '&:hover': { bgcolor: agentColors.subagentTint },
-                    }}
-                >
-                    <SubagentIcon size={14} />
-                    <EllipsisText text={it.title} sx={{ color: agentColors.subagent }} />
-                    <SubagentState status={it.status} compact />
-                    <ChevronRightIcon sx={{ fontSize: 16, color: 'text.secondary', ml: 'auto', flex: 'none' }} />
-                </ButtonBase>
-            ))}
-        </Box>
-    );
-}
 
 const TONE_COLOR = { running: agentColors.green, ok: agentColors.ok, error: agentColors.red, muted: 'text.secondary' };
 
@@ -207,7 +168,6 @@ function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
     const [error, setError] = useState<string>();
     const controllable = s.status === 'running' && !!controls?.running.has(s.id);
     const task = controls?.background.get(s.id);
-    const subRuns = controls?.subagents?.byCall.get(s.id);
     return (
         <Box component="li" data-testid="agent-step" data-step-id={s.id} sx={{ minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
@@ -252,9 +212,6 @@ function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
                 </Typography>
                 {controllable && controls && <RunningControls id={s.id} controls={controls} onError={setError} />}
             </Box>
-            {subRuns && subRuns.length > 0 && controls?.subagents && (
-                <SubagentLinks items={subRuns} onOpen={controls.subagents.onOpen} />
-            )}
             {error && (
                 <Typography role="alert" sx={{ fontSize: 11.5, color: agentColors.red, pl: 3 }}>
                     {error}
@@ -265,11 +222,32 @@ function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
 }
 
 /**
- * Compact list of the tool calls of one agent step, like the "Datensatz analysiert" block of the
- * prototype: status, tool name in monospace, a hint at the arguments and the measured duration. A running
- * foreground command offers "Move to background" and "Stop"; a call that started a background task names it.
+ * The tool calls of an answer: status, tool name in monospace, a hint at the arguments and the measured duration. A
+ * running foreground command offers "Move to background" and "Stop"; a call that started a background task names it.
+ * `plain` (issue #54): only the rows, for the opened process line of an answer and the step under "Thinking …";
+ * otherwise a box with a headline, as in a subagent's task strip.
  */
-export default function StepList({ steps, controls }: { steps: Step[]; controls?: StepControls }) {
+export default function StepList({
+    steps,
+    controls,
+    plain = false,
+}: {
+    steps: Step[];
+    controls?: StepControls;
+    plain?: boolean;
+}) {
+    const rows = (
+        <Box
+            component="ul"
+            data-testid="agent-steps"
+            sx={{ listStyle: 'none', m: 0, p: 0, px: plain ? 0 : 1.5, pb: plain ? 0 : 1, display: 'grid', rowGap: 0.75 }}
+        >
+            {steps.map((s) => (
+                <StepRow key={s.id} s={s} controls={controls} />
+            ))}
+        </Box>
+    );
+    if (plain) return rows;
     const total = steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
     const anyDuration = steps.some((s) => s.durationMs !== undefined);
     return (
@@ -284,11 +262,7 @@ export default function StepList({ steps, controls }: { steps: Step[]; controls?
                     </Typography>
                 )}
             </Box>
-            <Box component="ul" sx={{ listStyle: 'none', m: 0, px: 1.5, pb: 1, display: 'grid', rowGap: 0.75 }}>
-                {steps.map((s) => (
-                    <StepRow key={s.id} s={s} controls={controls} />
-                ))}
-            </Box>
+            {rows}
         </Box>
     );
 }

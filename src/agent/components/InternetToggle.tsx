@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import Box from '@mui/material/Box';
+import { alpha } from '@mui/material/styles';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Switch from '@mui/material/Switch';
@@ -43,11 +44,11 @@ export default function InternetToggle({ chat, compact = false }: { chat: Chat; 
                 sx={{
                     ...rowIconButtonSx,
                     color,
-                    bgcolor: on ? agentColors.greenTint : undefined,
-                    borderColor: on ? agentColors.greenLine : 'divider',
+                    bgcolor: on ? alpha(agentColors.green, 0.08) : undefined,
+                    borderColor: on ? alpha(agentColors.green, 0.5) : agentColors.outline,
                 }}
             >
-                {busy ? <CircularProgress size={16} /> : <Icon sx={{ fontSize: 18 }} />}
+                {busy ? <CircularProgress size={16} /> : <Icon sx={{ fontSize: 22 }} />}
             </IconButton>
         </Tooltip>
     ) : (

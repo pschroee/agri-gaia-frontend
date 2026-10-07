@@ -206,7 +206,7 @@ export function visibleContext(ctx: PageContext | undefined, dismissed: string |
 }
 
 /** Placeholder of the input: neutral, or naming the selection that goes with the message. */
-export function inputPlaceholder(ctx: PageContext | undefined, fallback = 'Ask the agent …'): string {
+export function inputPlaceholder(ctx: PageContext | undefined, fallback = 'Message Agent …'): string {
     const objs = contextObjects(ctx);
     if (objs.length === 0) return fallback;
     const kind = objs[0].kind;

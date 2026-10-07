@@ -8,6 +8,7 @@ import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
+import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
 
@@ -42,9 +43,9 @@ export default function NewChatButton({
                         aria-label="New chat"
                         disabled={disabled}
                         onClick={() => void startNewChat()}
-                        sx={{ ...rowIconButtonSx, color: agentColors.green }}
+                        sx={{ ...rowIconButtonSx, color: agentColors.green, '&:hover': { bgcolor: alpha(agentColors.green, 0.04) } }}
                     >
-                        {creatingChat ? spinner : <AddIcon sx={{ fontSize: 18 }} />}
+                        {creatingChat ? spinner : <AddIcon sx={{ fontSize: 22 }} />}
                     </IconButton>
                 </Box>
             </Tooltip>

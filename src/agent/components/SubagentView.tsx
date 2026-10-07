@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 // Looking into a subagent, read-only (issue #48): its sub-entry under the chat, the breadcrumb that replaces the chat's
-// title, the transcript in the chat's own components and the slim line that replaces the input.
+// title, the transcript in the chat's own components and the footer that replaces the input (frame since issue #54).
 import { MouseEvent, useCallback, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import { alpha } from '@mui/material/styles';
 import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -15,12 +16,13 @@ import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-import { isLiveStatus, runTranscript } from '../subagents';
+import { isLiveStatus, runTranscript, subagentStateText } from '../subagents';
 import type { RunStatus, SubagentNavItem, SubagentRun } from '../subagents';
 import { AgentBlock, UserBubble } from './Conversation';
 import EllipsisText from './EllipsisText';
 import type { Files, Thinking } from './Conversation';
-import { SubagentIcon, SubagentState } from './SubagentState';
+import { STATE_COLOR, SubagentIcon, SubagentState } from './SubagentState';
+import { WorkingIndicator } from './ProcessLine';
 import { agentColors } from './tokens';
 
 /**
@@ -161,52 +163,36 @@ export function SubagentBreadcrumb({
     );
 }
 
-/** Replaces the input while a subagent is open: "Subagent · running · read-only" and "Back to chat", one line. */
-export function SubagentReadOnlyBar({ status, onBack }: { status: RunStatus; onBack: () => void }) {
+/**
+ * Replaces the input while a subagent is open (issue #54, design): "Subagents can't receive messages." and an outlined
+ * "Back to chat" in the subagents' violet.
+ */
+export function SubagentReadOnlyBar({ onBack }: { onBack: () => void }) {
     return (
         <Box
             data-testid="agent-subagent-readonly"
             role="status"
-            sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                minWidth: 0,
-                px: 1.25,
-                py: 0.5,
-                borderRadius: 1,
-                border: 1,
-                borderColor: agentColors.subagent,
-                bgcolor: agentColors.subagentTint,
-                fontSize: 12.5,
-            }}
+            sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, minHeight: 36 }}
         >
-            <SubagentIcon size={16} />
-            <Box
-                component="span"
-                sx={{
-                    flex: 1,
-                    minWidth: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.75,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                }}
-            >
-                <span>Subagent</span>
-                <span aria-hidden>·</span>
-                <SubagentState status={status} />
-                <span aria-hidden>·</span>
-                <Box component="span" sx={{ color: 'text.secondary', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    read-only
-                </Box>
-            </Box>
+            <Typography component="span" sx={{ flex: 1, minWidth: 0, fontSize: 13, color: 'text.secondary' }}>
+                Subagents can&apos;t receive messages.
+            </Typography>
             <Button
-                size="small"
+                variant="outlined"
                 onClick={onBack}
-                startIcon={<ArrowBackIcon sx={{ fontSize: '16px !important' }} />}
-                sx={{ flex: 'none', textTransform: 'none', fontSize: 12.5, py: 0.25, color: agentColors.subagent }}
+                data-testid="agent-subagent-back-button"
+                startIcon={<ArrowBackIcon sx={{ fontSize: '18px !important' }} />}
+                sx={{
+                    flex: 'none',
+                    height: 36,
+                    px: '15px',
+                    fontSize: 14,
+                    fontWeight: 500,
+                    letterSpacing: '0.4px',
+                    color: agentColors.subagent,
+                    borderColor: 'rgba(94, 53, 177, 0.5)',
+                    '&:hover': { borderColor: agentColors.subagent, bgcolor: 'rgba(94, 53, 177, 0.04)' },
+                }}
             >
                 Back to chat
             </Button>
@@ -214,9 +200,48 @@ export function SubagentReadOnlyBar({ status, onBack }: { status: RunStatus; onB
     );
 }
 
+/** Head of a subagent's view: its state as a chip ("done", "running") and "Subagent log · read-only". */
+function SubagentLogHead({ status }: { status: RunStatus }) {
+    const color = STATE_COLOR[status];
+    return (
+        <Box
+            data-testid="agent-subagent-head"
+            sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+        >
+            <Box
+                component="span"
+                data-testid="agent-subagent-status"
+                data-status={status}
+                sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    height: 24,
+                    px: '10px',
+                    borderRadius: '12px',
+                    bgcolor: alpha(color, 0.1),
+                    color,
+                    fontWeight: 500,
+                    flex: 'none',
+                    whiteSpace: 'nowrap',
+                }}
+            >
+                {isLiveStatus(status) ? (
+                    <CircularProgress size={10} thickness={5} sx={{ color }} />
+                ) : (
+                    <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color }} />
+                )}
+                {subagentStateText(status)}
+            </Box>
+            <span>Subagent log · read-only</span>
+        </Box>
+    );
+}
+
 /**
- * A subagent's run with the chat's own components: the task as a user message, answers as text, tool calls as step
- * lists with their result. A narrow coloured border on the left marks that this is not the chat.
+ * A subagent's run with the chat's own components: the task as a user message, answers as text, tool calls behind the
+ * answer's process line. On top its state and "Subagent log · read-only" (issue #54; the violet selector, or the
+ * breadcrumb on /ai-agent, marks that this is not the chat).
  */
 export function SubagentTranscript({
     run,
@@ -239,15 +264,9 @@ export function SubagentTranscript({
         <Box
             data-testid="agent-subagent-transcript"
             data-run-id={run.runId}
-            sx={{
-                borderLeft: `3px solid ${agentColors.subagent}`,
-                pl: dense ? 1.25 : 1.75,
-                display: 'flex',
-                flexDirection: 'column',
-                gap: dense ? 1.5 : 1.75,
-                minWidth: 0,
-            }}
+            sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}
         >
+            <SubagentLogHead status={status} />
             {items.length === 0 && (
                 <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
                     {live ? 'The subagent is starting …' : 'This subagent left no entries.'}
@@ -262,10 +281,7 @@ export function SubagentTranscript({
                 ) : null,
             )}
             {live && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}>
-                    <CircularProgress size={14} sx={{ color: agentColors.subagent }} />
-                    {status === 'idle' ? 'The subagent is quiet …' : 'The subagent is working …'}
-                </Box>
+                <WorkingIndicator label={status === 'idle' ? 'The subagent is quiet …' : 'The subagent is working …'} />
             )}
         </Box>
     );

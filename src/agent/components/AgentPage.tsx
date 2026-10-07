@@ -367,7 +367,6 @@ function AgentPageContent() {
                             <ChatView
                                 key={selectedChatId}
                                 chatId={selectedChatId}
-                                placeholder="Reply or describe a new task …"
                                 header={<ChatHeader />}
                             />
                         ) : (

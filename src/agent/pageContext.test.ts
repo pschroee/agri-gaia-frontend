@@ -170,8 +170,8 @@ describe('context chip', () => {
         expect(hasSelection({ page: 'datasets', objects: [] })).toBe(false);
         expect(hasSelection(ds)).toBe(true);
         expect(hasSelection(two)).toBe(true);
-        expect(inputPlaceholder(undefined)).toBe('Ask the agent …');
-        expect(inputPlaceholder({ page: 'datasets' })).toBe('Ask the agent …');
+        expect(inputPlaceholder(undefined)).toBe('Message Agent …');
+        expect(inputPlaceholder({ page: 'datasets' })).toBe('Message Agent …');
         expect(inputPlaceholder({ page: 'datasets' }, 'Reply …')).toBe('Reply …');
         expect(inputPlaceholder(ds)).toBe('Ask about this dataset …');
         expect(inputPlaceholder({ page: 'edge-devices', objects: [{ kind: 'edge_device', id: '3' }] })).toBe(

@@ -64,6 +64,48 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
 - Render check without backend: run `npx vite` with `VITE_AGENT_ENABLED=true` and intercept requests in Playwright
   (serve a fake `keycloak-js` module for `/node_modules/.vite/deps/keycloak-js.js`, answer `api.<base>` and
   `/agent/api/**` with JSON). No mock code lives in the repository.
+- **Chat layout v2 (issue #54, design `prototyp/entwuerfe/agent-chat-panel-v2.dc.html` of the thesis repository):**
+  the same building blocks in the panel and on `/ai-agent`. **Panel header** 48 px (design 56): symbol, "Agent" (hidden
+  during a run, the state chip takes its place), context ring with percentage, "Open in agent page", close; the panel is
+  white. **Chat row** (`ChatSelector.tsx`): an outlined field (44 px, design 48) with the floating label "Chat", the
+  title (ellipsized, full title as hover tooltip while cut) and a drop-down arrow, then "New chat" and the internet globe
+  as square outlined buttons of the same height (`rowIconButtonSx`, `CHAT_ROW_HEIGHT`). It opens a Popover (not a
+  `Select`: typing in a Select's menu triggers its type-ahead) with **"Search chats"** on top (focused when the
+  transition has entered; `autoFocus` loses against the Popover's focus trap, so `disableAutoFocus` plus
+  `TransitionProps.onEntered`), the chats below (open one bold and tinted, state chip, "n waiting", titles wrap), Enter
+  opens the first match. The search (`searchChats` in `src/agent/chatSearch.ts`, unit-tested) matches every word of the
+  query in the title, over all chats (without a query the newest 20 plus an older selected one), and the open chat's
+  subagents by title: the chat is listed for a matching subagent, and only the matching subagents show under it. **Only
+  the open chat's subagents are known in the frontend**; other chats with `subagents > 0` show a static "🤖 n" badge,
+  the open one the toggle "🤖 n ⌃/⌄" (#48 behaviour). The list's maximum height is measured on opening (window height
+  minus the row's bottom and the footer), otherwise MUI moves a long list up over the field. With a subagent open the
+  field is violet (label "Subagent", 2 px border), a back arrow sits in it and the title reads "chat › 🤖 subagent".
+  **Transcript:** empty chat with symbol and "No messages yet. Describe what you want to do." in the middle (only then
+  the conversation fills the height; otherwise approvals follow right after the last answer). User messages are light
+  green bubbles on the right (`agentColors.userBubble` `#e3efe8`, radius 16/16/4/16, 85 % in the panel), their
+  attachments as file cards directly above. An answer (`AgentBlock`) is text without a bubble, then the subagents it
+  started as one card (`SubagentCard`: robot, title, state, chevron; replaces the links under the `subagent` call), the
+  files it handed over as cards and a **Copy** button (Markdown of the text parts, `answerMarkdown`; `copyText` in
+  `src/agent/clipboard.ts` falls back to `execCommand('copy')`; the icon shows a tick for 1.2 s). **Process line**
+  (`ProcessLine.tsx`, decision 3): thinking and steps of an answer behind one collapsed line above its text ("Thought
+  9 s · 3 tool calls · 1 failed", `processSummary` in `src/agent/answer.ts`); opened, the thinking blocks (each
+  collapsible on its own) and the steps (`StepList plain`) in order. All text parts stay visible, also those between
+  steps (`splitAnswer` joins step lists that become neighbours). While the turn runs (`activeKey`: the live answer, else
+  the last stored answer of a running chat with no user message after it), "Thinking …" with the design's 4 px bar
+  stands at the answer's end (`showsWorking`: not while text streams), with the running step below it (Stop and "Move
+  to background" stay) or "Waiting for your approval …". The live message is joined to the stored answer of the same
+  turn, so a turn is one answer with one line. Without an answer yet the same indicator stands at the end. Approval
+  cards, queue, "Jump to latest", compaction and background notes are unchanged.
+  **Field** (`ChatInput`): selection chip above it (28 px pill tinted in the primary colour, kind icon, name in mono);
+  an outlined box (radius 8, 2 px primary while focused via `:focus-within`) with the staged files as cards (168 px)
+  above the text (`InputBase`, two rows), below paperclip, model, thinking level and a round 36 px send button (grey
+  while empty or uploading). During a run Stop (round, outlined, red square) takes the send button's place, with text
+  the queue arrow follows it (as #39). The input shows **no run state** any more (decision: the state stays in the
+  header; `StatePlace` has no `input`). Placeholder "Message Agent … (/ for commands)", "Ask about this dataset …" with
+  a selection, "Queue another message …" while queueing. Pasting files (a screenshot) attaches them (`pastedFiles`).
+  Render check: mock as below plus a fake `XMLHttpRequest` subclass for `…/files` (progress held until released), a
+  fake `EventSource`, clipboard permissions; compare the transcript's `clientHeight` with the `ki-agents` build (panel
+  567 → 572 px, `/ai-agent` 462 → 480 px at 1440 × 900).
 - **Queue:** while the agent works, the input stays usable and a sent message is queued by the gateway
   (`queued: true`). `QueueList` shows the open entries above the input, removable until delivered (409 afterwards);
   after an abort (`queue_held`) they wait for the next message or "Send now" (`POST …/queue/send`). The state logic
@@ -136,7 +178,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   ("smarttail-bucht-3-kw31"), several as one chip with the count ("2 datasets", tooltip lists the names). Its cross
   leaves the selection out of the next message only (`visibleContext` then gives the page alone; the removal is keyed
   by page and ids and ends after a send, so the chip comes back while the selection stays). The placeholder is neutral
-  ("Ask the agent …") or names the selection ("Ask about the 2 selected datasets …", `inputPlaceholder`); the panel
+  ("Message Agent …", issue #54) or names the selection ("Ask about the 2 selected datasets …", `inputPlaceholder`); the panel
   passes no section placeholder any more. **Wire form** (`wireContext`): one object as `object` (every gateway since
   #13), several as `objects` (gateway PR for #45). A gateway before #45 answers 400 `unknown field "objects"`;
   `sendMessage` then sends the page alone once more (`isOldGatewayRefusal`), never one object of several. Read
@@ -148,8 +190,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `transcript.test.ts`, `queue.test.ts`. Render check: check boxes on `/data` with `/agent/api/**` and
   `api.<base>/datasets` mocked; no chip without a selection, the sent `context` per message.
 - **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
-  `message_update` with `thinking_start|delta|end`) show as a collapsed muted line "Thinking · 4.2 s" between text and
-  tool steps (`ThinkingBlock`), live as "Thinking … n s". The live message is assembled by the pure reducer
+  `message_update` with `thinking_start|delta|end`) show as collapsed muted lines "Thinking · 4.2 s" (`ThinkingBlock`)
+  inside the answer's opened process line (issue #54), live as "Thinking … n s". The live message is assembled by the pure reducer
   `src/agent/live.ts` (text, thinking and tool calls by `contentIndex`); `liveParts` and `buildTranscript` turn live and
   stored messages into the same parts. **pi stores no timing per block:** the duration is measured only while the block
   streams, kept in memory by `timestamp:contentIndex`, and handed to the stored message; after a page reload, or for
@@ -170,28 +212,24 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   sending until the pointer has left the button (a disabled button fires no blur and its wrapper a fresh mouseover),
   and a hover counts only after a real mousemove, because the opening panel puts the send button under the pointer
   resting on the floating button and the browser fires a mouseover without movement. Keyboard focus still opens it.
-- **Run control (issue #39):** Stop sits in the input field again, there is no status bar above it (it took two
-  lines of the 400 px panel). While a turn runs (working or waiting for approval) the send arrow becomes Stop
-  (`POST …/abort`, tooltip and label "Stop"); with text in the field the queue arrow takes the last place and Stop sits
-  left of it, Enter queues ("Queue another message …"). The last place always fits the field's content, so a click
-  there after typing never stops the agent by mistake. Escape never stops (it only closes the slash menu). The pure
-  `inputControls` and `inputStatusText` in `src/agent/runState.ts` decide (unit-tested). The run state shows small in
-  the row below the field next to model and thinking level ("Working · 12 s", "Needs approval · 12 s", "Stopping …"
-  from the click until the turn has ended); there it gives way first (label ellipsized, dot and timer stay, the picker
-  keeps its width because a fraction of a pixel less wraps it). A failed stop shows as one amber line above that row with a dismiss cross, until the state
-  changes. The state comes from the pure `runStateOf`: `working`, `waiting` (running with an open approval; the live
+- **Run control (issue #39, field since #54):** Stop sits in the input field, there is no status bar above it. While a
+  turn runs (working or waiting for approval) the send arrow becomes Stop (`POST …/abort`, tooltip and label "Stop",
+  a spinner while stopping); with text in the field the queue arrow takes the last place and Stop sits left of it,
+  Enter queues ("Queue another message …"). The last place always fits the field's content, so a click there after
+  typing never stops the agent by mistake. Escape never stops (it only closes the slash menu). The pure
+  `inputControls` in `src/agent/runState.ts` decides (unit-tested). The run state shows in the header only (issue #54;
+  before, small in the row below the field). A failed stop shows as one amber line below the field with a dismiss
+  cross, until the state changes. The state comes from the pure `runStateOf`: `working`, `waiting` (running with an open approval; the live
   approval list beats the chat's counter), `starting`, `resuming` and `idle` (nothing running; the gateway's `dormant`
   counts as idle). The timer uses `running_since`, otherwise the last user message. After an abort the queue is held
   (`QueueList`, "Send now"). The open `ChatView` hands its chat to `updateChat` of the context, so the history list,
-  the chat selector and the panel header chip follow live, not only every 15 s. Measured in the render check: the area
-  below the transcript keeps its idle height while the agent works (panel 118 px, was 174; `/ai-agent` 82 px, was
-  120), a failed stop adds one line (23 px).
+  the chat selector and the panel header chip follow live, not only every 15 s. A failed stop adds one line below the field.
 - **A state shows only while something happens (issue #35):** `runStateText(state, place)` in `src/agent/runState.ts`
   (unit-tested) decides per place (`header`: panel header and the chat header of `/ai-agent`; `list`: history list and
-  the panel's chat selector; `input`: the row below the input field, issue #39). A ready chat (idle, active or dormant)
+  the panel's chat selector; the input field shows none since #54). A ready chat (idle, active or dormant)
   shows nothing anywhere, no "active", "Idle" or "ready". Starting and resuming show a muted "loading" chip in header
-  and lists, their steps in the transcript (`ResumeBlock`, "Starting a sandbox …"), nothing below the input. Working
-  and waiting show everywhere. `RunStateChip` renders nothing where the place has no text. The Status tab still names states (`activityText` in `status.ts`).
+  and lists, their steps in the transcript (`ResumeBlock`, "Starting a sandbox …"). Working and waiting show in header
+  and lists. `RunStateChip` renders nothing where the place has no text. The Status tab still names states (`activityText` in `status.ts`).
 - **Resuming a dormant chat:** sending to a dormant chat resumes it; the response to `POST …/messages` comes only after
   resuming. The SSE event `resume` (`ResumeStep`, phases acquire → session → settings → workspace → inputs, then
   `ready` or `failed`) feeds the pure `applyResumeStep` in `src/agent/resume.ts`; `ResumeBlock` shows the steps live
@@ -199,8 +237,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `seq`, which transcript items now carry). The sent text shows greyed (`pending` in `useChatStream`) until its user
   message is stored. A lost `ready` is closed on the next pi event (`closeResumes`). The steps exist only live: after a
   page reload the block is gone. On `failed` the request fails and `ChatInput` puts the text back.
-- **Model and thinking level:** `ModelEffortPicker` sits in the row below the input (small text buttons with menus,
-  so they fit the 400 px panel). There is no approval hint in that row, neither the lock icon in the panel nor
+- **Model and thinking level:** `ModelEffortPicker` sits in the bottom row of the input field (small 28 px text
+  buttons with menus, so they fit the 400 px panel). There is no approval hint in that row, neither the lock icon in the panel nor
   "Write actions need your approval." on `/ai-agent` (issue #47); approval cards and counters say it. Models come from `GET /models`
   (loaded once in `AgentContext`; each entry names the provider, no prices, issue #43). **The model list carries no
   thinking levels:** the
@@ -210,11 +248,11 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `ContextTooLargeDialog`; "Compact first, then switch" posts `compact_first: true`, and `pending_model` shows
   "Compacting, then …" until the chat event brings the new model. The decisions are pure functions in
   `src/agent/modelChoice.ts`, unit-tested.
-- **Chat row of the panel and long titles (issue #38):** below the panel header sit the chat selector, "New chat" as a
-  plus (`NewChatButton compact`, tooltip and label "New chat") and the internet globe; plus and globe share
-  `rowIconButtonSx` (`tokens.ts`, 32 × 32 px). The selector takes the remaining room and ellipsizes the title; its
-  tooltip and the opened list show the full title (list left-aligned under the selector, at most 368 px wide, titles
-  wrap with `overflow-wrap: anywhere`). **The row's wrapper is a grid with `minmax(0, 1fr)`:** an `auto` column grows
+- **Chat row of the panel and long titles (issue #38, layout since #54 above):** below the panel header sit the chat
+  selector, "New chat" as a plus (`NewChatButton compact`, tooltip and label "New chat") and the internet globe; plus
+  and globe share `rowIconButtonSx` (`tokens.ts`, as high as the selector). The selector takes the remaining room and
+  ellipsizes the title; its tooltip and the opened list show the full title (list as wide as the row, titles wrap with
+  `overflow-wrap: anywhere`). **The row's wrapper is a grid with `minmax(0, 1fr)`:** an `auto` column grows
   to the title's min-content, and the old row ran past the 400 px panel although the `Select` had `minWidth: 0`
   (856 px wide for a 110-character title). On `/ai-agent` the chat header wraps its controls (state chip, internet,
   context, tokens) as one group onto a second line before the title gets narrower than 200 px; history items break
@@ -285,32 +323,38 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (`subagentsAtOnce` in `src/agent/status.ts`, `max_subagents` of `GET /config`, falling back to an older gateway's
   default). Texts are pure functions in `src/agent/settings.ts`, unit-tested.
 - **Files:** attachments, the chat's artifacts and display images, as in the gateway's own UI (API.md, *Attachments to
-  messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files anywhere on the
-  agent area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
+  messages*, *Display images*). **Since issue #54 there is no "Files" strip**: every file stands at its message or
+  answer. Inputs show above the user message that names them; outputs under the answer whose tool call handed them
+  over, else (no or unknown `tool_call_id`) under the last answer that started before the file was stored, the first
+  answer for older ones; the live answer takes files only by its calls (`placeOutputs` in `src/agent/files.ts`,
+  unit-tested; transcript items carry `at`). Anything without an answer shows at the end of the transcript. Inputs that
+  were uploaded but never sent with a message (removed from the field) no longer show anywhere. **Cards (#54):** 40 px
+  square (image thumbnail, else a type icon: PDF red, image grey, others by kind), name truncated in the middle,
+  "731 KB · PDF" (`fileMeta`, `fileTypeTag`), a download button; 220 px (at most 85 %) in the transcript, 168 px with a
+  remove cross inside the field. **Uploads** go one request per file through `XMLHttpRequest` (`agentApi.uploadFile`,
+  fetch cannot report upload progress); the staged state (`stagedReducer`) keeps files in flight with their progress
+  ("Uploading 71%", 3 px bar at the bottom of the card), and sending waits until none is in flight. **Attachments:** the paperclip in the field (`ChatInput`) dropping files anywhere on the agent area and pasting
+  files into the field upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
   `GET /config` are refused before uploading and named with their size; a 413 of the gateway (or a proxy) becomes a size
   message too (`uploadErrorText`). There is deliberately no `accept` filter: any type can be attached, the paperclip
   tooltip and the drop overlay name the formats the agent reads (`READABLE_FORMATS`: Office, PDF, CSV, text, HTML, EPUB,
   images; gateway skill `documents`, issue #42). Only the command-line binding converts Office files and PDF; with MCP
-  or REST alone the agent says it cannot read them (gateway API.md, *Attachments to messages*). Uploaded files sit as tiles above the field until sent; sending
+  or REST alone the agent says it cannot read them (gateway API.md, *Attachments to messages*). Uploaded files sit as cards inside the field until sent; sending
   posts their names as `attachments` with the text (text may be empty), also when the message is queued (the queue row
   names the files); a failed send puts text and chips back; a slash command leaves the chips for the next message.
   The gateway appends the block `[Attachments in /workspace/inputs/]` to the stored user message; `buildTranscript`
-  splits it off (`splitAttachments`) and the user bubble shows the files below it as tiles (images enlarge, others
-  download `…/artifacts/{name}?kind=input`). **Tiles (issue #41, as in the gateway's UI):** one look for staged files,
-  a sent message and the results a tool call handed over (`ResultAttachments` below its steps, matched by
-  `tool_call_id`, `artifactsOfCalls`): 158 px wide (two fit in the panel, also in a user message at 88 %), a
-  36 px square with the thumbnail (only `previewKind` image: raster type **and** extension; a name the artifact list
-  does not know yet never gets one) or a type icon (`fileTypeOf`: extension first, then content type; PDF, Word,
-  spreadsheet, presentation, text incl. CSV, archive, image, file), the name truncated in the middle (`splitFileName`:
-  the head ellipsizes, the last four stem characters and the extension stay, `MiddleName`), size, full name in the
-  tooltip; staged tiles have the remove cross inside the tile and scroll after three rows. A file tile in the
-  transcript is one download link (`::after` over the tile), an image's thumbnail opens `ImagePreview` (its `fallback`
-  shows the type icon if loading fails). The opened `ArtifactStrip` uses the same icons and middle names. Render check:
-  names short, long, 220 characters without spaces, an image, a PDF, SVG and a renamed `.png` (`text/html`), staged,
-  sent and as results, panel and `/ai-agent`; no element wider than its box (the head's ellipsis and the clipped tail
-  excepted), tail, size and cross inside the tile, no request for the SVG or the renamed file. **Artifacts:** `ArtifactStrip` on top of the chat (only with
-  files), collapsed "Files 2 results · 1 upload", opened results and uploads with download; opening reloads
-  `GET …/artifacts`, the SSE event `artifact` adds new ones. A pending approval of kind `artifact_upload` shows in
+  splits it off (`splitAttachments`) and the user bubble shows the files above it as cards (images enlarge, every card
+  downloads `…/artifacts/{name}?kind=input`). **Cards (issue #41, look since #54, see above):** one look for staged files, a sent
+  message and the results of an answer: a square with the thumbnail (only `previewKind` image: raster type **and**
+  extension; a name the artifact list does not know yet never gets one) or a type icon (`fileTypeOf`: extension first,
+  then content type; PDF, Word, spreadsheet, presentation, text incl. CSV, archive, image, file), the name truncated in
+  the middle (`splitFileName`: the head ellipsizes, the last four stem characters and the extension stay,
+  `MiddleName`), full name in the tooltip; staged cards scroll after three rows. An image's thumbnail opens
+  `ImagePreview` (its `fallback` shows the type icon if loading fails). Render check: names short, long, 220
+  characters without spaces, an image, a PDF, SVG and a renamed `.png` (`text/html`), staged, sent and as results,
+  panel and `/ai-agent`; no element wider than its box (the head's ellipsis and the clipped tail excepted), no request
+  for the SVG or the renamed file. **Artifacts:** the chat's list comes with `GET /chats/{id}` and the SSE event
+  `artifact`. A pending approval of kind `artifact_upload` shows in
   `ApprovalCard` with name, size, type and the text preview (none for images), "Allow" / "Reject". **Display images:**
   `Markdown` renders `![alt](path)` through `src/agent/images.ts` (port of the gateway's `web/src/lib/images.ts`): local
   paths under `/workspace`, `/tmp`, `/home/agent` load from `GET …/images?path=…&msg=…` once the answer is stored (`msg`
@@ -367,7 +411,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   each load of a running chat and 400 ms after a bash start (the gateway registers the command a moment after pi reports
   it, so a live one stays until its end event). A failure (404: already ended, 409: too many background tasks) shows
   below the row. A step that started or became a background task carries a chip "bg-3 · running". **Background
-  tasks** and **subagent runs** sit in `TaskStrip` below the files (only when there are any): collapsed "Tasks Background
+  tasks** and **subagent runs** sit in `TaskStrip` on top of the chat (only when there are any): collapsed "Tasks Background
   1 running · Subagents 1 running · 2 done" with a spinner while something runs; opened, the tasks (running first) with
   state, runtime, the last three lines of `tail` and Stop (`POST …/background/{bg}/stop`, 409 explained), and the runs
   with title (workflow label, else the task's first line), state, duration, tool count, agent and short run ID, and
@@ -385,8 +429,9 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   transcript components of the chat (`runTranscript` in `src/agent/subagents.ts`: each task as a user bubble, text
   answers and tool calls as agent blocks with step lists, result done/failed/running/not finished), live through the
   SSE events `subagent` and `subagent_run`. No input and no stop per subagent; the chat's `ChatInput` stays mounted but
-  hidden, so a draft and staged files survive, and a slim line "Subagent · <state> · read-only" with "Back to chat"
-  (36 px, below the 88 px of the input area) takes its place. Selection lives in `AgentContext` (`selectedSubagent`,
+  hidden, so a draft and staged files survive. **Frame (issue #54):** on top of its transcript a state chip ("done",
+  "running" …) and "Subagent log · read-only"; in place of the input "Subagents can't receive messages." with an
+  outlined violet "Back to chat" (`SubagentReadOnlyBar`). Selection lives in `AgentContext` (`selectedSubagent`,
   `selectSubagent`, valid only for the selected chat; `selectChat`, also of the same chat, and "New chat" leave it; a
   run the loaded chat does not know falls back to the chat). The open `ChatView` publishes its runs
   (`openChatSubagents`), which `useSubagentNav` turns into sub-entries (robot, title, state). **Titles cost nothing:**
@@ -395,7 +440,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   as "[Context]", bare headings such as "## Task" and punctuation-only lines skipped, whitespace collapsed, 70
   characters), else the agent; `subagentNav` adds the short run ID only for runs with neither, so "Subagent 1" never
   shows. **No task in tooltips (issue #52):** the task is the first message of the subagent's transcript; titles
-  (breadcrumb, sub-entries, step links, task strip) are `EllipsisText`, whose one-line tooltip shows the title only
+  (breadcrumb, sub-entries, subagent card, task strip) are `EllipsisText`, whose one-line tooltip shows the title only
   while it is cut; the back arrow says just "Back to chat", and the panel's chat selector shows no tooltip while a
   subagent is open (at most one tooltip at a time). All of them open on hover only (`disableFocusListener`: the select
   gets focus back when its menu closes, which used to leave the tooltip open after a click outside), close on leave,
@@ -404,14 +449,15 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   closed. **Group:** open while a run is live, closed when all are done;
   the user's toggle holds until that default changes (`groupOpen`, `toggleGroup`), the group of the opened subagent is
   always open, and closing it goes back to the chat. **Panel:** the sub-entries sit indented under the open chat in
-  the chat selector (toggle with count on the chat's item, `stopPropagation` so it does not select the chat); a
-  selected subagent is the select value `subagent:<run>` and renders as breadcrumb `← chat › subagent` in the same
-  height (back arrow and chat title stop `mousedown`, so they do not open the menu). **`/ai-agent`:** sub-entries under
+  the chat selector's list (badge "🤖 n" with the toggle on the chat's row, `stopPropagation` so it does not select the
+  chat); a selected subagent turns the field violet with a back arrow in it and "chat › 🤖 subagent" as title (see
+  *Chat layout v2*). **`/ai-agent`:** sub-entries under
   the selected chat in the history (grid `minmax(0, 1fr)`, else long titles widen the column), the breadcrumb in the
-  chat header's title. Marking: robot icon, breadcrumb and a 3 px left border in `agentColors.subagent`. Second ways
-  in: the `subagent` call in the main transcript lists the runs it started as links (`runsByCall`, after the gateway's
-  `assignRuns`: the last answer with a subagent call before the run's start, the call naming the run's agent wins),
-  and the runs in `TaskStrip` carry an open button. **In the panel, subagents alone open no task strip**
+  chat header's title. Marking: robot icon, breadcrumb or violet field, the state chip on top and the footer in
+  `agentColors.subagent` (no left border since #54). Second ways in: the answer whose `subagent` call started runs lists
+  them as a card below its text (`SubagentCard`; `runsByCall`, after the gateway's `assignRuns`: the last answer with a
+  subagent call before the run's start, the call naming the run's agent wins), and the runs in `TaskStrip` carry an
+  open button. **In the panel, subagents alone open no task strip**
   (`subagentsElsewhere`): they are in the chat selector, and the transcript keeps the height it has without subagents
   (measured 573 px with and without; the strip took 46 px before); with background tasks the strip shows and lists
   the runs too. Render check: mock `subagent_entries`, `subagent_runs` and an SSE `subagent` event; compare the

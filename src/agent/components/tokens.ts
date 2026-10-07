@@ -20,6 +20,10 @@ export const agentColors = {
     /** Marks the read-only view of a subagent (left border, breadcrumb, read-only line; issue #48). */
     subagent: '#5e35b1',
     subagentTint: '#f3effa',
+    /** The user's message bubble (design "Agent Chat Panel v2", issue #54). */
+    userBubble: '#e3efe8',
+    /** Outline of fields and buttons in the panel (MUI's outlined input border). */
+    outline: 'rgba(0, 0, 0, 0.23)',
 };
 
 export const MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace';
@@ -47,14 +51,19 @@ export const codeBlockSx = {
     whiteSpace: 'pre',
 } as const;
 
+/** Height of the panel's chat selector and the square buttons next to it (design: 48 px; issue #54). */
+export const CHAT_ROW_HEIGHT = 44;
+
 /**
- * Square outlined icon button of the panel's chat row ("New chat" plus and the internet globe), 32 × 32 px. Both use
- * it, so they keep the same size and look.
+ * Square outlined icon button of the panel's chat row ("New chat" plus and the internet globe), as high as the chat
+ * selector. Both use it, so they keep the same size and look.
  */
 export const rowIconButtonSx = {
     flex: 'none',
+    width: CHAT_ROW_HEIGHT,
+    height: CHAT_ROW_HEIGHT,
     border: 1,
-    borderColor: 'divider',
+    borderColor: agentColors.outline,
     borderRadius: 1,
-    p: '6px',
+    p: 0,
 } as const;
