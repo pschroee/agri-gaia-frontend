@@ -222,36 +222,15 @@ function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
 }
 
 /**
- * The tool calls of an answer: status, tool name in monospace, a hint at the arguments and the measured duration. A
- * running foreground command offers "Move to background" and "Stop"; a call that started a background task names it.
- * `plain` (issue #54): only the rows, for the opened process line of an answer and the step under "Thinking …";
- * otherwise a box with a headline, as in a subagent's task strip.
+ * Compact list of the tool calls of one agent step, in the answer where they happened (as before issue #54, restored
+ * by #57): status, tool name in monospace, a hint at the arguments and the measured duration. A running foreground
+ * command offers "Move to background" and "Stop"; a call that started a background task names it.
  */
-export default function StepList({
-    steps,
-    controls,
-    plain = false,
-}: {
-    steps: Step[];
-    controls?: StepControls;
-    plain?: boolean;
-}) {
-    const rows = (
-        <Box
-            component="ul"
-            data-testid="agent-steps"
-            sx={{ listStyle: 'none', m: 0, p: 0, px: plain ? 0 : 1.5, pb: plain ? 0 : 1, display: 'grid', rowGap: 0.75 }}
-        >
-            {steps.map((s) => (
-                <StepRow key={s.id} s={s} controls={controls} />
-            ))}
-        </Box>
-    );
-    if (plain) return rows;
+export default function StepList({ steps, controls }: { steps: Step[]; controls?: StepControls }) {
     const total = steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
     const anyDuration = steps.some((s) => s.durationMs !== undefined);
     return (
-        <Box sx={{ ...blockSx, borderLeft: `3px solid ${agentColors.green}`, my: 1 }}>
+        <Box data-testid="agent-step-list" sx={{ ...blockSx, borderLeft: `3px solid ${agentColors.green}`, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, pt: 1, pb: 0.75 }}>
                 <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{headline(steps)}</Typography>
                 {anyDuration && (
@@ -262,7 +241,15 @@ export default function StepList({
                     </Typography>
                 )}
             </Box>
-            {rows}
+            <Box
+                component="ul"
+                data-testid="agent-steps"
+                sx={{ listStyle: 'none', m: 0, px: 1.5, pb: 1, display: 'grid', rowGap: 0.75 }}
+            >
+                {steps.map((s) => (
+                    <StepRow key={s.id} s={s} controls={controls} />
+                ))}
+            </Box>
         </Box>
     );
 }

@@ -22,7 +22,7 @@ import { AgentBlock, UserBubble } from './Conversation';
 import EllipsisText from './EllipsisText';
 import type { Files, Thinking } from './Conversation';
 import { STATE_COLOR, SubagentIcon, SubagentState } from './SubagentState';
-import { WorkingIndicator } from './ProcessLine';
+import WorkingIndicator from './WorkingIndicator';
 import { agentColors } from './tokens';
 
 /**
@@ -239,8 +239,8 @@ function SubagentLogHead({ status }: { status: RunStatus }) {
 }
 
 /**
- * A subagent's run with the chat's own components: the task as a user message, answers as text, tool calls behind the
- * answer's process line. On top its state and "Subagent log · read-only" (issue #54; the violet selector, or the
+ * A subagent's run with the chat's own components: the task as a user message, answers with their thinking and tool
+ * steps in order (#57). On top its state and "Subagent log · read-only" (issue #54; the violet selector, or the
  * breadcrumb on /ai-agent, marks that this is not the chat).
  */
 export function SubagentTranscript({
@@ -277,10 +277,17 @@ export function SubagentTranscript({
                     <UserBubble key={it.key} text={it.text} dense={dense} files={files} />
                 ) : it.kind === 'agent' ? (
                     // no chat id: a subagent's display images are not served per subagent
-                    <AgentBlock key={it.key} item={it} dense={dense} thinking={thinking} />
+                    <AgentBlock
+                        key={it.key}
+                        item={it}
+                        dense={dense}
+                        thinking={thinking}
+                        active={live && it.key === items[items.length - 1].key}
+                    />
                 ) : null,
             )}
-            {live && (
+            {/* the working hint only while the run shows nothing of its current answer yet (#57); quiet: always */}
+            {live && (status === 'idle' || items[items.length - 1]?.kind !== 'agent') && (
                 <WorkingIndicator label={status === 'idle' ? 'The subagent is quiet …' : 'The subagent is working …'} />
             )}
         </Box>
