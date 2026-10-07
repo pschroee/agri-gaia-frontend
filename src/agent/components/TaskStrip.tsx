@@ -9,12 +9,14 @@ import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 
 import {
     backgroundStatus,
@@ -36,6 +38,7 @@ import {
     runStatus,
     runSubtitle,
     runTitle,
+    runTooltip,
     shortRunId,
 } from '../subagents';
 import type { RunStatus, SubagentRun } from '../subagents';
@@ -228,12 +231,15 @@ function SubagentRow({
     now,
     calls,
     chatId,
+    onOpen,
 }: {
     run: SubagentRun;
     status: RunStatus;
     now: number;
     calls: LLMCall[];
     chatId: string;
+    /** Opens the subagent's own view (issue #48). */
+    onOpen?: (runId: string) => void;
 }) {
     const [open, setOpen] = useState(false);
     const usage = runUsage(run, calls);
@@ -250,68 +256,84 @@ function SubagentRow({
             data-status={status}
             sx={{ borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0 }, minWidth: 0 }}
         >
-            <ButtonBase
-                onClick={() => setOpen(!open)}
-                aria-expanded={open}
-                sx={{
-                    display: 'flex',
-                    width: '100%',
-                    alignItems: 'flex-start',
-                    gap: 0.75,
-                    py: 0.75,
-                    textAlign: 'left',
-                }}
-            >
-                <ChevronRightIcon
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', minWidth: 0 }}>
+                <ButtonBase
+                    onClick={() => setOpen(!open)}
+                    aria-expanded={open}
                     sx={{
-                        fontSize: 16,
-                        mt: '1px',
-                        flex: 'none',
-                        color: 'text.secondary',
-                        transform: open ? 'rotate(90deg)' : 'none',
-                        transition: 'transform 150ms',
+                        display: 'flex',
+                        flex: 1,
+                        minWidth: 0,
+                        alignItems: 'flex-start',
+                        gap: 0.75,
+                        py: 0.75,
+                        textAlign: 'left',
                     }}
-                />
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                        {live && <CircularProgress size={11} thickness={5} sx={{ flex: 'none' }} />}
-                        <Typography
-                            noWrap
-                            title={run.task ?? runTitle(run)}
-                            sx={{ fontSize: 12.5, fontWeight: 500, minWidth: 0 }}
-                        >
-                            {runTitle(run)}
-                        </Typography>
-                        {usage && (
-                            <Tooltip
-                                title={`${usage.calls} model call${usage.calls === 1 ? '' : 's'} · ${formatTokens(
-                                    usage.tokens,
-                                )} tokens (input and output), recorded at the LLM proxy`}
+                >
+                    <ChevronRightIcon
+                        sx={{
+                            fontSize: 16,
+                            mt: '1px',
+                            flex: 'none',
+                            color: 'text.secondary',
+                            transform: open ? 'rotate(90deg)' : 'none',
+                            transition: 'transform 150ms',
+                        }}
+                    />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
+                            {live && <CircularProgress size={11} thickness={5} sx={{ flex: 'none' }} />}
+                            <Typography
+                                noWrap
+                                title={runTooltip(run)}
+                                sx={{ fontSize: 12.5, fontWeight: 500, minWidth: 0 }}
                             >
-                                <Typography
-                                    component="span"
-                                    data-testid="agent-subagent-tokens"
-                                    sx={{
-                                        ml: 'auto',
-                                        flex: 'none',
-                                        fontSize: 11.5,
-                                        color: 'text.secondary',
-                                        fontVariantNumeric: 'tabular-nums',
-                                    }}
+                                {runTitle(run)}
+                            </Typography>
+                            {usage && (
+                                <Tooltip
+                                    title={`${usage.calls} model call${usage.calls === 1 ? '' : 's'} · ${formatTokens(
+                                        usage.tokens,
+                                    )} tokens (input and output), recorded at the LLM proxy`}
                                 >
-                                    {formatTokensShort(usage.tokens)} tokens
-                                </Typography>
-                            </Tooltip>
-                        )}
-                    </Box>
-                    <Typography noWrap sx={{ fontSize: 11.5, color: 'text.secondary' }}>
-                        <Box component="span" sx={{ color: RUN_COLOR[status] }}>
-                            {meta[0]}
+                                    <Typography
+                                        component="span"
+                                        data-testid="agent-subagent-tokens"
+                                        sx={{
+                                            ml: 'auto',
+                                            flex: 'none',
+                                            fontSize: 11.5,
+                                            color: 'text.secondary',
+                                            fontVariantNumeric: 'tabular-nums',
+                                        }}
+                                    >
+                                        {formatTokensShort(usage.tokens)} tokens
+                                    </Typography>
+                                </Tooltip>
+                            )}
                         </Box>
-                        {meta.length > 1 ? ` · ${meta.slice(1).join(' · ')}` : ''} · {runSubtitle(run)}
-                    </Typography>
-                </Box>
-            </ButtonBase>
+                        <Typography noWrap sx={{ fontSize: 11.5, color: 'text.secondary' }}>
+                            <Box component="span" sx={{ color: RUN_COLOR[status] }}>
+                                {meta[0]}
+                            </Box>
+                            {meta.length > 1 ? ` · ${meta.slice(1).join(' · ')}` : ''} · {runSubtitle(run)}
+                        </Typography>
+                    </Box>
+                </ButtonBase>
+                {onOpen && (
+                    <Tooltip title="Open this subagent (read-only)">
+                        <IconButton
+                            size="small"
+                            aria-label={`Open subagent ${runTitle(run)}`}
+                            data-testid="agent-subagent-open"
+                            onClick={() => onOpen(run.runId)}
+                            sx={{ flex: 'none', mt: 0.5, ml: 0.25, p: 0.5 }}
+                        >
+                            <SmartToyOutlinedIcon sx={{ fontSize: 17, color: agentColors.subagent }} />
+                        </IconButton>
+                    </Tooltip>
+                )}
+            </Box>
             <Collapse in={open} unmountOnExit>
                 <Box sx={{ pl: 2.75, pb: 1 }}>
                     <RunSteps run={run} live={live} chatId={chatId} />
@@ -334,6 +356,8 @@ export default function TaskStrip({
     subagentEntries,
     subagentRuns,
     llmCalls,
+    onOpenSubagent,
+    subagentsElsewhere = false,
 }: {
     chatId: string;
     chatRunning: boolean;
@@ -342,6 +366,10 @@ export default function TaskStrip({
     subagentEntries: SubagentEntry[];
     subagentRuns: SubagentRunMeta[];
     llmCalls: LLMCall[];
+    /** Opens a subagent's own view (issue #48). */
+    onOpenSubagent?: (runId: string) => void;
+    /** The subagents are reachable elsewhere (the panel's chat selector): they alone open no strip. */
+    subagentsElsewhere?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const runs = useMemo(() => groupRuns(subagentEntries, subagentRuns), [subagentEntries, subagentRuns]);
@@ -353,7 +381,9 @@ export default function TaskStrip({
     const statuses = runs.map((r) => runStatus(r, { chatRunning, now }));
     const subRunning = statuses.filter((s) => s === 'running').length;
     const sorted = useMemo(() => sortBackground(background), [background]);
-    if (background.length === 0 && runs.length === 0) return null;
+    // subagents alone open no strip where `subagentsElsewhere` (the panel lists them in its chat selector, so the
+    // transcript keeps its height; issue #48); with background tasks they are listed here as well
+    if (background.length === 0 && (runs.length === 0 || subagentsElsewhere)) return null;
     const busy = bgRunning + subRunning > 0;
     const summary = [
         background.length ? `Background ${backgroundSummary(background)}` : '',
@@ -423,6 +453,7 @@ export default function TaskStrip({
                                         now={now}
                                         calls={llmCalls}
                                         chatId={chatId}
+                                        onOpen={onOpenSubagent}
                                     />
                                 ))}
                             </Box>

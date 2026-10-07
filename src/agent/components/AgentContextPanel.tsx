@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -21,6 +21,7 @@ import { useAgent } from '../AgentContext';
 import { expandToAgentPage } from '../expand';
 import { chatTitle, sectionOf } from '../format';
 import { isRunning, runSince, runStateOf, runStateText } from '../runState';
+import { useSubagentNav } from '../useSubagentNav';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
@@ -28,11 +29,14 @@ import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
 import SignInNotice from './SignInNotice';
+import { GroupToggleButton, SubagentBreadcrumb, SubagentEntryContent } from './SubagentView';
 import { agentColors } from './tokens';
 
 export const AGENT_PANEL_WIDTH = 400;
 /** Height of the fixed platform footer. */
 export const FOOTER_HEIGHT = 30;
+/** Values of the chat selector that open a subagent of the open chat. */
+const SUB_PREFIX = 'subagent:';
 
 /**
  * The panel's chat row (issue #38): the chat selector takes the remaining room and ellipsizes the title (full title
@@ -42,22 +46,92 @@ export const FOOTER_HEIGHT = 30;
 function ChatSelector() {
     const { chats, selectedChatId, selectChat } = useAgent();
     const selected = chats.find((c) => c.id === selectedChatId);
+    const sub = useSubagentNav();
     const [menuOpen, setMenuOpen] = useState(false);
     const [tipOpen, setTipOpen] = useState(false);
+    const chatValue = selectedChatId && chats.some((c) => c.id === selectedChatId) ? selectedChatId : '';
+    // a subagent of the open chat is a value of its own (issue #48); its entry is then always listed
+    const value = chatValue && sub.selected ? `${SUB_PREFIX}${sub.selected.runId}` : chatValue;
+    const items: ReactNode[] = [];
+    if (chats.length === 0)
+        items.push(
+            <MenuItem key="none" value="" disabled>
+                No chats yet
+            </MenuItem>,
+        );
+    for (const c of chats.slice(0, 20)) {
+        const state = runStateOf(c);
+        const withSubs = c.id === sub.chatId && sub.items.length > 0;
+        items.push(
+            <MenuItem
+                key={c.id}
+                value={c.id}
+                sx={{ fontSize: 13, gap: 1, whiteSpace: 'normal', alignItems: 'flex-start' }}
+            >
+                <Box component="span" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                    {chatTitle(c)}
+                </Box>
+                {runStateText(state, 'list') && (
+                    <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
+                        <RunStateChip state={state} />
+                    </Box>
+                )}
+                {c.pending_approvals > 0 && state !== 'waiting' && (
+                    <Box
+                        component="span"
+                        sx={{ color: agentColors.amberText, fontSize: 12, flex: 'none', whiteSpace: 'nowrap' }}
+                    >
+                        · {c.pending_approvals} waiting
+                    </Box>
+                )}
+                {withSubs && <GroupToggleButton open={sub.open} count={sub.items.length} onToggle={sub.toggle} />}
+            </MenuItem>,
+        );
+        if (withSubs && sub.open)
+            for (const it of sub.items)
+                items.push(
+                    <MenuItem
+                        key={`${SUB_PREFIX}${it.runId}`}
+                        value={`${SUB_PREFIX}${it.runId}`}
+                        data-testid="agent-subagent-entry"
+                        data-run-id={it.runId}
+                        dense
+                        sx={{ fontSize: 12.5, pl: 3.5, minHeight: 32 }}
+                    >
+                        <SubagentEntryContent item={it} />
+                    </MenuItem>,
+                );
+    }
+    const onChange = (v: string) => {
+        if (v.startsWith(SUB_PREFIX)) sub.select(v.slice(SUB_PREFIX.length));
+        else selectChat(v);
+    };
     return (
         // minmax(0, 1fr): an auto column would grow to the title's full width and push the buttons out of the panel
         <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 1 }}>
             <Box data-testid="agent-chat-picker-row" sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 0 }}>
                 <Tooltip
-                    title={selected ? chatTitle(selected) : ''}
+                    title={
+                        selected ? (
+                            sub.selected ? (
+                                <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
+                                    {sub.selected.tooltip}
+                                </Box>
+                            ) : (
+                                chatTitle(selected)
+                            )
+                        ) : (
+                            ''
+                        )
+                    }
                     open={tipOpen && !menuOpen}
                     onOpen={() => setTipOpen(true)}
                     onClose={() => setTipOpen(false)}
                 >
                     <Select
                         size="small"
-                        value={selectedChatId && chats.some((c) => c.id === selectedChatId) ? selectedChatId : ''}
-                        onChange={(e) => selectChat(String(e.target.value))}
+                        value={value}
+                        onChange={(e) => onChange(String(e.target.value))}
                         open={menuOpen}
                         onOpen={() => {
                             setTipOpen(false);
@@ -65,10 +139,20 @@ function ChatSelector() {
                         }}
                         onClose={() => setMenuOpen(false)}
                         displayEmpty
-                        // the state of the selected chat shows in the panel header
+                        // the state of the selected chat shows in the panel header; a subagent shows as breadcrumb
+                        // "← chat › subagent" in the same height
                         renderValue={(id) => {
-                            const c = chats.find((x) => x.id === id);
-                            return c ? chatTitle(c) : chats.length ? '' : 'No chats yet';
+                            const c = chats.find((x) => x.id === selectedChatId);
+                            if (String(id).startsWith(SUB_PREFIX) && c && sub.selected)
+                                return (
+                                    <SubagentBreadcrumb
+                                        chatTitle={chatTitle(c)}
+                                        item={sub.selected}
+                                        onBack={() => sub.select(undefined)}
+                                    />
+                                );
+                            const chat = chats.find((x) => x.id === id);
+                            return chat ? chatTitle(chat) : chats.length ? '' : 'No chats yet';
                         }}
                         sx={{
                             flex: 1,
@@ -76,6 +160,9 @@ function ChatSelector() {
                             bgcolor: '#fff',
                             fontSize: 13,
                             '& .MuiSelect-select': { py: 0.75, minWidth: 0 },
+                            ...(sub.selected && {
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: agentColors.subagent },
+                            }),
                         }}
                         inputProps={{ 'aria-label': 'Chat' }}
                         // the list opens left-aligned under the selector (MUI centres it), stays inside the panel
@@ -87,38 +174,7 @@ function ChatSelector() {
                             PaperProps: { sx: { maxWidth: AGENT_PANEL_WIDTH - 32 } },
                         }}
                     >
-                        {chats.length === 0 && (
-                            <MenuItem value="" disabled>
-                                No chats yet
-                            </MenuItem>
-                        )}
-                        {chats.slice(0, 20).map((c) => {
-                            const state = runStateOf(c);
-                            return (
-                                <MenuItem
-                                    key={c.id}
-                                    value={c.id}
-                                    sx={{ fontSize: 13, gap: 1, whiteSpace: 'normal', alignItems: 'flex-start' }}
-                                >
-                                    <Box component="span" sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
-                                        {chatTitle(c)}
-                                    </Box>
-                                    {runStateText(state, 'list') && (
-                                        <Box component="span" sx={{ flex: 'none', display: 'inline-flex' }}>
-                                            <RunStateChip state={state} />
-                                        </Box>
-                                    )}
-                                    {c.pending_approvals > 0 && state !== 'waiting' && (
-                                        <Box
-                                            component="span"
-                                            sx={{ color: agentColors.amberText, fontSize: 12, flex: 'none', whiteSpace: 'nowrap' }}
-                                        >
-                                            · {c.pending_approvals} waiting
-                                        </Box>
-                                    )}
-                                </MenuItem>
-                            );
-                        })}
+                        {items}
                     </Select>
                 </Tooltip>
                 <NewChatButton compact />

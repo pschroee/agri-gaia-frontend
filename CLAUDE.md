@@ -357,7 +357,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   state, runtime, the last three lines of `tail` and Stop (`POST …/background/{bg}/stop`, 409 explained), and the runs
   with title (workflow label, else the task's first line), state, duration, tool count, agent and short run ID, and
   the tokens recorded at the LLM proxy (`runUsage`, input plus output; `GET …/llm_calls`, matched by the `response_id` of the run's entries, loaded once
-  subagents exist). A run opens to its own steps (`runItems`: task, step lists, text answers). Data: `background`,
+  subagents exist). A run opens to its own steps (`runItems`: task, step lists, text answers) and has a button that opens
+  its read-only view (see *Looking into a subagent*). Data: `background`,
   `subagent_entries`, `subagent_runs` of `GET /chats/{id}`, SSE `background` (a throttled `output` never overwrites an
   end), `subagent`, `subagent_run`, `llm_call`. A run's state comes from pi-subagents when known, otherwise it is
   estimated from its entries (`runStatus`, `src/agent/subagents.ts`). **Notes:** the gateway's note that a task ended
@@ -365,6 +366,33 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (`BackgroundNoteLine`), opening to command, last lines and log path; queued notes are labelled from their header line.
   Render check: answer `tools/running`, `background`, `llm_calls` and the chat's `background`/`subagent_*` fields, drive
   SSE `pi` `tool_execution_start|end`, `background`, `subagent`, `subagent_run`.
+- **Looking into a subagent (issue #48):** every subagent run of the open chat can be opened read-only, with the
+  transcript components of the chat (`runTranscript` in `src/agent/subagents.ts`: each task as a user bubble, text
+  answers and tool calls as agent blocks with step lists, result done/failed/running/not finished), live through the
+  SSE events `subagent` and `subagent_run`. No input and no stop per subagent; the chat's `ChatInput` stays mounted but
+  hidden, so a draft and staged files survive, and a slim line "Subagent · <state> · read-only" with "Back to chat"
+  (36 px, below the 88 px of the input area) takes its place. Selection lives in `AgentContext` (`selectedSubagent`,
+  `selectSubagent`, valid only for the selected chat; `selectChat`, also of the same chat, and "New chat" leave it; a
+  run the loaded chat does not know falls back to the chat). The open `ChatView` publishes its runs
+  (`openChatSubagents`), which `useSubagentNav` turns into sub-entries (robot, title, state). **Titles cost nothing:**
+  `runTitle` gives the workflow label, else the first meaningful line of the task (markdown marks, "Task:", tags such
+  as "[Context]", bare headings such as "## Task" and punctuation-only lines skipped, whitespace collapsed, 70
+  characters), else the agent; `subagentNav` adds the short run ID only for runs with neither, so "Subagent 1" never
+  shows; the full task is the tooltip (`runTooltip`). **Group:** open while a run is live, closed when all are done;
+  the user's toggle holds until that default changes (`groupOpen`, `toggleGroup`), the group of the opened subagent is
+  always open, and closing it goes back to the chat. **Panel:** the sub-entries sit indented under the open chat in
+  the chat selector (toggle with count on the chat's item, `stopPropagation` so it does not select the chat); a
+  selected subagent is the select value `subagent:<run>` and renders as breadcrumb `← chat › subagent` in the same
+  height (back arrow and chat title stop `mousedown`, so they do not open the menu). **`/ai-agent`:** sub-entries under
+  the selected chat in the history (grid `minmax(0, 1fr)`, else long titles widen the column), the breadcrumb in the
+  chat header's title. Marking: robot icon, breadcrumb and a 3 px left border in `agentColors.subagent`. Second ways
+  in: the `subagent` call in the main transcript lists the runs it started as links (`runsByCall`, after the gateway's
+  `assignRuns`: the last answer with a subagent call before the run's start, the call naming the run's agent wins),
+  and the runs in `TaskStrip` carry an open button. **In the panel, subagents alone open no task strip**
+  (`subagentsElsewhere`): they are in the chat selector, and the transcript keeps the height it has without subagents
+  (measured 573 px with and without; the strip took 46 px before); with background tasks the strip shows and lists
+  the runs too. Render check: mock `subagent_entries`, `subagent_runs` and an SSE `subagent` event; compare the
+  transcript height of a chat with and without subagents and the select's height with and without breadcrumb.
 - **Menus without scroll lock:** MUI's Popover (and Menu and Select) locks the page while open: `overflow: hidden`
   on body removes the document scrollbar and `padding-right` on body and `.mui-fixed` makes up for it. In-flow content
   and the app bar stay, but the context panel (fixed drawer at `right: 0`, no `.mui-fixed`) jumped right by the

@@ -5,6 +5,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    groupOpen,
+    groupOpenByDefault,
     groupRuns,
     mergeLLMCalls,
     mergeRunMeta,
@@ -16,9 +18,16 @@ import {
     runStatus,
     runSubtitle,
     runTitle,
+    runTooltip,
+    runTranscript,
+    runsByCall,
     shortRunId,
+    subagentNav,
+    subagentStateText,
+    toggleGroup,
+    toolAgents,
 } from './subagents';
-import type { LLMCall, SubagentEntry, SubagentRunMeta } from './types';
+import type { LLMCall, StoredMessage, SubagentEntry, SubagentRunMeta } from './types';
 
 const T0 = Date.parse('2026-10-06T10:00:00Z');
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -170,5 +179,132 @@ describe('subagent runs', () => {
             true,
         )[0];
         expect(err.type === 'steps' && err.steps.map((s) => s.status)).toEqual(['running', 'error']);
+    });
+});
+
+describe('looking into subagents (issue #48)', () => {
+    it('titles a run by its name, else the first meaningful line of the task, never "Subagent n"', () => {
+        expect(runTitle({ agent: 'worker', label: ' summary-datasets ', task: 'Do it' })).toBe('summary-datasets');
+        expect(runTitle({ agent: 'worker', task: '\n\n## Task: Summarise the **datasets**\nthen more' })).toBe(
+            'Summarise the datasets',
+        );
+        expect(runTitle({ agent: 'worker', task: '---\n[Context]\n- `ls` the models\n' })).toBe('ls the models');
+        expect(runTitle({ agent: 'worker', task: '1. Count   the\timages' })).toBe('Count the images');
+        expect(runTitle({ agent: 'worker', task: '## Task\nSummarise the models\n' })).toBe('Summarise the models');
+        expect(runTitle({ agent: 'worker', task: 'Context:\nThe platform has 3 datasets.' })).toBe(
+            'The platform has 3 datasets.',
+        );
+        expect(runTitle({ agent: 'worker', task: 'x'.repeat(100) }, 20)).toBe(`${'x'.repeat(19)}…`);
+        expect(runTitle({ agent: 'worker', task: '```\n***\n' })).toBe('worker');
+        expect(runTitle({ agent: 'worker', task: 'Zähle die Bilder' })).toBe('Zähle die Bilder');
+    });
+
+    it('puts the full task into the tooltip', () => {
+        expect(runTooltip({ agent: 'w', task: 'Task: A\nB' })).toBe('Task: A\nB');
+        expect(runTooltip({ agent: 'w', label: 'L', task: 'A' })).toBe('L\n\nA');
+        expect(runTooltip({ agent: 'w' })).toBe('w');
+    });
+
+    it('lists the sub-entries with title, tooltip and state; runs without name or task keep apart', () => {
+        const runs = groupRuns(entries, [
+            meta('run-2', { label: 'labels', state: 'complete' }),
+            meta('abcdefgh', { started_at: at(30), state: 'running', agent: 'worker' }),
+            meta('zyxwvuts', { started_at: at(31), state: 'failed', agent: '' }),
+        ]);
+        const nav = subagentNav(runs, { chatRunning: true, now: T0 + 40_000 });
+        expect(nav.map((n) => [n.title, n.status])).toEqual([
+            ['Count the images per class', 'done'],
+            ['labels', 'done'],
+            ['worker · abcdef', 'running'],
+            ['Subagent · zyxwvu', 'failed'],
+        ]);
+        expect(nav[0].tooltip).toBe('Task: Count the images per class\nmore');
+        expect(nav.some((n) => /^Subagent \d/.test(n.title))).toBe(false);
+        expect(subagentStateText('stopped')).toBe('ended');
+        expect(subagentStateText('running')).toBe('running');
+    });
+
+    it("opens the group while one runs and keeps the user's toggle until the default changes", () => {
+        expect(groupOpenByDefault(['done', 'running'])).toBe(true);
+        expect(groupOpenByDefault(['done', 'failed', 'stopped'])).toBe(false);
+        expect(groupOpenByDefault(['idle'])).toBe(true);
+        expect(groupOpen(['running'], undefined)).toBe(true);
+        expect(groupOpen(['done'], undefined)).toBe(false);
+        // closed by hand while running: stays closed while it runs
+        const closed = toggleGroup(['running'], undefined);
+        expect(closed).toEqual({ open: false, madeWhenDefault: true });
+        expect(groupOpen(['running', 'running'], closed)).toBe(false);
+        // all done: the default (closed) applies again; a new run opens it again
+        expect(groupOpen(['done'], closed)).toBe(false);
+        const opened = toggleGroup(['done'], undefined);
+        expect(groupOpen(['done'], opened)).toBe(true);
+        expect(groupOpen(['done', 'running'], opened)).toBe(true);
+        expect(groupOpen(['done', 'done'], { open: true, madeWhenDefault: true })).toBe(false);
+        // the opened subagent keeps its group open
+        expect(groupOpen(['done'], undefined, true)).toBe(true);
+        expect(toggleGroup(['done'], undefined, true)).toEqual({ open: false, madeWhenDefault: false });
+    });
+
+    it('maps a run to transcript items: task as user message, text and steps as agent blocks', () => {
+        const [a] = groupRuns(entries);
+        const items = runTranscript(a, false);
+        expect(items.map((i) => i.kind)).toEqual(['user', 'agent']);
+        expect(items[0]).toMatchObject({ kind: 'user', text: 'Task: Count the images per class\nmore' });
+        const agent = items[1];
+        expect(agent.kind === 'agent' && agent.parts).toEqual([
+            { type: 'steps', steps: [{ id: 'e2', tool: 'bash', summary: 'ls data', status: 'done' }] },
+            { type: 'text', text: 'Two classes, 15 images each.' },
+        ]);
+        // keys are unique across runs, a second task starts a new user message
+        const two = runTranscript(
+            {
+                runId: 'r',
+                entries: [
+                    entry('r', 't1', 'task', 1, { text: 'First' }),
+                    entry('r', 'x', 'text', 2, { text: 'One' }),
+                    entry('r', 't2', 'task', 3, { text: 'Second' }),
+                    entry('r', 'c', 'tool_call', 4, { name: 'read', id: 'k' }),
+                    entry('r', 'd', 'tool_result', 5, { name: 'read', tool_call_id: 'k', is_error: true }),
+                ],
+            },
+            true,
+        );
+        expect(two.map((i) => i.kind)).toEqual(['user', 'agent', 'user', 'agent']);
+        expect(new Set(two.map((i) => i.key)).size).toBe(4);
+        const last = two[3];
+        expect(last.kind === 'agent' && last.parts[0].type === 'steps' && last.parts[0].steps[0].status).toBe('error');
+        expect(runTranscript({ runId: 'e', entries: [] }, true)).toEqual([]);
+    });
+
+    it('assigns runs to the subagent call that started them', () => {
+        expect(toolAgents('{"agent":"a","tasks":[{"agent":"b"},{"x":1}]}')).toEqual(['a', 'b']);
+        expect(toolAgents({ chain: [{ agent: 'c' }] })).toEqual(['c']);
+        expect(toolAgents('not json')).toEqual([]);
+        const msg = (seq: number, s: number, calls: { id: string; args: unknown }[]): StoredMessage => ({
+            seq,
+            role: 'assistant',
+            created_at: at(s + 1),
+            message: {
+                role: 'assistant',
+                timestamp: T0 + s * 1000,
+                content: calls.map((c) => ({ type: 'toolCall', id: c.id, name: 'subagent', arguments: c.args })),
+            },
+        });
+        const messages = [
+            msg(1, 0, [
+                { id: 'call-a', args: { agent: 'researcher' } },
+                { id: 'call-b', args: { agent: 'reviewer' } },
+            ]),
+            { seq: 2, role: 'user', created_at: at(5), message: { role: 'user', content: 'hi' } },
+            msg(3, 10, [{ id: 'call-c', args: { tasks: [{ agent: 'x' }] } }]),
+        ];
+        const runs = [
+            { runId: 'early', agent: 'researcher', start: T0 - 1000 },
+            { runId: 'r1', agent: 'reviewer', start: T0 + 2000 },
+            { runId: 'r2', agent: 'researcher', start: T0 + 3000 },
+            { runId: 'r3', agent: 'other', start: T0 + 11_000 },
+        ];
+        expect(runsByCall(messages, runs)).toEqual({ 'call-b': ['r1'], 'call-a': ['r2'], 'call-c': ['r3'] });
+        expect(runsByCall([], runs)).toEqual({});
     });
 });
