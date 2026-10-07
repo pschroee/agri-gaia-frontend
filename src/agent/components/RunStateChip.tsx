@@ -15,6 +15,7 @@ import { agentColors } from './tokens';
 export const RUN_STATE_COLOR: Record<RunState, string> = {
     working: agentColors.green,
     waiting: agentColors.amberText,
+    starting: agentColors.green,
     resuming: agentColors.green,
     idle: agentColors.ok,
     dormant: '#757575',
@@ -23,7 +24,7 @@ export const RUN_STATE_COLOR: Record<RunState, string> = {
 /** Dot, spinner or moon in front of the state. Working pulses. */
 export function RunStateIcon({ state, size = 8 }: { state: RunState; size?: number }) {
     const color = RUN_STATE_COLOR[state];
-    if (state === 'resuming') return <CircularProgress size={size + 3} sx={{ color, flex: 'none' }} />;
+    if (state === 'resuming' || state === 'starting') return <CircularProgress size={size + 3} sx={{ color, flex: 'none' }} />;
     if (state === 'dormant') return <BedtimeOutlinedIcon sx={{ fontSize: size + 5, color, flex: 'none' }} />;
     return (
         <Box

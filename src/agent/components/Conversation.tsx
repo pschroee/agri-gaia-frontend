@@ -332,16 +332,22 @@ export default function Conversation({
         }),
         [runningTools, stopTool, backgroundTool, background],
     );
-    // resume blocks sit after the user message that triggered them; not stored yet: at the end
+    // resume blocks sit after the user message that triggered them; not stored yet: at the end. The start of a new
+    // chat's first sandbox comes before everything.
     const placed = useMemo(() => {
         const after = new Map<number, ResumeView[]>();
         const end: ResumeView[] = [];
+        const top: ResumeView[] = [];
         for (const r of resumes) {
+            if (r.start) {
+                top.push(r);
+                continue;
+            }
             const i = resumeAnchor(items, r);
             if (i < 0) end.push(r);
             else after.set(i, [...(after.get(i) ?? []), r]);
         }
-        return { after, end };
+        return { after, end, top };
     }, [items, resumes]);
     const resuming = resumeRunning(resumes);
     // command notes sit before the first message stored after the command ran; nothing stored since: at the end
@@ -366,11 +372,30 @@ export default function Conversation({
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 1.5 : 1.75 }}>
-            {items.length === 0 && !hasLive && !pending && resumes.length === 0 && notes.end.length === 0 && (
-                <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                    No messages yet. Describe what you want to do.
-                </Typography>
+            {placed.top.map((r) => (
+                <ResumeBlock key={`resume-${r.id}`} resume={r} />
+            ))}
+            {/* a new chat waiting for its sandbox, before the first step arrives over SSE */}
+            {chat?.starting && resumes.length === 0 && (
+                <Box
+                    data-testid="agent-chat-starting"
+                    role="status"
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}
+                >
+                    <CircularProgress size={14} />
+                    Starting a sandbox for this chat … You can type already.
+                </Box>
             )}
+            {items.length === 0 &&
+                !hasLive &&
+                !pending &&
+                resumes.length === 0 &&
+                notes.end.length === 0 &&
+                !chat?.starting && (
+                    <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
+                        No messages yet. Describe what you want to do.
+                    </Typography>
+                )}
             {items.map((it, i) => (
                 <Fragment key={it.key}>
                     {notes.before.get(i)?.map((n) => <CommandLine key={n.key} notice={n} />)}
@@ -403,7 +428,13 @@ export default function Conversation({
                     files={files}
                     context={pending.context}
                     dense={dense}
-                    pending={resuming ? 'Goes to the agent once the chat has resumed' : 'Sending …'}
+                    pending={
+                        chat?.starting || resumes.some((r) => r.start && r.state === 'running')
+                            ? 'Goes to the agent once the sandbox is ready'
+                            : resuming
+                              ? 'Goes to the agent once the chat has resumed'
+                              : 'Sending …'
+                    }
                 />
             )}
             {placed.end.map((r) => (
@@ -422,7 +453,7 @@ export default function Conversation({
                 />
             )}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
-            {(chat?.running || pending) && !hasLive && !resuming && !stream.compacting && (
+            {(chat?.running || pending) && !hasLive && !resuming && !chat?.starting && !stream.compacting && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}>
                     <CircularProgress size={14} />
                     {chat?.resuming

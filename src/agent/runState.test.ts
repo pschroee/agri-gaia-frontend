@@ -9,13 +9,15 @@ import {
     formatElapsed,
     isRunning,
     pendingSettled,
+    RUN_STATE_HINT,
+    RUN_STATE_LABEL,
     runSince,
     runStateOf,
     suspendErrorText,
 } from './runState';
 import type { Chat, StoredMessage } from './types';
 
-type RunChat = Pick<Chat, 'state' | 'running' | 'resuming' | 'pending_approvals' | 'running_since'>;
+type RunChat = Pick<Chat, 'state' | 'running' | 'resuming' | 'starting' | 'pending_approvals' | 'running_since'>;
 const chat = (extra: Partial<RunChat> = {}): RunChat => ({
     state: 'active',
     running: false,
@@ -33,6 +35,14 @@ const msg = (seq: number, role: string, createdAt = '2026-10-06T10:00:00Z'): Sto
 describe('runStateOf', () => {
     it('is undefined without a chat', () => {
         expect(runStateOf(undefined)).toBeUndefined();
+    });
+
+    it('shows a new chat waiting for its first sandbox as starting, not resuming', () => {
+        expect(runStateOf(chat({ starting: true, resuming: true }))).toBe('starting');
+        expect(runStateOf(chat({ starting: true }), { resumeRunning: true })).toBe('starting');
+        expect(runStateOf(chat({ resuming: true }))).toBe('resuming');
+        expect(RUN_STATE_LABEL.starting).toBe('Starting');
+        expect(RUN_STATE_HINT.starting).toMatch(/type already/);
     });
 
     it('distinguishes idle, working and dormant', () => {

@@ -6,13 +6,11 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Fab from '@mui/material/Fab';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import AddIcon from '@mui/icons-material/Add';
 import SyncIcon from '@mui/icons-material/Sync';
 
 import { useAgent } from '../AgentContext';
@@ -25,19 +23,18 @@ import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
 import AgentMenuTheme from './AgentMenuTheme';
-import NewChatDialog from './NewChatDialog';
+import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
 import { agentColors } from './tokens';
 import { FOOTER_HEIGHT } from './AgentContextPanel';
 
-function History({ onNew }: { onNew: () => void }) {
+function History() {
     const { chats, selectedChatId, selectChat } = useAgent();
     return (
         <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, overflowY: 'auto', minHeight: 0 }}>
-            <Button fullWidth variant="outlined" startIcon={<AddIcon />} onClick={onNew} sx={{ mb: 2 }}>
-                New chat
-            </Button>
+            <NewChatButton fullWidth sx={{ mb: 2 }} />
+            <NewChatError sx={{ mb: 2 }} />
             <Typography
                 sx={{
                     fontSize: 11.5,
@@ -161,7 +158,6 @@ function AgentPageContent() {
         selectChat(id);
         setParams({});
     };
-    const [newOpen, setNewOpen] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
 
     const refresh = () => {
@@ -213,7 +209,7 @@ function AgentPageContent() {
                         mt: 2.5,
                     }}
                 >
-                    <History onNew={() => setNewOpen(true)} />
+                    <History />
                     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                         {selectedChatId ? (
                             <ChatView
@@ -224,7 +220,7 @@ function AgentPageContent() {
                             />
                         ) : (
                             <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>
-                                Start a new chat to work with the agent.
+                                Start a new chat to work with the agent, or drop files here to start one with them.
                             </Typography>
                         )}
                     </Box>
@@ -238,7 +234,6 @@ function AgentPageContent() {
                     <StatusView refreshKey={refreshKey} onOpenChat={openChat} />
                 </Box>
             )}
-            <NewChatDialog open={newOpen} onClose={() => setNewOpen(false)} />
         </Box>
     );
 }

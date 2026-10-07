@@ -5,6 +5,8 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AgentApiError, agentApi, silentLogin } from './api';
+import { browserLanguage } from './language';
+import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
 import type { Chat, Config, Me, Model } from './types';
 import type { Compacting } from './usage';
 
@@ -27,6 +29,19 @@ type AgentState = {
     selectChat: (id: string | undefined) => void;
     /** Adds a newly created chat and selects it. */
     addChat: (chat: Chat) => void;
+    /**
+     * "New chat": creates a chat with the gateway's defaults right away (no dialog), selects it and hands its input
+     * the focus and `files` (dropped without an open chat). Ignored while a creation is on its way.
+     */
+    startNewChat: (files?: File[]) => Promise<void>;
+    /** A "New chat" request is on its way. */
+    creatingChat: boolean;
+    /** Why the last "New chat" failed (cleared by the next attempt or dismissNewChatError). */
+    newChatError?: string;
+    dismissNewChatError: () => void;
+    /** The chat just created by startNewChat, until its input took focus and files (takeFreshChat). */
+    freshChat?: FreshChat;
+    takeFreshChat: (chatId: string) => void;
     /** Replaces a known chat with a newer state (from the open chat's stream), so lists and header follow live. */
     updateChat: (chat: Chat) => void;
     /** Compactions the open chat views see running right now, by chat id (for the panel header). */
@@ -73,7 +88,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
     const [panelOpen, setPanelOpenState] = useState(() => load(PANEL_KEY) === 'true');
     const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
+    const [creatingChat, setCreatingChat] = useState(false);
+    const [newChatError, setNewChatError] = useState<string>();
+    const [freshChat, setFreshChat] = useState<FreshChat>();
     const checking = useRef(false);
+    const creating = useRef(false);
 
     const check = useCallback(async (allowSilent: boolean) => {
         if (checking.current) return;
@@ -161,6 +180,36 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         [selectChat],
     );
 
+    const startNewChat = useCallback(
+        async (files: File[] = []) => {
+            if (!canStartNewChat(status, creating.current)) return;
+            creating.current = true;
+            setCreatingChat(true);
+            setNewChatError(undefined);
+            try {
+                const chat = await agentApi.createChat(newChatRequest(browserLanguage()));
+                setFreshChat({ chatId: chat.id, files });
+                addChat(chat);
+            } catch (e) {
+                if (e instanceof AgentApiError && e.status === 401) setStatus('signed-out');
+                setNewChatError(
+                    newChatErrorText(e instanceof AgentApiError ? e.status : undefined, e instanceof Error ? e.message : String(e)),
+                );
+            } finally {
+                creating.current = false;
+                setCreatingChat(false);
+            }
+        },
+        [status, addChat],
+    );
+
+    const dismissNewChatError = useCallback(() => setNewChatError(undefined), []);
+
+    const takeFreshChat = useCallback(
+        (chatId: string) => setFreshChat((f) => (f && f.chatId === chatId ? undefined : f)),
+        [],
+    );
+
     const updateChat = useCallback((chat: Chat) => {
         setChats((list) => {
             const i = list.findIndex((c) => c.id === chat.id);
@@ -200,6 +249,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectedChatId,
             selectChat,
             addChat,
+            startNewChat,
+            creatingChat,
+            newChatError,
+            dismissNewChatError,
+            freshChat,
+            takeFreshChat,
             updateChat,
             compacting,
             setCompacting,
@@ -219,6 +274,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectedChatId,
             selectChat,
             addChat,
+            startNewChat,
+            creatingChat,
+            newChatError,
+            dismissNewChatError,
+            freshChat,
+            takeFreshChat,
             updateChat,
             compacting,
             setCompacting,

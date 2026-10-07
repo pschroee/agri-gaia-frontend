@@ -32,6 +32,8 @@ export type ResumeView = {
     error?: string;
     /** Highest stored message seq when the resume started; the user message that triggered it comes later. */
     afterSeq: number;
+    /** The first sandbox of a new chat (gateway `start`), not a resume of a resting chat. */
+    start?: boolean;
 };
 
 const freshSteps = (): ResumeStepView[] => RESUME_PHASES.map((phase) => ({ phase, status: 'pending' }));
@@ -42,8 +44,9 @@ const freshSteps = (): ResumeStepView[] => RESUME_PHASES.map((phase) => ({ phase
  */
 export function applyResumeStep(list: ResumeView[], step: ResumeStep, lastSeq: number): ResumeView[] {
     const i = list.findIndex((r) => r.id === step.id);
-    const cur: ResumeView =
+    const found: ResumeView =
         i >= 0 ? list[i] : { id: step.id, state: 'running', steps: freshSteps(), afterSeq: lastSeq };
+    const cur: ResumeView = step.start && !found.start ? { ...found, start: true } : found;
     let next: ResumeView;
     if (step.phase === 'ready') {
         next = { ...cur, state: 'done', totalMs: step.ms };
@@ -130,11 +133,14 @@ export function stepDetail(s: ResumeStepView): string | undefined {
 
 /** Head line of the block; once finished, the line that stays in the transcript. */
 export function resumeSummary(r: ResumeView, formatMs: (ms: number | undefined) => string | undefined): string {
-    if (r.state === 'running') return 'Resuming the chat …';
-    if (r.state === 'failed') return `Resuming failed${r.error ? `: ${r.error}` : ''}`;
+    if (r.state === 'running') return r.start ? 'Starting a sandbox for the chat …' : 'Resuming the chat …';
+    if (r.state === 'failed') {
+        const why = r.error ? `: ${r.error}` : '';
+        return r.start ? `Starting the sandbox failed${why}. Your next message tries again.` : `Resuming failed${why}`;
+    }
     const total = formatMs(r.totalMs);
     const warn = r.steps.some((s) => s.status === 'warning') ? ' · with warning' : '';
-    return `Resumed in a fresh sandbox${total ? ` · ${total}` : ''}${warn}`;
+    return `${r.start ? 'Started' : 'Resumed'} in a fresh sandbox${total ? ` · ${total}` : ''}${warn}`;
 }
 
 /**

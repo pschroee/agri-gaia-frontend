@@ -29,8 +29,7 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   them) and the connection of new chats (CLI, MCP, REST API or a combination, fixed by the gateway's `AGW_TOOLSETS`,
 gateway issue #29: `toolsets` of `GET /config`, else the `active` entry of `GET /variants`; the pool card of that
 combination says "new chats", others "older chats only"; a gateway without it still gets the old table of variants
-with the English labels of `variantLabel`), plus defaults from `GET /config`. The New chat dialog has no connection
-choice any more. Everything reloads
+with the English labels of `variantLabel`), plus defaults from `GET /config`. Everything reloads
   every 15 s and on the refresh button; a failed request empties only its section, a failed `GET /me` shows the error
   alert, and figures that could not be loaded show "–", not 0. `GET /platform` exists since gateway PR #6; an older
   gateway answers 404, shown as "Not reported by this gateway version". The probe is cached 10 s in the gateway, and
@@ -90,7 +89,7 @@ choice any more. Everything reloads
   object changes (`visibleContext`, keyed by page and id). Sent messages show a muted "Refers to …" above the bubble,
   taken only from the structured `context` of the gateway's `page_context` source (the note itself is `audience:
   "agent"` and cut out); queued rows show it from `QueueEntry.context`. `sectionOf` uses the same route table. Slash
-  commands and the first message of the new-chat dialog carry no context. The context never grants rights; the
+  commands carry no context. The context never grants rights; the
   delegation decides. Unit tests in `pageContext.test.ts`, `transcript.test.ts`, `queue.test.ts`.
 - **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
   `message_update` with `thinking_start|delta|end`) show as a collapsed muted line "Thinking · 4.2 s" between text and
@@ -137,9 +136,21 @@ choice any more. Everything reloads
   disabled with a tooltip (the gateway answers 409). A 409 with `code: "context_too_large"` and `details` opens
   `ContextTooLargeDialog`; "Compact first, then switch" posts `compact_first: true`, and `pending_model` shows
   "Compacting, then …" until the chat event brings the new model. The decisions are pure functions in
-  `src/agent/modelChoice.ts`, unit-tested. **New chat:** `POST /chats` takes no thinking level; the dialog offers the
-  levels other chats reported for the chosen model (`levelsByModel`), creates the chat without the first message,
-  sets the level, then sends the message, so the first turn already runs with it.
+  `src/agent/modelChoice.ts`, unit-tested.
+- **New chat (no dialog, issue #30):** "New chat" (`NewChatButton`, panel and `/ai-agent`) posts `POST /chats` with only
+  `{async: true, language}` (`newChatRequest` in `src/agent/newChat.ts`, unit-tested): model, thinking level and
+  bindings are the gateway's defaults (`AGW_DEFAULT_MODEL`, `AGW_TOOLSETS`), no delegation, the gateway names the chat
+  after the first message. `startNewChat` in `AgentContext` adds and selects the chat and leaves a `freshChat` entry,
+  which the chat's `ChatInput` takes once (focus, plus files); the button spins and ignores further clicks meanwhile,
+  a failure shows as a closable alert below it (`NewChatError`). Model and level are switched below the input as in
+  any chat. **Gateway `async`:** with a warm slot the chat comes back ready (gateway: tens of ms); with an empty pool it
+  comes back at once with `starting` (and `resuming`) and gets its sandbox in the background. `runStateOf` then gives
+  `starting` ("Starting · 12 s", spinner, timer from `created_at`), the transcript shows "Starting a sandbox for this
+  chat … You can type already" until SSE `resume` steps with `start: true` arrive, which `ResumeBlock` shows at the top
+  ("Started in a fresh sandbox · 16 s"). A message sent meanwhile is not expected to queue (`expectQueued`): the
+  gateway holds it until the sandbox is there, so it shows as the greyed pending bubble. An older gateway without
+  `async` answers 503 on an empty pool, shown as "No free agent sandbox right now". Render check: answer `POST chats`
+  once with an active chat and once with `starting: true, resuming: true`, measure click → focused textarea.
 - **Context, tokens and cost:** `ContextMeter` shows the chat's `context` (pi's usage, gateway API.md) as a ring with
   the percentage, a tick where auto-compaction starts (`threshold_tokens` = window minus reserve) and, on click, a
   popover with tokens, window, threshold, reserve and headroom plus the compaction settings (see *Chat settings*).
@@ -201,7 +212,8 @@ choice any more. Everything reloads
   logic is in `src/agent/files.ts` and `images.ts`, unit-tested. **Drop area:** `AgentDropZone` covers the whole context panel (from its header down) and the chat tab of
   `/ai-agent` (history and chat); while files are dragged over it, an overlay "Drop files to upload" covers the area,
   and dropped files go to the open chat's `ChatInput` (registered through `useAgentDropTarget`), the same path as the
-  paperclip. Without an open chat the area takes nothing; drags without files (text, links) pass through, so the text
+  paperclip. Without an open chat, dropped files start a new chat
+  (`startNewChat(files)`, overlay "A new chat starts with them") and its input takes them; drags without files (text, links) pass through, so the text
   field still takes dropped text. Nested `dragenter`/`dragleave` are counted by the pure `dragReducer`
   (`src/agent/dropzone.ts`, unit-tested); a `dragleave` towards an element outside the area, `dragend` and `drop` on
   the window end it at once. A `ChatInput` outside a zone keeps its own drop target (`useFileDrop`). Render check: drop
