@@ -279,16 +279,36 @@ export type SocketCall = {
 /** Outcome of a platform call as the gateway classifies it (GET /activity). */
 export type ActivityOutcome = 'ok' | 'error' | 'blocked' | 'logged' | 'rejected' | 'refused';
 
-/** Platform call of GET /activity, with its outcome and the approval it waited for. */
+/** Kind of an entry of GET /activity; a gateway before issue #37 sends none (platform). */
+export type ActivityKind = 'platform' | 'internet';
+
+/**
+ * Internet entry of GET /activity (gateway issue #37): the agent's request (with approval) or switch-off, or the
+ * user's switch.
+ */
+export type ActivityInternet = {
+    action: 'request' | 'off' | 'switch';
+    origin: 'agent' | 'user';
+    result: 'approved' | 'already_on' | 'rejected' | 'expired' | 'on' | 'off' | 'already_off' | 'error';
+};
+
+/**
+ * Entry of GET /activity: a platform call with its outcome and the approval it waited for, or (kind internet) an
+ * internet switch with the approval of a request.
+ */
 export type ActivityCall = SocketCall & {
-    outcome: ActivityOutcome;
+    kind?: ActivityKind;
+    /** Platform calls only. */
+    outcome?: ActivityOutcome;
+    /** Internet entries only. */
+    internet?: ActivityInternet;
     approval?: { id: string; state: Approval['state']; created_at: string; decided_at?: string };
 };
 
 /** What the activity view gets of a chat. */
 export type ActivityChat = { id: string; title: string; model: string; variant: string };
 
-/** Summary of all calls of the period (not limited by outcome or page). */
+/** Summary of all platform calls of the period (not limited by outcome or page; internet entries never count). */
 export type ActivitySummary = {
     total: number;
     outcomes: Partial<Record<ActivityOutcome, number>>;

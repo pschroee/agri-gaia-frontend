@@ -46,6 +46,15 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   among the loaded ones plus the approval the gateway joined to the call. An older gateway answers 404, shown as a hint
   instead of the table. The view no longer loads chats one by one. Query, paging, rows and figures are pure in
   `src/agent/activity.ts`, unit-tested. Render check: answer `activity` by `before` and check the query parameters.
+  **Internet switches (issue #37, gateway PR for #37):** the view asks `kind=all` (filter "Show": Everything, Platform
+  calls, Internet switches) and shows the gateway's internet entries as rows of their own (`internetEvent`: "Internet
+  requested by the agent / a subagent" with the reason, clamped to two lines, and "approved", "rejected by you", "no
+  decision in time"; "Internet switched off by the agent"; "Internet switched on/off by you", via "UI"); an expanded
+  row shows approval and who acted. The result filter belongs to platform calls: with a result the query asks
+  `kind=platform`, and with "Internet switches" it is disabled. The key figures stay the platform `summary`, which the
+  gateway never counts internet entries into; the footer counts platform calls and switches apart (`shownText`). A
+  gateway before #37 ignores `kind` and sends entries without it: they count as platform calls, and "Internet
+  switches" then shows an empty table, never platform calls (`activityRows` filters by `kindOf`).
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
   reuses the platform's Keycloak session (`return` stays `/agent/`). The visible "Sign in" of `SignInNotice` passes the

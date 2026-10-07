@@ -2,7 +2,14 @@
 //
 // SPDX-License-Identifier: MIT
 
-import type { ActivityCall, ActivityChat, ActivityOutcome, ActivityPage } from './types';
+import type {
+    ActivityCall,
+    ActivityChat,
+    ActivityInternet,
+    ActivityKind,
+    ActivityOutcome,
+    ActivityPage,
+} from './types';
 
 /** Period of the activity view, counted in local days. */
 export type Period = 'today' | '7d' | '30d' | 'all';
@@ -32,6 +39,15 @@ export const OUTCOME_FILTERS: { value: ActivityOutcome | ''; label: string }[] =
     { value: 'refused', label: 'refused' },
 ];
 
+/** What the table lists: everything, only platform calls or only internet switches (gateway issue #37). */
+export type KindFilter = 'all' | ActivityKind;
+
+export const KIND_FILTERS: { value: KindFilter; label: string }[] = [
+    { value: 'all', label: 'Everything' },
+    { value: 'platform', label: 'Platform calls' },
+    { value: 'internet', label: 'Internet switches' },
+];
+
 /** Calls per page; the gateway allows up to 500. */
 export const PAGE_SIZE = 100;
 
@@ -46,10 +62,13 @@ export function periodSince(period: Period, now = new Date()): Date | undefined 
 
 /** Query string of GET /activity ("?since=…&limit=100"); the time goes as RFC 3339 in UTC without milliseconds. */
 export function activityQuery(
-    opts: { period: Period; outcome?: ActivityOutcome | ''; before?: number; limit?: number },
+    opts: { period: Period; kind?: KindFilter; outcome?: ActivityOutcome | ''; before?: number; limit?: number },
     now = new Date(),
 ): string {
     const q = new URLSearchParams();
+    // kind=platform is the gateway's default; an outcome is about platform calls only, so it asks for those.
+    const kind = opts.outcome ? 'platform' : opts.kind ?? 'platform';
+    if (kind !== 'platform') q.set('kind', kind);
     const since = periodSince(opts.period, now);
     if (since) q.set('since', since.toISOString().replace(/\.\d{3}Z$/, 'Z'));
     if (opts.outcome) q.set('outcome', opts.outcome);
@@ -69,25 +88,34 @@ export function mergePages(prev: ActivityPage, next: ActivityPage): ActivityPage
     };
 }
 
-/** One platform call of the agent with its chat and the other calls of the same tool call. */
+/** Kind of an entry; a gateway before issue #37 sends none, and all its entries are platform calls. */
+export const kindOf = (c: ActivityCall): ActivityKind => c.kind ?? 'platform';
+
+/** One platform call of the agent with its chat and the other calls of the same tool call, or one internet entry. */
 export type ActivityRow = { call: ActivityCall; chat: ActivityChat; log: ActivityCall[] };
 
-/** Rows of the table, newest first; calls of one tool call share their log (oldest first). */
-export function activityRows(page: ActivityPage): ActivityRow[] {
+/**
+ * Rows of the table, newest first; platform calls of one tool call share their log (oldest first), an internet
+ * entry stands alone. With a kind other than all, entries of the other kind are left out (an older gateway ignores
+ * kind=internet and answers with platform calls).
+ */
+export function activityRows(page: ActivityPage, kind: KindFilter = 'all'): ActivityRow[] {
+    const calls = kind === 'all' ? page.calls : page.calls.filter((c) => kindOf(c) === kind);
     const byToolCall = new Map<string, ActivityCall[]>();
-    for (const c of page.calls) {
-        if (!c.tool_call_id) continue;
+    for (const c of calls) {
+        if (!c.tool_call_id || kindOf(c) !== 'platform') continue;
         const key = `${c.chat_id ?? ''}|${c.tool_call_id}`;
         byToolCall.set(key, [...(byToolCall.get(key) ?? []), c]);
     }
-    return [...page.calls]
+    return [...calls]
         .sort((a, b) => b.id - a.id)
         .map((call) => {
             const chatId = call.chat_id ?? '';
             const chat = page.chats[chatId] ?? { id: chatId, title: '', model: '', variant: '' };
-            const log = call.tool_call_id
-                ? [...(byToolCall.get(`${chatId}|${call.tool_call_id}`) ?? [call])].sort((a, b) => a.id - b.id)
-                : [call];
+            const log =
+                call.tool_call_id && kindOf(call) === 'platform'
+                    ? [...(byToolCall.get(`${chatId}|${call.tool_call_id}`) ?? [call])].sort((a, b) => a.id - b.id)
+                    : [call];
             return { call, chat, log };
         });
 }
@@ -116,4 +144,111 @@ export function activityFigures(page: ActivityPage) {
         p95: s.duration?.count ? s.duration.p95_ms : undefined,
         measured: s.duration?.count ?? 0,
     };
+}
+
+/** Action, origin and result of an internet entry; from the gateway's internet field, else from op and result. */
+export function internetOf(c: ActivityCall): ActivityInternet {
+    if (c.internet) return c.internet;
+    const r = c.result.toLowerCase();
+    if (c.op === 'internet_set') {
+        const result = (['on', 'off', 'already on', 'already off'].includes(r) ? r.replace(' ', '_') : 'error') as
+            | 'on'
+            | 'off'
+            | 'already_on'
+            | 'already_off'
+            | 'error';
+        return { action: 'switch', origin: 'user', result };
+    }
+    if (c.op === 'internet_off') {
+        return {
+            action: 'off',
+            origin: 'agent',
+            result: r === 'off' ? 'off' : r === 'already off' ? 'already_off' : 'error',
+        };
+    }
+    const result = r.startsWith('approved')
+        ? 'approved'
+        : r.startsWith('already on')
+        ? 'already_on'
+        : r.startsWith('expired')
+        ? 'expired'
+        : r.startsWith('rejected')
+        ? 'rejected'
+        : 'error';
+    return { action: 'request', origin: 'agent', result };
+}
+
+export type InternetTone = 'ok' | 'bad' | 'warn' | 'muted';
+
+/** What a row of the table says about an internet entry. */
+export type InternetEvent = {
+    /** "Internet requested", "Internet switched off by the agent", "Internet switched on by you". */
+    title: string;
+    /** The agent's reason of a request. */
+    reason?: string;
+    /** Result column: "approved", "rejected by you", "no decision in time", "switched off", … */
+    result: string;
+    tone: InternetTone;
+    /** Who acted: "Agent", "Subagent" or "You". */
+    by: string;
+};
+
+/** Texts of an internet entry for the activity table. */
+export function internetEvent(c: ActivityCall): InternetEvent {
+    const i = internetOf(c);
+    const sub = i.origin === 'agent' && !!c.session && c.session !== 'main';
+    const by = i.origin === 'user' ? 'You' : sub ? 'Subagent' : 'Agent';
+    const actor = sub ? 'a subagent' : 'the agent';
+    if (i.action === 'request') {
+        const reason = c.detail.trim();
+        const results: Record<string, [string, InternetTone]> = {
+            approved: ['approved', 'ok'],
+            already_on: ['already on, not asked', 'muted'],
+            rejected: ['rejected by you', 'bad'],
+            expired: ['no decision in time', 'warn'],
+        };
+        const [result, tone] = results[i.result] ?? ['failed', 'bad'];
+        return {
+            title: `Internet requested by ${actor}`,
+            reason: reason && reason !== '(no reason given)' ? reason : undefined,
+            result,
+            tone,
+            by,
+        };
+    }
+    if (i.action === 'off') {
+        const [result, tone]: [string, InternetTone] =
+            i.result === 'off'
+                ? ['switched off', 'muted']
+                : i.result === 'already_off'
+                ? ['was already off', 'muted']
+                : ['failed', 'bad'];
+        return { title: `Internet switched off by ${actor}`, result, tone, by };
+    }
+    const on = i.result === 'on' || i.result === 'already_on';
+    const [result, tone]: [string, InternetTone] =
+        i.result === 'on'
+            ? ['on', 'ok']
+            : i.result === 'off'
+            ? ['off', 'muted']
+            : i.result === 'error'
+            ? ['failed', 'bad']
+            : [on ? 'was already on' : 'was already off', 'muted'];
+    return {
+        title: i.result === 'error' ? 'Internet switched by you' : `Internet switched ${on ? 'on' : 'off'} by you`,
+        result,
+        tone,
+        by,
+    };
+}
+
+/** Footer of the table: how many platform calls of the period and how many internet switches are shown. */
+export function shownText(rows: ActivityRow[], total: number | undefined, kind: KindFilter, outcome: string): string {
+    const platform = rows.filter((r) => kindOf(r.call) === 'platform').length;
+    const internet = rows.length - platform;
+    const switches = `${internet} internet ${internet === 1 ? 'switch' : 'switches'}`;
+    if (kind === 'internet') return `Shows ${switches}.`;
+    if (outcome) return `Shows ${platform} ${platform === 1 ? 'call' : 'calls'} with this result.`;
+    const calls = `Shows ${platform} of ${total ?? platform} platform ${(total ?? platform) === 1 ? 'call' : 'calls'}`;
+    return internet > 0 ? `${calls} and ${switches}.` : `${calls}.`;
 }
