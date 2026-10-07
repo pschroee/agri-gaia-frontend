@@ -17,6 +17,9 @@ export const agentColors = {
     ok: '#2e7d32',
     muted: 'rgba(0, 0, 0, 0.6)',
     panelBg: '#fafafa',
+    /** Marks the read-only view of a subagent (left border, breadcrumb, read-only line; issue #48). */
+    subagent: '#5e35b1',
+    subagentTint: '#f3effa',
 };
 
 export const MONO = '"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, monospace';

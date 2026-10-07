@@ -6,8 +6,8 @@
 // (subagent_runs), their own steps and the model calls recorded at the LLM proxy. Pure functions, after the gateway's own
 // web/src/lib/subagents.ts and subagent-overview.ts.
 import { displayToolName, summarizeArgs } from './transcript';
-import type { Step } from './transcript';
-import type { LLMCall, SubagentEntry, SubagentRunMeta } from './types';
+import type { AgentPart, Step, TranscriptItem } from './transcript';
+import type { LLMCall, StoredMessage, SubagentEntry, SubagentRunMeta } from './types';
 
 export type SubagentRun = {
     runId: string;
@@ -168,16 +168,43 @@ export function shortRunId(runId: string): string {
     return idx !== undefined ? `${short}#${idx}` : short;
 }
 
-/** Title: the workflow name, otherwise the first line of the task (without "Task:"), otherwise the agent. */
+/**
+ * A line of the task that says something: markdown heading, quote and list marks, emphasis and the "Task:" prefix of
+ * pi-subagents are dropped; lines of punctuation only (rules, fences), tags such as "[Context]" and bare section
+ * headings ("## Task") do not count.
+ */
+function meaningfulLine(task: string | undefined): string | undefined {
+    for (const raw of (task ?? '').split('\n')) {
+        const line = raw
+            .trim()
+            .replace(/^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/, '')
+            .replace(/\*\*|__|`/g, '')
+            .replace(/^task:\s*/i, '')
+            .trim();
+        if (!line || /^\[[^\]]*\]:?$/.test(line) || !/[\p{L}\p{N}]/u.test(line)) continue;
+        // a bare heading such as "## Task" or "Context:" names a section, not the job
+        if (/^(?:task|your task|instructions?|context|goal|objective)\s*:?$/i.test(line)) continue;
+        return line.replace(/\s+/g, ' ');
+    }
+    return undefined;
+}
+
+/**
+ * Title of a run without a model call (issue #48): the workflow name (label), otherwise the first meaningful line of
+ * the task shortened to `max` characters, otherwise the agent. The full task belongs in the tooltip (runTooltip).
+ */
 export function runTitle(run: Pick<SubagentRun, 'task' | 'agent' | 'label'>, max = 70): string {
-    if (run.label) return run.label;
-    const line = (run.task ?? '')
-        .split('\n')
-        .map((l) => l.trim())
-        .find((l) => l !== '')
-        ?.replace(/^task:\s*/i, '');
+    if (run.label?.trim()) return run.label.trim();
+    const line = meaningfulLine(run.task);
     if (!line) return run.agent || 'Subagent';
     return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
+/** Tooltip of a run's title: the full task (with the name in front when the title is the name). */
+export function runTooltip(run: Pick<SubagentRun, 'task' | 'agent' | 'label'>): string {
+    const task = run.task?.trim();
+    if (!task) return runTitle(run, Infinity);
+    return run.label?.trim() ? `${run.label.trim()}\n\n${task}` : task;
 }
 
 /** Second line: agent and short run ID. */
@@ -279,4 +306,149 @@ export function runsSummary(statuses: RunStatus[]): string {
         .filter(([, n]) => n > 0)
         .map(([s, n]) => `${n} ${s === 'stopped' ? 'ended' : RUN_STATUS_LABEL[s]}`)
         .join(' · ');
+}
+
+// --- Looking into a subagent (issue #48) ---
+
+/** A subagent as a sub-entry under its chat (panel chat selector, history of /ai-agent). */
+export type SubagentNavItem = {
+    runId: string;
+    title: string;
+    /** Full task for the tooltip. */
+    tooltip: string;
+    status: RunStatus;
+};
+
+/** Runs live while they run or are quiet in a working chat. */
+export const isLiveStatus = (s: RunStatus) => s === 'running' || s === 'idle';
+
+/**
+ * Sub-entries of a chat in the order the runs started. A run with neither name nor task gets its short run ID after
+ * the agent, so two of them stay apart; never "Subagent 1".
+ */
+export function subagentNav(
+    runs: SubagentRun[],
+    { chatRunning, now }: { chatRunning: boolean; now: number },
+): SubagentNavItem[] {
+    return runs.map((r) => {
+        const named = !!r.label?.trim() || !!meaningfulLine(r.task);
+        const title = named ? runTitle(r) : `${r.agent || 'Subagent'} · ${shortRunId(r.runId)}`;
+        return {
+            runId: r.runId,
+            title,
+            tooltip: named ? runTooltip(r) : title,
+            status: runStatus(r, { chatRunning, now }),
+        };
+    });
+}
+
+/** Short state of a sub-entry: running, quiet, done, failed, ended. */
+export function subagentStateText(s: RunStatus): string {
+    return s === 'stopped' ? 'ended' : RUN_STATUS_LABEL[s];
+}
+
+/** The user's choice to open or close a chat's group of subagents, and the default it was made against. */
+export type GroupToggle = { open: boolean; madeWhenDefault: boolean };
+
+/** Default of a group: open while one of its subagents runs, closed when all are done. */
+export function groupOpenByDefault(statuses: RunStatus[]): boolean {
+    return statuses.some(isLiveStatus);
+}
+
+/**
+ * Whether a chat's group of subagents is open. The user's toggle holds until the default changes (a new run starts
+ * or the last one ends), then the default applies again. A group with the opened subagent in it is always open, so
+ * the selected entry stays visible.
+ */
+export function groupOpen(statuses: RunStatus[], toggle: GroupToggle | undefined, hasSelected = false): boolean {
+    if (hasSelected) return true;
+    const def = groupOpenByDefault(statuses);
+    if (toggle && toggle.madeWhenDefault === def) return toggle.open;
+    return def;
+}
+
+/** The toggle after a click on the group's arrow. */
+export function toggleGroup(statuses: RunStatus[], toggle: GroupToggle | undefined, hasSelected = false): GroupToggle {
+    return { open: !groupOpen(statuses, toggle, hasSelected), madeWhenDefault: groupOpenByDefault(statuses) };
+}
+
+/**
+ * A run's entries as transcript items, for the same components as the chat: each task as a user message, text answers
+ * and tool calls (as step lists with their result: done, failed, still running or not finished) joined into agent
+ * blocks until the next task.
+ */
+export function runTranscript(run: Pick<SubagentRun, 'entries' | 'runId'>, live: boolean): TranscriptItem[] {
+    const out: TranscriptItem[] = [];
+    let agent: Extract<TranscriptItem, { kind: 'agent' }> | undefined;
+    for (const it of runItems(run, live)) {
+        if (it.type === 'task') {
+            agent = undefined;
+            out.push({ kind: 'user', key: `${run.runId}:${it.key}`, text: it.text.trim() });
+            continue;
+        }
+        const part: AgentPart =
+            it.type === 'text' ? { type: 'text', text: it.text } : { type: 'steps', steps: it.steps };
+        if (!agent) {
+            agent = { kind: 'agent', key: `${run.runId}:${it.key}`, parts: [] };
+            out.push(agent);
+        }
+        agent.parts.push(part);
+    }
+    return out;
+}
+
+const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/** Agents a subagent call names: agent, and the agent of each entry of tasks, chain or parallel. */
+export function toolAgents(args: unknown): string[] {
+    let a = args;
+    if (typeof a === 'string') {
+        try {
+            a = JSON.parse(a);
+        } catch {
+            return [];
+        }
+    }
+    if (!isObj(a)) return [];
+    const out: string[] = [];
+    if (typeof a.agent === 'string') out.push(a.agent);
+    for (const k of ['tasks', 'chain', 'parallel']) {
+        const list = a[k];
+        if (Array.isArray(list)) for (const t of list) if (isObj(t) && typeof t.agent === 'string') out.push(t.agent);
+    }
+    return out;
+}
+
+/**
+ * Runs per tool call ID of the main agent's `subagent` calls (after the gateway's assignRuns): each run belongs to the
+ * last answer with a subagent call that started before it (background runs start after the call); within that answer
+ * the call naming the run's agent wins, otherwise the first one. Runs started before any such call stay unassigned.
+ */
+export function runsByCall(
+    messages: Pick<StoredMessage, 'message' | 'created_at'>[],
+    runs: Pick<SubagentRun, 'runId' | 'agent' | 'start'>[],
+): Record<string, string[]> {
+    const candidates: { time: number; calls: { id: string; agents: string[] }[] }[] = [];
+    for (const m of messages) {
+        const msg = m.message;
+        if (msg.role !== 'assistant' || !Array.isArray(msg.content)) continue;
+        const calls = msg.content
+            .filter((b) => b.type === 'toolCall' && b.name === 'subagent' && !!b.id)
+            .map((b) =>
+                b.type === 'toolCall' ? { id: b.id, agents: toolAgents(b.arguments) } : { id: '', agents: [] },
+            );
+        if (!calls.length) continue;
+        const time = msg.timestamp ?? ms(m.created_at);
+        candidates.push({ time, calls });
+    }
+    candidates.sort((a, b) => a.time - b.time);
+    const out: Record<string, string[]> = {};
+    for (const r of [...runs].sort((a, b) => a.start - b.start)) {
+        let c: (typeof candidates)[number] | undefined;
+        for (const x of candidates) if (x.time <= r.start) c = x;
+        if (!c) continue;
+        const hit = c.calls.find((x) => x.agents.includes(r.agent)) ?? c.calls[0];
+        (out[hit.id] ??= []).push(r.runId);
+    }
+    return out;
 }

@@ -8,6 +8,7 @@ import { AgentApiError, agentApi, approvalEventsUrl, silentLogin } from './api';
 import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './approvalFeed';
 import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
+import type { SubagentRun } from './subagents';
 import type { Approval, Chat, Config, Me, Model } from './types';
 import type { Compacting } from './usage';
 
@@ -28,6 +29,15 @@ type AgentState = {
     refreshChats: () => Promise<void>;
     selectedChatId?: string;
     selectChat: (id: string | undefined) => void;
+    /**
+     * The subagent of the selected chat the user looks into (read-only, issue #48), by run ID; undefined: the chat
+     * itself. Selecting a chat (also the same one) or creating one leaves the subagent.
+     */
+    selectedSubagent?: string;
+    selectSubagent: (runId: string | undefined) => void;
+    /** Subagent runs of the open chat, published by its ChatView (for the chat selector and the history). */
+    openChatSubagents?: OpenChatSubagents;
+    setOpenChatSubagents: (chatId: string, value: Omit<OpenChatSubagents, 'chatId'> | undefined) => void;
     /** Adds a newly created chat and selects it. */
     addChat: (chat: Chat) => void;
     /**
@@ -57,6 +67,9 @@ type AgentState = {
     /** The stream across chats is open (otherwise the count comes from polling every 15 s). */
     approvalsLive: boolean;
 };
+
+/** Runs of the open chat and whether the chat works (for estimating the state of runs without one). */
+export type OpenChatSubagents = { chatId: string; runs: SubagentRun[]; chatRunning: boolean };
 
 const AgentContext = createContext<AgentState | undefined>(undefined);
 
@@ -93,6 +106,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [models, setModels] = useState<Model[]>([]);
     const [config, setConfig] = useState<Config>();
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
+    const [subagent, setSubagent] = useState<{ chatId: string; runId: string }>();
+    const [openChatSubagents, setOpenChatSubagentsState] = useState<OpenChatSubagents>();
     const [panelOpen, setPanelOpenState] = useState(() => load(PANEL_KEY) === 'true');
     const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
     const [creatingChat, setCreatingChat] = useState(false);
@@ -199,8 +214,26 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
     const selectChat = useCallback((id: string | undefined) => {
         setSelectedChatId(id);
+        setSubagent(undefined);
         store(CHAT_KEY, id);
     }, []);
+
+    const selectSubagent = useCallback(
+        (runId: string | undefined) => setSubagent(runId && selectedChatId ? { chatId: selectedChatId, runId } : undefined),
+        [selectedChatId],
+    );
+    // only a subagent of the selected chat counts (the fallback to the newest chat leaves it too)
+    const selectedSubagent = subagent && subagent.chatId === selectedChatId ? subagent.runId : undefined;
+
+    const setOpenChatSubagents = useCallback(
+        (chatId: string, value: Omit<OpenChatSubagents, 'chatId'> | undefined) =>
+            setOpenChatSubagentsState((cur) => {
+                if (!value) return cur?.chatId === chatId ? undefined : cur;
+                if (cur?.chatId === chatId && cur.runs === value.runs && cur.chatRunning === value.chatRunning) return cur;
+                return { chatId, ...value };
+            }),
+        [],
+    );
 
     const addChat = useCallback(
         (chat: Chat) => {
@@ -278,6 +311,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             refreshChats,
             selectedChatId,
             selectChat,
+            selectedSubagent,
+            selectSubagent,
+            openChatSubagents: openChatSubagents?.chatId === selectedChatId ? openChatSubagents : undefined,
+            setOpenChatSubagents,
             addChat,
             startNewChat,
             creatingChat,
@@ -306,6 +343,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             refreshChats,
             selectedChatId,
             selectChat,
+            selectedSubagent,
+            selectSubagent,
+            openChatSubagents,
+            setOpenChatSubagents,
             addChat,
             startNewChat,
             creatingChat,

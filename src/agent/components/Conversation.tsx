@@ -31,11 +31,11 @@ import StepList from './StepList';
 import type { StepControls } from './StepList';
 import ThinkingBlock from './ThinkingBlock';
 
-type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
+export type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
 
-type Files = { chatId?: string; known: Artifact[] };
+export type Files = { chatId?: string; known: Artifact[] };
 
-function UserBubble({
+export function UserBubble({
     text,
     dense,
     pending,
@@ -94,7 +94,7 @@ function UserBubble({
     );
 }
 
-function AgentBlock({
+export function AgentBlock({
     item,
     dense,
     thinking,
@@ -267,11 +267,14 @@ export default function Conversation({
     stream,
     items,
     dense = false,
+    subagents,
 }: {
     stream: ChatStream;
     /** The transcript, built by the caller (it also counts the entries for scrolling). */
     items: TranscriptItem[];
     dense?: boolean;
+    /** Runs per `subagent` call, opened on click (issue #48). */
+    subagents?: StepControls['subagents'];
 }) {
     const { chat, live, resumes, pending } = stream;
     const liveP = useMemo(() => liveParts(live), [live]);
@@ -289,8 +292,9 @@ export default function Conversation({
             onStop: stopTool,
             onBackground: backgroundTool,
             background: backgroundByCall(background),
+            subagents,
         }),
-        [runningTools, stopTool, backgroundTool, background],
+        [runningTools, stopTool, backgroundTool, background, subagents],
     );
     // resume blocks sit after the user message that triggered them; not stored yet: at the end. A resume on opening
     // the chat sits where it started, before anything stored later and before a message still on its way. The start of

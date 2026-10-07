@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -16,6 +16,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import { useAgent } from '../AgentContext';
 import { chatTitle, formatRelativeDay } from '../format';
 import { runSince, runStateOf } from '../runState';
+import { useSubagentNav } from '../useSubagentNav';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
 import ChatView from './ChatView';
@@ -26,11 +27,13 @@ import AgentMenuTheme from './AgentMenuTheme';
 import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
 import SignInNotice from './SignInNotice';
+import { GroupToggleButton, SubagentBreadcrumb, SubagentEntryContent } from './SubagentView';
 import { agentColors } from './tokens';
 import { FOOTER_HEIGHT } from './AgentContextPanel';
 
 function History() {
     const { chats, selectedChatId, selectChat } = useAgent();
+    const sub = useSubagentNav();
     return (
         <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, overflowY: 'auto', minHeight: 0 }}>
             <NewChatButton fullWidth sx={{ mb: 2 }} />
@@ -52,59 +55,123 @@ function History() {
             {chats.map((c) => {
                 const on = c.id === selectedChatId;
                 const state = runStateOf(c);
+                const withSubs = on && c.id === sub.chatId && sub.items.length > 0;
                 return (
-                    <Box
-                        key={c.id}
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => selectChat(c.id)}
-                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && selectChat(c.id)}
-                        // two lines at most; the full title on hover
-                        title={chatTitle(c)}
-                        sx={{
-                            px: 1.25,
-                            py: 1.1,
-                            mb: 0.4,
-                            borderRadius: 1,
-                            cursor: 'pointer',
-                            fontSize: 13,
-                            lineHeight: 1.4,
-                            color: on ? 'text.primary' : 'text.secondary',
-                            bgcolor: on ? agentColors.greenTint : undefined,
-                            '&:hover': { bgcolor: on ? agentColors.greenTint : 'action.hover' },
-                        }}
-                    >
+                    <Fragment key={c.id}>
                         <Box
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => selectChat(c.id)}
+                            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && selectChat(c.id)}
+                            // two lines at most; the full title on hover
+                            title={chatTitle(c)}
                             sx={{
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                // a word longer than the line breaks instead of running out of the list
-                                overflowWrap: 'anywhere',
+                                px: 1.25,
+                                py: 1.1,
+                                mb: 0.4,
+                                borderRadius: 1,
+                                cursor: 'pointer',
+                                fontSize: 13,
+                                lineHeight: 1.4,
+                                color: on ? 'text.primary' : 'text.secondary',
+                                bgcolor: on ? agentColors.greenTint : undefined,
+                                '&:hover': { bgcolor: on ? agentColors.greenTint : 'action.hover' },
                             }}
                         >
-                            {chatTitle(c)}
+                            <Box
+                                sx={{
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    // a word longer than the line breaks instead of running out of the list
+                                    overflowWrap: 'anywhere',
+                                }}
+                            >
+                                {chatTitle(c)}
+                            </Box>
+                            <Box
+                                sx={{
+                                    fontSize: 11,
+                                    color: 'text.disabled',
+                                    mt: 0.25,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    columnGap: 1,
+                                }}
+                            >
+                                <span>{formatRelativeDay(c.updated_at)}</span>
+                                <RunStateChip state={state} since={runSince(c)} />
+                                {c.pending_approvals > 0 && state !== 'waiting' && (
+                                    <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
+                                )}
+                                {withSubs && (
+                                    <Box component="span" sx={{ ml: 'auto' }}>
+                                        <GroupToggleButton
+                                            open={sub.open}
+                                            count={sub.items.length}
+                                            onToggle={sub.toggle}
+                                        />
+                                    </Box>
+                                )}
+                            </Box>
                         </Box>
-                        <Box
-                            sx={{
-                                fontSize: 11,
-                                color: 'text.disabled',
-                                mt: 0.25,
-                                display: 'flex',
-                                alignItems: 'center',
-                                flexWrap: 'wrap',
-                                columnGap: 1,
-                            }}
-                        >
-                            <span>{formatRelativeDay(c.updated_at)}</span>
-                            <RunStateChip state={state} since={runSince(c)} />
-                            {c.pending_approvals > 0 && state !== 'waiting' && (
-                                <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
-                            )}
-                        </Box>
-                    </Box>
+                        {withSubs && sub.open && (
+                            <Box
+                                component="ul"
+                                data-testid="agent-history-subagents"
+                                sx={{
+                                    listStyle: 'none',
+                                    m: 0,
+                                    mb: 0.75,
+                                    p: 0,
+                                    pl: 1.5,
+                                    display: 'grid',
+                                    // minmax(0, 1fr): titles ellipsize instead of widening the history column
+                                    gridTemplateColumns: 'minmax(0, 1fr)',
+                                    rowGap: 0.25,
+                                }}
+                            >
+                                {sub.items.map((it) => {
+                                    const active = sub.selected?.runId === it.runId;
+                                    return (
+                                        <Box
+                                            component="li"
+                                            key={it.runId}
+                                            role="button"
+                                            tabIndex={0}
+                                            aria-current={active ? 'true' : undefined}
+                                            data-testid="agent-subagent-entry"
+                                            data-run-id={it.runId}
+                                            onClick={() => sub.select(it.runId)}
+                                            onKeyDown={(e) =>
+                                                (e.key === 'Enter' || e.key === ' ') && sub.select(it.runId)
+                                            }
+                                            sx={{
+                                                px: 1,
+                                                py: 0.6,
+                                                borderRadius: 1,
+                                                cursor: 'pointer',
+                                                fontSize: 12.5,
+                                                color: active ? 'text.primary' : 'text.secondary',
+                                                bgcolor: active ? agentColors.subagentTint : undefined,
+                                                borderLeft: `2px solid ${
+                                                    active ? agentColors.subagent : 'transparent'
+                                                }`,
+                                                '&:hover': {
+                                                    bgcolor: active ? agentColors.subagentTint : 'action.hover',
+                                                },
+                                            }}
+                                        >
+                                            <SubagentEntryContent item={it} />
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        )}
+                    </Fragment>
                 );
             })}
         </Box>
@@ -114,6 +181,7 @@ function History() {
 /** Head of the open chat: title, run state while something happens, internet switch, context ring and tokens. */
 function ChatHeader() {
     const { chats, selectedChatId, compacting } = useAgent();
+    const sub = useSubagentNav();
     const chat = chats.find((c) => c.id === selectedChatId);
     if (!chat) return null;
     const state = runStateOf(chat);
@@ -134,7 +202,8 @@ function ChatHeader() {
         >
             <Typography
                 data-testid="agent-chat-title"
-                title={chatTitle(chat)}
+                component="div"
+                title={sub.selected ? undefined : chatTitle(chat)}
                 sx={{
                     fontSize: 15,
                     fontWeight: 500,
@@ -145,7 +214,17 @@ function ChatHeader() {
                     whiteSpace: 'nowrap',
                 }}
             >
-                {chatTitle(chat)}
+                {/* a subagent shows as breadcrumb "← chat › subagent" in the title's place (issue #48) */}
+                {sub.selected ? (
+                    <SubagentBreadcrumb
+                        chatTitle={chatTitle(chat)}
+                        item={sub.selected}
+                        onBack={() => sub.select(undefined)}
+                        fontSize={15}
+                    />
+                ) : (
+                    chatTitle(chat)
+                )}
             </Typography>
             {/* the controls move together and wrap among themselves only when the column is narrower still */}
             <Box

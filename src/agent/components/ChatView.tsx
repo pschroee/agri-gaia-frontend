@@ -17,7 +17,10 @@ import type { PageContext } from '../pageContext';
 import { useCurrentPageContext } from '../pageSelection';
 import { resumeRunning } from '../resume';
 import { runSince, runStateOf } from '../runState';
+import { groupRuns, isLiveStatus, runStatus, runsByCall, subagentNav } from '../subagents';
+import type { SubagentNavItem } from '../subagents';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
+import { useNow } from '../useNow';
 
 import { useChatStream } from '../useChatStream';
 import { useStickToBottom } from '../useStickToBottom';
@@ -27,6 +30,7 @@ import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
 import QueueList from './QueueList';
+import { SubagentReadOnlyBar, SubagentTranscript } from './SubagentView';
 import TaskStrip from './TaskStrip';
 
 type Props = {
@@ -69,18 +73,56 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
             buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running, thinkingTimes }),
         [messages, approvals, socketCalls, executions, chat?.running, thinkingTimes],
     );
+    // subagents (issue #48): published for the chat selector and the history, looked into read-only here
+    const runs = useMemo(
+        () => groupRuns(stream.subagentEntries, stream.subagentRuns),
+        [stream.subagentEntries, stream.subagentRuns],
+    );
+    const chatRunning = !!chat?.running;
+    const setOpenChatSubagents = agent?.setOpenChatSubagents;
+    useEffect(() => {
+        setOpenChatSubagents?.(chatId, { runs, chatRunning });
+    }, [chatId, runs, chatRunning, setOpenChatSubagents]);
+    useEffect(() => () => setOpenChatSubagents?.(chatId, undefined), [chatId, setOpenChatSubagents]);
+    const selectSubagent = agent?.selectSubagent;
+    const subagentId = agent?.selectedSubagent;
+    const subRun = subagentId ? runs.find((r) => r.runId === subagentId) : undefined;
+    // a run the loaded chat does not know (gone or another chat's): back to the chat
+    useEffect(() => {
+        if (subagentId && !stream.loading && !subRun) selectSubagent?.(undefined);
+    }, [subagentId, subRun, stream.loading, selectSubagent]);
+    const anyRunLive = runs.some((r) => isLiveStatus(runStatus(r, { chatRunning, now: Date.now() })));
+    const now = useNow(anyRunLive || chatRunning, 2000);
+    const subStatus = subRun ? runStatus(subRun, { chatRunning, now }) : undefined;
+    const subagentLinks = useMemo(() => {
+        if (!runs.length || !selectSubagent) return undefined;
+        const nav = new Map(subagentNav(runs, { chatRunning, now }).map((n) => [n.runId, n]));
+        const byCall = new Map<string, SubagentNavItem[]>();
+        for (const [call, ids] of Object.entries(runsByCall(messages, runs)))
+            byCall.set(
+                call,
+                ids.map((id) => nav.get(id)).filter((n): n is SubagentNavItem => !!n),
+            );
+        return { byCall, onOpen: (runId: string) => selectSubagent(runId) };
+    }, [runs, messages, chatRunning, now, selectSubagent]);
     const liveCount = useMemo(() => {
         const parts = liveParts(live);
         return parts.length ? countEntries([{ kind: 'agent', key: 'live', parts }]) : 0;
     }, [live]);
-    const count =
-        countEntries(items) +
+    const count = subRun
+        ? subRun.entries.length
+        : countEntries(items) +
         pending.length +
         liveCount +
         stream.resumes.length +
         stream.commandNotices.length +
         (stream.pending ? 1 : 0);
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
+    // opening a subagent or going back starts at the end, like opening a chat
+    useEffect(() => {
+        jumpToLatest();
+    }, [subagentId, jumpToLatest]);
+    const backToChat = useCallback(() => selectSubagent?.(undefined), [selectSubagent]);
     // the platform page next to the panel (none on /ai-agent)
     const pageContext = useCurrentPageContext();
     // After sending, the own message and the answer are what the user wants to see.
@@ -130,6 +172,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     subagentEntries={stream.subagentEntries}
                     subagentRuns={stream.subagentRuns}
                     llmCalls={stream.llmCalls}
+                    onOpenSubagent={selectSubagent}
+                    subagentsElsewhere={dense}
                 />
             </Box>
             <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
@@ -152,7 +196,11 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                                 {stream.error}
                             </Alert>
                         )}
-                        <Conversation stream={stream} items={items} dense={dense} />
+                        {subRun && subStatus ? (
+                            <SubagentTranscript run={subRun} status={subStatus} dense={dense} chatId={chatId} />
+                        ) : (
+                            <Conversation stream={stream} items={items} dense={dense} subagents={subagentLinks} />
+                        )}
                         <ApprovalCard approvals={pending} onDecide={stream.decide} />
                     </Box>
                 </Box>
@@ -189,40 +237,45 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     pb: dense ? 1.25 : 0,
                 }}
             >
-                <QueueList
-                    chat={stream.chat}
-                    rows={stream.queue}
-                    error={stream.queueError}
-                    onRemove={stream.unqueue}
-                    onSendNow={stream.sendQueueNow}
-                />
-                <ChatInput
-                    onSend={onSend}
-                    onUpload={stream.uploadFiles}
-                    maxFileMb={agent?.config?.artifact_max_mb}
-                    chatId={chatId}
-                    running={stream.chat?.running}
-                    runState={runState}
-                    since={since}
-                    onAbort={stream.abort}
-                    placeholder={placeholder}
-                    commands={commands}
-                    onCommand={onCommand}
-                    onCommandsOpen={stream.refreshCommands}
-                    pageContext={pageContext}
-                    start={start}
-                    onStartTaken={onStartTaken}
-                    toolbar={
-                        <ModelEffortPicker
-                            chat={stream.chat}
-                            models={agent?.models ?? []}
-                            dense={dense}
-                            onModel={stream.setModel}
-                            onEffort={stream.setEffort}
-                            tooLargeRequest={stream.commandTooLarge}
-                        />
-                    }
-                />
+                {/* read-only: no input and no stop per subagent; the chat's input stays mounted (hidden), so a draft
+                    and staged files are still there after "Back to chat" */}
+                {subRun && subStatus && <SubagentReadOnlyBar status={subStatus} onBack={backToChat} />}
+                <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
+                    <QueueList
+                        chat={stream.chat}
+                        rows={stream.queue}
+                        error={stream.queueError}
+                        onRemove={stream.unqueue}
+                        onSendNow={stream.sendQueueNow}
+                    />
+                    <ChatInput
+                        onSend={onSend}
+                        onUpload={stream.uploadFiles}
+                        maxFileMb={agent?.config?.artifact_max_mb}
+                        chatId={chatId}
+                        running={stream.chat?.running}
+                        runState={runState}
+                        since={since}
+                        onAbort={stream.abort}
+                        placeholder={placeholder}
+                        commands={commands}
+                        onCommand={onCommand}
+                        onCommandsOpen={stream.refreshCommands}
+                        pageContext={pageContext}
+                        start={start}
+                        onStartTaken={onStartTaken}
+                        toolbar={
+                            <ModelEffortPicker
+                                chat={stream.chat}
+                                models={agent?.models ?? []}
+                                dense={dense}
+                                onModel={stream.setModel}
+                                onEffort={stream.setEffort}
+                                tooLargeRequest={stream.commandTooLarge}
+                            />
+                        }
+                    />
+                </Box>
             </Box>
         </Box>
     );
