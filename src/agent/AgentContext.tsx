@@ -6,6 +6,7 @@ import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, 
 
 import { AgentApiError, agentApi, approvalEventsUrl, silentLogin } from './api';
 import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './approvalFeed';
+import { RunsCache, ensureChatRuns, runsCacheReducer, selectionFor } from './chatSubagents';
 import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
 import { PanelState, panelReducer, panelShown } from './panelCarry';
@@ -29,7 +30,8 @@ type AgentState = {
     config?: Config;
     refreshChats: () => Promise<void>;
     selectedChatId?: string;
-    selectChat: (id: string | undefined) => void;
+    /** Selects a chat; with `subagent`, that run of the chat opens right away (sub-entry of another chat, issue #60). */
+    selectChat: (id: string | undefined, subagent?: string) => void;
     /**
      * The subagent of the selected chat the user looks into (read-only, issue #48), by run ID; undefined: the chat
      * itself. Selecting a chat (also the same one) or creating one leaves the subagent.
@@ -39,6 +41,10 @@ type AgentState = {
     /** Subagent runs of the open chat, published by its ChatView (for the chat selector and the history). */
     openChatSubagents?: OpenChatSubagents;
     setOpenChatSubagents: (chatId: string, value: Omit<OpenChatSubagents, 'chatId'> | undefined) => void;
+    /** Short lists of subagent runs of chats the user expanded in the selector or the history, by chat id (#60). */
+    chatRuns: RunsCache;
+    /** Loads a chat's short list unless the cached one is current; never opens or wakes the chat. */
+    loadChatRuns: (chatId: string) => void;
     /** Adds a newly created chat and selects it. */
     addChat: (chat: Chat) => void;
     /**
@@ -116,6 +122,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
     const [subagent, setSubagent] = useState<{ chatId: string; runId: string }>();
     const [openChatSubagents, setOpenChatSubagentsState] = useState<OpenChatSubagents>();
+    const [chatRuns, dispatchChatRuns] = useReducer(runsCacheReducer, {});
+    const chatRunsRef = useRef(chatRuns);
+    chatRunsRef.current = chatRuns;
+    const chatRunsInflight = useRef(new Set<string>());
     const [panel, dispatchPanel] = useReducer(
         panelReducer,
         undefined,
@@ -224,9 +234,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         }
     }, [chats, chatsLoaded, selectedChatId]);
 
-    const selectChat = useCallback((id: string | undefined) => {
+    const selectChat = useCallback((id: string | undefined, subagentRun?: string) => {
         setSelectedChatId(id);
-        setSubagent(undefined);
+        setSubagent(selectionFor(id, subagentRun));
         store(CHAT_KEY, id);
     }, []);
 
@@ -246,6 +256,20 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             }),
         [],
     );
+
+    const chatsRef = useRef(chats);
+    chatsRef.current = chats;
+    const loadChatRuns = useCallback((chatId: string) => {
+        const chat = chatsRef.current.find((c) => c.id === chatId);
+        if (!chat) return;
+        void ensureChatRuns(chat, {
+            cache: chatRunsRef.current,
+            inflight: chatRunsInflight.current,
+            fetchRuns: agentApi.subagentRuns,
+            dispatch: dispatchChatRuns,
+            now: Date.now,
+        });
+    }, []);
 
     const addChat = useCallback(
         (chat: Chat) => {
@@ -334,6 +358,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectSubagent,
             openChatSubagents: openChatSubagents?.chatId === selectedChatId ? openChatSubagents : undefined,
             setOpenChatSubagents,
+            chatRuns,
+            loadChatRuns,
             addChat,
             startNewChat,
             creatingChat,
@@ -367,6 +393,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             selectSubagent,
             openChatSubagents,
             setOpenChatSubagents,
+            chatRuns,
+            loadChatRuns,
             addChat,
             startNewChat,
             creatingChat,

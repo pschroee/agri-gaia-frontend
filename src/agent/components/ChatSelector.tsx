@@ -6,12 +6,15 @@
 // floating label "Chat" and the open chat's title, then "New chat" and the internet switch as square outlined buttons
 // of the same height. With a subagent open the field turns violet ("Subagent", 2 px border), a back arrow sits in it
 // and the title reads "Chat › 🤖 Subagent". The list opens with "Search chats" on top, which filters chats and the
-// open chat's subagents; the open chat's subagents sit indented under it (#48: open while one runs).
+// open chat's subagents; the open chat's subagents sit indented under it (#48: open while one runs). The "🤖 n" badge of
+// every other chat opens its group too (issue #60): the first time it loads the chat's short list of runs, without
+// opening or waking the chat, and a click on a sub-entry opens that chat with the subagent's view.
 
 import { KeyboardEvent, MouseEvent, ReactNode, useMemo, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
+import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import InputBase from '@mui/material/InputBase';
 import Popover from '@mui/material/Popover';
@@ -30,6 +33,7 @@ import { chatTitle } from '../format';
 import { runStateOf, runStateText } from '../runState';
 import type { SubagentNavItem } from '../subagents';
 import type { Chat } from '../types';
+import { useChatSubagentGroups } from '../useChatSubagentGroups';
 import { useSubagentNav } from '../useSubagentNav';
 import { isHovered, isTruncated } from './EllipsisText';
 import EllipsisText from './EllipsisText';
@@ -188,11 +192,35 @@ function SubagentRow({ item, selected, onSelect }: { item: SubagentNavItem; sele
     );
 }
 
+/** A line in place of a group's sub-entries: its short list is loading, failed or empty (issue #60). */
+export function GroupNote({ loading, error, indent = 4 }: { loading?: boolean; error?: string; indent?: number }) {
+    return (
+        <Box
+            role={error ? 'alert' : 'status'}
+            data-testid="agent-subagent-group-note"
+            sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                minHeight: 32,
+                pl: indent,
+                pr: 2,
+                fontSize: 12.5,
+                color: error ? 'error.main' : 'text.secondary',
+            }}
+        >
+            {loading && <CircularProgress size={12} thickness={5} sx={{ color: VIOLET }} />}
+            {loading ? 'Loading subagents …' : error ? `Could not load the subagents: ${error}` : 'No subagents found.'}
+        </Box>
+    );
+}
+
 /** The panel's chat row: selector field, "New chat" and the internet switch (issue #54). */
 export default function ChatSelector() {
     const { chats, selectedChatId, selectChat } = useAgent();
     const selected = chats.find((c) => c.id === selectedChatId);
     const sub = useSubagentNav();
+    const groups = useChatSubagentGroups(chats);
     const [menuOpen, setMenuOpen] = useState(false);
     const [query, setQuery] = useState('');
     const [tipOpen, setTipOpen] = useState(false);
@@ -206,9 +234,9 @@ export default function ChatSelector() {
             searchChats(
                 chats.map((c) => ({ ...c, title: chatTitle(c) })),
                 query,
-                { chatId: sub.chatId, selectedChatId, subagents: sub.items },
+                { chatId: sub.chatId, selectedChatId, subagents: sub.items, others: groups.known },
             ),
-        [chats, query, sub.chatId, selectedChatId, sub.items],
+        [chats, query, sub.chatId, selectedChatId, sub.items, groups.known],
     );
     const close = () => {
         setMenuOpen(false);
@@ -221,6 +249,11 @@ export default function ChatSelector() {
     const pickSubagent = (runId: string) => {
         close();
         sub.select(runId);
+    };
+    // a subagent of another chat: that chat opens with the subagent's view (issue #60)
+    const pickOtherSubagent = (chatId: string, runId: string) => {
+        close();
+        selectChat(chatId, runId);
     };
     // the list ends above the platform footer, so MUI never moves it up over the field
     const [menuMaxHeight, setMenuMaxHeight] = useState<number>();
@@ -250,8 +283,44 @@ export default function ChatSelector() {
         );
     for (const c of result.chats) {
         const isOpenChat = c.id === sub.chatId && sub.items.length > 0;
+        if (!isOpenChat && (c.subagents ?? 0) > 0) {
+            // another chat: its group loads on the first expand (issue #60); a search shows only matching subagents
+            const g = groups.group(c);
+            const matches = result.others?.[c.id];
+            const groupOpen = !!matches || g.open;
+            rows.push(
+                <ChatRow
+                    key={c.id}
+                    chat={c}
+                    selected={c.id === selectedChatId && !isSub}
+                    onSelect={() => pickChat(c.id)}
+                    badge={
+                        <SubagentBadge
+                            count={c.subagents ?? 0}
+                            open={groupOpen}
+                            onToggle={matches ? undefined : () => groups.toggle(c)}
+                        />
+                    }
+                />,
+            );
+            if (!groupOpen) continue;
+            const items = matches ?? g.items;
+            if (!items || items.length === 0)
+                rows.push(<GroupNote key={`note:${c.id}`} loading={g.loading} error={g.error} />);
+            else
+                for (const it of items)
+                    rows.push(
+                        <SubagentRow
+                            key={`sub:${c.id}:${it.runId}`}
+                            item={it}
+                            selected={false}
+                            onSelect={() => pickOtherSubagent(c.id, it.runId)}
+                        />,
+                    );
+            continue;
+        }
         const subsShown = isOpenChat ? (result.subagents ?? (sub.open ? sub.items : [])) : [];
-        const count = isOpenChat ? sub.items.length : c.subagents ?? 0;
+        const count = isOpenChat ? sub.items.length : 0;
         const groupOpen = isOpenChat && (result.subagents ? result.subagents.length > 0 : sub.open);
         rows.push(
             <ChatRow
@@ -264,7 +333,7 @@ export default function ChatSelector() {
                         <SubagentBadge
                             count={count}
                             open={groupOpen}
-                            onToggle={isOpenChat && !result.subagents ? sub.toggle : undefined}
+                            onToggle={!result.subagents ? sub.toggle : undefined}
                         />
                     ) : undefined
                 }
