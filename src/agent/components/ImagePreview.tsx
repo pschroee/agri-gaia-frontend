@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -26,6 +27,8 @@ type Props = {
     maxHeight?: number;
     /** Square tile of this size instead of a free thumbnail (attachments). */
     tile?: number;
+    /** Shown instead of the muted note when the image fails to load (an attachment tile shows its type icon). */
+    fallback?: ReactNode;
 };
 
 /** Muted inline note in place of an image (not loaded, not available, not yet available). */
@@ -60,9 +63,10 @@ export function ImageNote({ text, title }: { text: string; title?: string }) {
 }
 
 /** An image as a thumbnail; a click opens the large view with the name and a download link. */
-export default function ImagePreview({ src, alt, label, filename, maxHeight = 240, tile }: Props) {
+export default function ImagePreview({ src, alt, label, filename, maxHeight = 240, tile, fallback }: Props) {
     const [open, setOpen] = useState(false);
     const [failed, setFailed] = useState(false);
+    if (failed && fallback !== undefined) return <>{fallback}</>;
     if (failed) return <ImageNote text={`Image not available${label ? ` · ${label}` : ''}`} title={label} />;
     const name = filename ?? label?.split('/').pop() ?? 'image';
     const title = alt || name;

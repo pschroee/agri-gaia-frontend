@@ -6,16 +6,20 @@ import { describe, expect, it } from 'vitest';
 
 import {
     artifactApprovalView,
+    artifactsOfCalls,
     artifactSummary,
     canSend,
     checkSizes,
     emptyStaged,
+    fileTypeOf,
     formatBytes,
     mergeArtifacts,
     previewKind,
     splitArtifacts,
     splitAttachments,
+    splitFileName,
     stagedReducer,
+    truncateMiddle,
     withAttachments,
 } from './files';
 import { emptyQueue, queueReducer, queueRows } from './queue';
@@ -238,5 +242,83 @@ describe('queue rows with attachments', () => {
             attachments: ['a.csv'],
             state: 'sending',
         });
+    });
+});
+
+describe('splitFileName / truncateMiddle', () => {
+    it('keeps the extension and the end of the stem in the tail', () => {
+        expect(splitFileName('825276804_18105773135202160_7072290302585619992.jpg')).toEqual({
+            head: '825276804_18105773135202160_707229030258561',
+            tail: '9992.jpg',
+        });
+        expect(splitFileName('fall1-0bde6b8d68ed (durchsuchbar).pdf').tail).toBe('bar).pdf');
+    });
+    it('joins back to the full name', () => {
+        for (const n of ['a.txt', 'report.final.docx', 'README', 'x'.repeat(300), '.env', 'archive.tar.gz']) {
+            const { head, tail } = splitFileName(n);
+            expect(head + tail).toBe(n);
+        }
+    });
+    it('leaves short stems whole and treats long or missing extensions as stem', () => {
+        expect(splitFileName('a.pdf')).toEqual({ head: 'a.pdf', tail: '' });
+        expect(splitFileName('abcd.pdf')).toEqual({ head: 'abcd.pdf', tail: '' });
+        expect(splitFileName('README_FIRST')).toEqual({ head: 'README_F', tail: 'IRST' });
+        expect(splitFileName('data.verylongextension').tail).toBe('sion');
+        expect(splitFileName('.env')).toEqual({ head: '.env', tail: '' });
+    });
+    it('truncates in the middle as text, extension visible', () => {
+        expect(truncateMiddle('825276804_18105773135202160_7072290302585619992.jpg', 16)).toBe('8252768…9992.jpg');
+        expect(truncateMiddle('short.pdf', 16)).toBe('short.pdf');
+        const t = truncateMiddle('y'.repeat(200) + '.xlsx', 20);
+        expect(Array.from(t)).toHaveLength(20);
+        expect(t.endsWith('yyyy.xlsx')).toBe(true);
+    });
+});
+
+describe('fileTypeOf', () => {
+    it('maps extensions to a type icon', () => {
+        expect(fileTypeOf({ name: 'a.PDF' })).toBe('pdf');
+        expect(fileTypeOf({ name: 'a.docx' })).toBe('word');
+        expect(fileTypeOf({ name: 'a.xlsx' })).toBe('spreadsheet');
+        expect(fileTypeOf({ name: 'a.pptx' })).toBe('presentation');
+        expect(fileTypeOf({ name: 'a.csv' })).toBe('text');
+        expect(fileTypeOf({ name: 'a.md' })).toBe('text');
+        expect(fileTypeOf({ name: 'a.tar.gz' })).toBe('archive');
+        expect(fileTypeOf({ name: 'a.zip' })).toBe('archive');
+        expect(fileTypeOf({ name: 'a.jpg' })).toBe('image');
+        expect(fileTypeOf({ name: 'drawing.svg' })).toBe('image');
+        expect(fileTypeOf({ name: 'model.onnx' })).toBe('file');
+    });
+    it('falls back to the content type without a known extension', () => {
+        const ct = (content_type: string) => fileTypeOf({ name: 'upload', content_type });
+        expect(ct('application/pdf')).toBe('pdf');
+        expect(ct('application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe('word');
+        expect(ct('application/vnd.ms-excel')).toBe('spreadsheet');
+        expect(ct('application/vnd.openxmlformats-officedocument.presentationml.presentation')).toBe('presentation');
+        expect(ct('text/csv; charset=utf-8')).toBe('text');
+        expect(ct('application/json')).toBe('text');
+        expect(ct('application/zip')).toBe('archive');
+        expect(ct('image/png')).toBe('image');
+        expect(ct('application/octet-stream')).toBe('file');
+        expect(fileTypeOf({ name: 'upload' })).toBe('file');
+    });
+    it('is only the icon: an SVG or a renamed file never previews as an image', () => {
+        expect(previewKind(art('drawing.svg', { content_type: 'image/svg+xml' }))).toBe('file');
+        expect(previewKind(art('photo.png', { content_type: 'text/html' }))).toBe('file');
+    });
+});
+
+describe('artifactsOfCalls', () => {
+    it('picks the outputs of the given tool calls, oldest first', () => {
+        const list = [
+            art('b.png', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:00:02Z' }),
+            art('a.pdf', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:00:01Z' }),
+            art('c.txt', { kind: 'output', tool_call_id: 't2' }),
+            art('in.txt', { kind: 'input', tool_call_id: 't1' }),
+            art('d.txt', { kind: 'output' }),
+        ];
+        expect(artifactsOfCalls(list, ['t1']).map((a) => a.name)).toEqual(['a.pdf', 'b.png']);
+        expect(artifactsOfCalls(list, [])).toEqual([]);
+        expect(artifactsOfCalls(undefined, ['t1'])).toEqual([]);
     });
 });

@@ -16,6 +16,7 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 import type { PageContext } from '../pageContext';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
+import { artifactsOfCalls } from '../files';
 import type { CommandNotice } from '../commands';
 import type { Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
@@ -27,7 +28,7 @@ import type { ChatStream } from '../useChatStream';
 import { compactionReason, formatAnswerUsage, formatTokens, formatUsd, TARIFF_LABEL } from '../usage';
 import type { AnswerUsage } from '../usage';
 import { RefersTo } from './PageContextChip';
-import { MessageAttachments } from './Attachments';
+import { MessageAttachments, ResultAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
 import ResumeBlock from './ResumeBlock';
@@ -112,8 +113,11 @@ function AgentBlock({
     chatId,
     live = false,
     controls,
+    artifacts,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
+    /** The chat's artifacts: results handed over by a tool call show as tiles below its steps. */
+    artifacts?: Artifact[];
     dense: boolean;
     thinking: Thinking;
     /** Stop / move running commands, background chips. */
@@ -149,7 +153,18 @@ function AgentBlock({
                             />
                         );
                     }
-                    return <StepList key={i} steps={p.steps} controls={controls} />;
+                    return (
+                        <Fragment key={i}>
+                            <StepList steps={p.steps} controls={controls} />
+                            <ResultAttachments
+                                chatId={chatId}
+                                artifacts={artifactsOfCalls(
+                                    artifacts,
+                                    p.steps.map((s) => s.id),
+                                )}
+                            />
+                        </Fragment>
+                    );
                 })}
                 {item.error && (
                     <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>
@@ -171,8 +186,8 @@ function UsageLine({ usage }: { usage: AnswerUsage }) {
         usage.cost !== undefined
             ? `Cost by tariff at the time of the answer${usage.tariff ? ` (${TARIFF_LABEL[usage.tariff]})` : ''}.`
             : usage.flatCost !== undefined
-              ? "Approximate: pi's flat price, no tariff cost stored for this answer."
-              : 'No cost stored for this answer.',
+            ? "Approximate: pi's flat price, no tariff cost stored for this answer."
+            : 'No cost stored for this answer.',
         usage.calls > 1 ? `${usage.calls} model calls in this answer.` : undefined,
         'Subagents and compactions count only in the chat total.',
     ]
@@ -410,7 +425,9 @@ export default function Conversation({
                 )}
             {items.map((it, i) => (
                 <Fragment key={it.key}>
-                    {notes.before.get(i)?.map((n) => <CommandLine key={n.key} notice={n} />)}
+                    {notes.before.get(i)?.map((n) => (
+                        <CommandLine key={n.key} notice={n} />
+                    ))}
                     {placed.before.get(i)?.map((r) => (
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
                     ))}
@@ -431,7 +448,14 @@ export default function Conversation({
                     ) : it.kind === 'compaction' ? (
                         <CompactionLine item={it} />
                     ) : (
-                        <AgentBlock item={it} dense={dense} thinking={thinking} chatId={chat?.id} controls={controls} />
+                        <AgentBlock
+                            item={it}
+                            dense={dense}
+                            thinking={thinking}
+                            chatId={chat?.id}
+                            controls={controls}
+                            artifacts={stream.artifacts}
+                        />
                     )}
                     {placed.after.get(i)?.map((r) => (
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
@@ -452,8 +476,8 @@ export default function Conversation({
                         chat?.starting || resumes.some((r) => r.start && r.state === 'running')
                             ? 'Goes to the agent once the sandbox is ready'
                             : resuming
-                              ? 'Goes to the agent once the chat has resumed'
-                              : 'Sending …'
+                            ? 'Goes to the agent once the chat has resumed'
+                            : 'Sending …'
                     }
                 />
             )}
@@ -468,8 +492,10 @@ export default function Conversation({
                     item={{ kind: 'agent', key: 'live', parts: liveP }}
                     dense={dense}
                     thinking={thinking}
+                    chatId={chat?.id}
                     live
                     controls={controls}
+                    artifacts={stream.artifacts}
                 />
             )}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
@@ -479,8 +505,8 @@ export default function Conversation({
                     {chat?.resuming
                         ? 'Resuming the chat …'
                         : stream.approvals.some((a) => a.state === 'pending')
-                          ? 'Waiting for your approval …'
-                          : 'The agent is working …'}
+                        ? 'Waiting for your approval …'
+                        : 'The agent is working …'}
                 </Box>
             )}
         </Box>
