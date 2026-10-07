@@ -100,7 +100,10 @@ function InternetItem({ approval, onDecide }: { approval: Approval; onDecide: (a
     );
 }
 
-/** The agent wants to hand over a result file (kind artifact_upload): name, size, type and a text preview. */
+/**
+ * The agent wants to hand over a result file (kind artifact_upload): name, size, type and a text preview. Only a gateway
+ * before issue #62 asks for this; since then files arrive as the agent's file message without approval.
+ */
 function ArtifactItem({ approval, onDecide }: { approval: Approval; onDecide: (approve: boolean) => Promise<void> }) {
     const { busy, decide } = useDecide(onDecide);
     const v = artifactApprovalView(approval);

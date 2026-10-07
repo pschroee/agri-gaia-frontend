@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Files of a chat: attachments the user uploads for the agent (inputs, POST /chats/{id}/files) and results the agent
-// hands over (outputs, after approval). Attachments go with a message by name; the gateway appends them to its text
+// Files of a chat: attachments the user uploads for the agent (inputs, POST /chats/{id}/files) and files the agent sends
+// to the user (outputs; stored at once without approval since gateway issue #62, shown as the agent's file message). Attachments go with a message by name; the gateway appends them to its text
 // as a fixed block (API.md, "Attachments to messages"), which the transcript splits off again.
 // Pure logic, used by ChatInput, useChatStream and Conversation.
 
@@ -208,7 +208,10 @@ export function mergeArtifacts(list: Artifact[], add: Artifact[]): Artifact[] {
     return [...list.filter((a) => !keys.has(key(a))), ...add];
 }
 
-/** What the approval card shows for a result file the agent wants to hand over (kind artifact_upload). */
+/**
+ * What the approval card shows for a result file the agent wanted to hand over (kind artifact_upload). Since gateway
+ * issue #62 uploads need no approval; only an older gateway still asks.
+ */
 export function artifactApprovalView(a: Pick<Approval, 'name' | 'size' | 'content_type' | 'preview' | 'via'>): {
     name: string;
     size: string;
@@ -321,12 +324,16 @@ export function fileMeta(a: { name: string; size?: number; content_type?: string
     return a.size !== undefined && Number.isFinite(a.size) && a.size >= 0 ? `${formatBytes(a.size)} · ${tag}` : tag;
 }
 
+/** A step as file placement sees it: its id and, where that is not the tool call ID (subagent entries), the call. */
+type PlacedStep = { id: string; callId?: string };
+const callOf = (s: PlacedStep) => s.callId ?? s.id;
+
 /** The parts of a transcript item that placeOutputs needs (agent answers with their steps and start). */
 type PlacedItem = {
     kind: string;
     key: string;
     at?: string;
-    parts?: { type: string; steps?: { id: string }[] }[];
+    parts?: { type: string; steps?: PlacedStep[] }[];
 };
 
 /**
@@ -348,7 +355,7 @@ export function placeOutputs(
     const answers = items.filter((it) => it.kind === 'agent');
     const byCall = new Map<string, string>();
     for (const it of answers)
-        for (const p of it.parts ?? []) for (const s of p.steps ?? []) byCall.set(s.id, it.key);
+        for (const p of it.parts ?? []) for (const s of p.steps ?? []) byCall.set(callOf(s), it.key);
     const add = (key: string, a: Artifact) => byItem.set(key, [...(byItem.get(key) ?? []), a]);
     const time = (s: string | undefined) => (s ? Date.parse(s) : NaN);
     for (const a of outputs) {
@@ -375,22 +382,48 @@ export function placeOutputs(
 
 /**
  * Splits the files placed under one answer (placeOutputs) between its step lists and its end (issue #57): a file
- * handed over by a tool call shows under the step list of that call, as before #54; one without a call of this answer
- * (placed by time) stays at the end of the answer. Keys of `byPart` are the indexes of the step parts in `parts`.
+ * sent by a tool call shows as the agent's file message right after the step list of that call (issue #62); one
+ * without a call of this answer (placed by time) follows the answer. Keys of `byPart` are the indexes of the step parts
+ * in `parts`.
  */
 export function outputsByStepPart(
-    parts: { type: string; steps?: { id: string }[] }[],
+    parts: { type: string; steps?: PlacedStep[] }[],
     results: Artifact[] | undefined,
 ): { byPart: Map<number, Artifact[]>; rest: Artifact[] } {
     const byPart = new Map<number, Artifact[]>();
     const rest: Artifact[] = [];
     if (!results?.length) return { byPart, rest };
     const partOfCall = new Map<string, number>();
-    parts.forEach((p, i) => p.steps?.forEach((s) => partOfCall.set(s.id, i)));
+    parts.forEach((p, i) => p.steps?.forEach((s) => partOfCall.set(callOf(s), i)));
     for (const a of results) {
         const i = a.tool_call_id ? partOfCall.get(a.tool_call_id) : undefined;
         if (i === undefined) rest.push(a);
         else byPart.set(i, [...(byPart.get(i) ?? []), a]);
     }
     return { byPart, rest };
+}
+
+/**
+ * Files a subagent sent (issue #62), for its read-only view: each under the answer of the run whose tool call sent it.
+ * Only by tool call, never by time: the chat's other files belong to the main agent or to other runs.
+ */
+export function outputsByCall(items: PlacedItem[], artifacts: Artifact[] | undefined): Map<string, Artifact[]> {
+    const byItem = new Map<string, Artifact[]>();
+    const outputs = (artifacts ?? [])
+        .filter((a) => a.kind === 'output' && a.tool_call_id)
+        .sort((x, y) => x.created_at.localeCompare(y.created_at));
+    if (outputs.length === 0) return byItem;
+    const byCall = new Map<string, string>();
+    for (const it of items)
+        if (it.kind === 'agent') for (const p of it.parts ?? []) for (const s of p.steps ?? []) byCall.set(callOf(s), it.key);
+    for (const a of outputs) {
+        const key = byCall.get(a.tool_call_id as string);
+        if (key) byItem.set(key, [...(byItem.get(key) ?? []), a]);
+    }
+    return byItem;
+}
+
+/** Accessible name of a file message of the agent: "File from the agent" or "3 files from the agent". */
+export function fileMessageLabel(count: number): string {
+    return count === 1 ? 'File from the agent' : `${count} files from the agent`;
 }

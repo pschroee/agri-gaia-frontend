@@ -16,6 +16,8 @@ import {
     formatBytes,
     mergeArtifacts,
     pastedFiles,
+    fileMessageLabel,
+    outputsByCall,
     outputsByStepPart,
     placeOutputs,
     previewKind,
@@ -451,6 +453,77 @@ describe('outputsByStepPart', () => {
         expect([...byPart.keys()].sort()).toEqual([1, 3]);
         expect(rest.map((a) => a.name)).toEqual(['late.txt', 'other.txt']);
         expect(outputsByStepPart(parts, undefined)).toEqual({ byPart: new Map(), rest: [] });
+    });
+});
+
+describe('files the agent sends (issue #62)', () => {
+    const answer = (key: string, at: string | undefined, ids: string[]) => ({
+        kind: 'agent',
+        key,
+        at,
+        parts: [{ type: 'steps', steps: ids.map((id) => ({ id })) }],
+    });
+
+    it('a file arriving live over SSE lands right after the step that sent it, replacing one of the same name', () => {
+        // the stored list, then two "artifact" events while the answer still streams
+        let list = [art('old.csv', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-07T20:00:01Z' })];
+        list = mergeArtifacts(list, [art('data.csv', { kind: 'output', tool_call_id: 't5', created_at: '2026-10-07T21:00:02Z' })]);
+        list = mergeArtifacts(list, [art('chart.png', { kind: 'output', tool_call_id: 't5', created_at: '2026-10-07T21:00:03Z' })]);
+        list = mergeArtifacts(list, [art('old.csv', { kind: 'output', tool_call_id: 't6', created_at: '2026-10-07T21:00:04Z', size: 9 })]);
+        const items = [
+            answer('a1', '2026-10-07T20:00:00Z', ['t1']),
+            { kind: 'user', key: 'u2', at: '2026-10-07T21:00:00Z' },
+        ];
+        const live = {
+            kind: 'agent',
+            key: 'live',
+            parts: [
+                { type: 'steps', steps: [{ id: 't4' }] },
+                { type: 'steps', steps: [{ id: 't5' }] },
+                { type: 'text' },
+                { type: 'steps', steps: [{ id: 't6' }] },
+            ],
+        };
+        const { byItem } = placeOutputs([...items, live], list);
+        expect(byItem.get('a1')).toBeUndefined();
+        const mine = byItem.get('live') ?? [];
+        expect(mine.map((a) => a.name)).toEqual(['data.csv', 'chart.png', 'old.csv']);
+        const { byPart, rest } = outputsByStepPart(live.parts, mine);
+        expect(byPart.get(0)).toBeUndefined();
+        expect(byPart.get(1)?.map((a) => a.name)).toEqual(['data.csv', 'chart.png']);
+        expect(byPart.get(3)?.map((a) => a.name)).toEqual(['old.csv']);
+        expect(rest).toEqual([]);
+    });
+
+    it('outputsByCall gives a subagent run only the files its own calls sent', () => {
+        // a subagent's steps are keyed by their log entry; the tool call is callId
+        const sub = (key: string, calls: string[]) => ({
+            kind: 'agent',
+            key,
+            parts: [{ type: 'steps', steps: calls.map((c, i) => ({ id: `${key}-entry${i}`, callId: c })) }],
+        });
+        const r1 = sub('r1', ['s1', 's2']);
+        const run = [{ kind: 'user', key: 'task' }, r1, sub('r2', ['s3'])];
+        const list = [
+            art('b.png', { kind: 'output', tool_call_id: 's3', created_at: '2026-10-07T21:00:03Z' }),
+            art('a.csv', { kind: 'output', tool_call_id: 's1', created_at: '2026-10-07T21:00:01Z' }),
+            art('main.pdf', { kind: 'output', tool_call_id: 'main-call', created_at: '2026-10-07T21:00:02Z' }),
+            art('timed.txt', { kind: 'output', created_at: '2026-10-07T21:00:02Z' }),
+            art('in.csv', { kind: 'input', tool_call_id: 's1' }),
+        ];
+        const by = outputsByCall(run, list);
+        expect(by.get('r1')?.map((a) => a.name)).toEqual(['a.csv']);
+        expect(by.get('r2')?.map((a) => a.name)).toEqual(['b.png']);
+        expect([...by.keys()].sort()).toEqual(['r1', 'r2']);
+        expect(outputsByCall(run, undefined).size).toBe(0);
+        // and right after the step list of that call
+        const { byPart } = outputsByStepPart(r1.parts, by.get('r1'));
+        expect(byPart.get(0)?.map((a) => a.name)).toEqual(['a.csv']);
+    });
+
+    it('names the file message for screen readers', () => {
+        expect(fileMessageLabel(1)).toBe('File from the agent');
+        expect(fileMessageLabel(2)).toBe('2 files from the agent');
     });
 });
 

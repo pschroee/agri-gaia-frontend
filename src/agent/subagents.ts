@@ -292,6 +292,7 @@ export function runItems(
             const execs = p.id ? execsByCall.get(p.id) : undefined;
             const step: Step = {
                 id: e.entry_id,
+                callId: p.id,
                 tool: displayToolName(p.name ?? 'tool'),
                 summary: summarizeArgs(p.arguments),
                 status: live ? 'running' : 'stopped',

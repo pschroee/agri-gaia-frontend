@@ -100,7 +100,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   gone, because it doubled the thinking blocks and hid the steps while they ran): text as Markdown without a bubble,
   each thinking block as one collapsed "Thinking · 3 s" (`ThinkingBlock`, one level), each run of tool calls as a
   `StepList` box with state icon, duration and the per-step controls (Stop, "Move to background"), and the files those
-  calls handed over as cards right below their step list (`outputsByStepPart` in `src/agent/files.ts`). Below the
+  calls sent as the agent's file message right below their step list (`outputsByStepPart` in `src/agent/files.ts`). Below the
   answer the subagents it started as one card (`SubagentCard`: robot, title, state, chevron; replaces the links under
   the `subagent` call), files placed by time only (`placeOutputs`) and, once the turn is over, a **Copy** button
   (Markdown of the text parts, `answerMarkdown` in `src/agent/answer.ts`; `copyText` in `src/agent/clipboard.ts` falls
@@ -390,8 +390,15 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   characters without spaces, an image, a PDF, SVG and a renamed `.png` (`text/html`), staged, sent and as results,
   panel and `/ai-agent`; no element wider than its box (the head's ellipsis and the clipped tail excepted), no request
   for the SVG or the renamed file. **Artifacts:** the chat's list comes with `GET /chats/{id}` and the SSE event
-  `artifact`. A pending approval of kind `artifact_upload` shows in
-  `ApprovalCard` with name, size, type and the text preview (none for images), "Allow" / "Reject". **Display images:**
+  `artifact`. **Files the agent sends (issue #62):** since gateway PR #29 the agent sends files without approval;
+  each shows at once (SSE `artifact`) as the agent's **file message** (`AgentFileMessage`, `data-testid
+  "agent-file-message"`): the cards of a user's attachments, left-aligned, right after the step list of the call that
+  sent them (`outputsByStepPart`), never inside it; files without a call of that answer follow the answer
+  (`placeOutputs`). In a subagent's view its own files show the same way (`outputsByCall`; subagent steps are keyed by
+  their log entry, so `Step.callId` carries the tool call). Only an older gateway still sends a pending
+  `artifact_upload` approval, which `ApprovalCard` shows with name, size, type and the text preview, "Allow" /
+  "Reject"; decided ones stay readable in the step details ("Upload "x" · Approved by you"). Render check: a stored
+  chat with two files of one call, an `artifact` event for a third, the subagent view with a file of a subagent call. **Display images:**
   `Markdown` renders `![alt](path)` through `src/agent/images.ts` (port of the gateway's `web/src/lib/images.ts`): local
   paths under `/workspace`, `/tmp`, `/home/agent` load from `GET …/images?path=…&msg=…` once the answer is stored (`msg`
   = `responseId`, else `ts-<timestamp>`, carried as `imageKey` on text parts); `data:` PNG/JPEG/GIF/WebP show directly;

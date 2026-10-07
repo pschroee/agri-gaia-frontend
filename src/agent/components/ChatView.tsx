@@ -218,6 +218,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                                 dense={dense}
                                 chatId={chatId}
                                 executions={stream.executions}
+                                artifacts={stream.artifacts}
                             />
                         ) : (
                             <Conversation stream={stream} items={items} dense={dense} subagents={subagentLinks} />
