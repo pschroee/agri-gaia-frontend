@@ -18,11 +18,11 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
-import { answerMarkdown, processSteps, showsWorking, splitAnswer } from '../answer';
+import { answerMarkdown, answerSteps } from '../answer';
 import { backgroundByCall } from '../background';
 import { copyText } from '../clipboard';
 import { noticeAnchor } from '../commands';
-import { placeOutputs } from '../files';
+import { outputsByStepPart, placeOutputs } from '../files';
 import type { CommandNotice } from '../commands';
 import type { SubagentNavItem } from '../subagents';
 import type { Artifact } from '../types';
@@ -36,9 +36,11 @@ import { MessageAttachments, ResultAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
 import ResumeBlock from './ResumeBlock';
-import { ProcessLine, WorkingIndicator, currentStepPart } from './ProcessLine';
+import StepList from './StepList';
 import type { StepControls } from './StepList';
 import SubagentCard from './SubagentCard';
+import ThinkingBlock from './ThinkingBlock';
+import WorkingIndicator from './WorkingIndicator';
 import { agentColors } from './tokens';
 
 export type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
@@ -137,9 +139,10 @@ export function CopyButton({ text }: { text: string }) {
 }
 
 /**
- * One answer of the agent (issue #54): the process line (thinking and steps behind "Thought 9 s · 3 tool calls"), the
- * text without a bubble, the subagents it started as a card, the files it handed over as cards and the copy button.
- * While the answer is worked on, "Thinking …" with a bar and the current step stand at its end.
+ * One answer of the agent: its parts in the order they happened, live as they arrive (issue #57, as before #54): text
+ * as Markdown, each thinking block as one collapsed "Thinking · 3 s", each run of tool calls as a step list with its
+ * controls and the files those calls handed over below it. Under the answer the subagents it started as a card
+ * (#54), files placed by time and, once finished, the copy button.
  */
 export function AgentBlock({
     item,
@@ -148,11 +151,8 @@ export function AgentBlock({
     chatId,
     live = false,
     active = false,
-    waitingLabel,
     controls,
     results,
-    processOpen,
-    onProcessOpen,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
@@ -163,60 +163,55 @@ export function AgentBlock({
     chatId?: string;
     /** The answer is still streaming (Mermaid blocks render once closed, no copy yet). */
     live?: boolean;
-    /** The answer belongs to the turn that runs right now. */
+    /** The answer belongs to the turn that runs right now (no copy yet). */
     active?: boolean;
-    /** Label of the working line while a step waits for approval. */
-    waitingLabel?: string;
     /** Files the agent handed over in this answer (placeOutputs). */
     results?: Artifact[];
-    processOpen?: boolean;
-    onProcessOpen?: (open: boolean) => void;
 }) {
-    const { texts, process } = useMemo(() => splitAnswer(item.parts), [item.parts]);
-    const working = showsWorking(item.parts, active);
     const markdown = useMemo(() => answerMarkdown(item.parts), [item.parts]);
+    const placed = useMemo(() => outputsByStepPart(item.parts, results), [item.parts, results]);
     const subagents = controls?.subagents;
     const runs = useMemo(() => {
         if (!subagents) return [];
         const seen = new Set<string>();
         const out: SubagentNavItem[] = [];
-        for (const s of processSteps(process))
+        for (const s of answerSteps(item.parts))
             for (const r of subagents.byCall.get(s.id) ?? [])
                 if (!seen.has(r.runId)) {
                     seen.add(r.runId);
                     out.push(r);
                 }
         return out;
-    }, [process, subagents]);
-    // the step under "Thinking …": only while a step is the newest part (not while the model thinks after it)
-    const last = item.parts[item.parts.length - 1];
-    const step = working && last?.type === 'steps' ? currentStepPart(process) : undefined;
+    }, [item.parts, subagents]);
     return (
         <Box
             data-testid="agent-answer"
             sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, fontSize: dense ? 14 : 14.5, lineHeight: 1.6 }}
         >
-            {process.length > 0 && (
-                <ProcessLine
-                    process={process}
-                    thinking={thinking}
-                    controls={controls}
-                    open={processOpen}
-                    onOpenChange={onProcessOpen}
-                />
-            )}
-            {texts.map((p, i) => (
-                <Box key={i} data-testid="agent-answer-text" sx={{ minWidth: 0 }}>
-                    <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} streaming={live} />
-                </Box>
-            ))}
-            {working && (
-                <WorkingIndicator
-                    label={step?.steps[0].status === 'waiting' ? waitingLabel ?? 'Waiting for your approval …' : undefined}
-                    step={step}
-                    controls={controls}
-                />
-            )}
+            {item.parts.map((p, i) => {
+                if (p.type === 'text')
+                    return (
+                        <Box key={i} data-testid="agent-answer-text" sx={{ minWidth: 0 }}>
+                            <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} streaming={live} />
+                        </Box>
+                    );
+                if (p.type === 'thinking')
+                    return (
+                        <ThinkingBlock
+                            key={p.id}
+                            part={p}
+                            open={thinking.open[p.id]}
+                            onOpenChange={thinking.onOpenChange}
+                        />
+                    );
+                const files = placed.byPart.get(i);
+                return (
+                    <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
+                        <StepList steps={p.steps} controls={controls} />
+                        {files && <ResultAttachments chatId={chatId} artifacts={files} />}
+                    </Fragment>
+                );
+            })}
             {item.error && <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>}
             {item.stopped && (
                 <Typography data-testid="agent-answer-stopped" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
@@ -224,8 +219,8 @@ export function AgentBlock({
                 </Typography>
             )}
             {runs.length > 0 && subagents && <SubagentCard items={runs} onOpen={subagents.onOpen} />}
-            {results && results.length > 0 && <ResultAttachments chatId={chatId} artifacts={results} />}
-            {!live && !working && markdown && <CopyButton text={markdown} />}
+            {placed.rest.length > 0 && <ResultAttachments chatId={chatId} artifacts={placed.rest} />}
+            {!live && !active && markdown && <CopyButton text={markdown} />}
         </Box>
     );
 }
@@ -346,10 +341,10 @@ function EmptyChat() {
 }
 
 /**
- * The conversation of a chat (issue #54): user messages as light green bubbles with their files above, answers as
- * text with one process line each, the files and subagents they produced below them and a copy button; notices of
- * the gateway, the answer that is streaming right now and "Thinking …" while the agent works. Scrolling is up to the
- * caller (ChatView, useStickToBottom).
+ * The conversation of a chat (issues #54, #57): user messages as light green bubbles with their files above, answers
+ * with text, thinking blocks and tool steps in the order they happened, the files and subagents they produced and a
+ * copy button; notices of the gateway, the answer that is streaming right now and a working hint while nothing of it
+ * shows yet. Scrolling is up to the caller (ChatView, useStickToBottom).
  */
 export default function Conversation({
     stream,
@@ -366,12 +361,11 @@ export default function Conversation({
 }) {
     const { chat, live, resumes, pending } = stream;
     const liveP = useMemo(() => liveParts(live), [live]);
-    // Open state chosen per thinking block and per answer's process line (collapsed until opened); kept here so it
-    // survives the switch from live to stored message.
+    // Open state chosen per thinking block (collapsed until opened); kept here so it survives the switch from live to
+    // stored message.
     const [open, setOpen] = useState<Record<string, boolean>>({});
     const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);
-    const [processOpen, setProcessOpen] = useState<Record<string, boolean>>({});
     const hasLive = liveP.length > 0;
     const files = useMemo<Files>(() => ({ chatId: chat?.id, known: stream.artifacts }), [chat?.id, stream.artifacts]);
     const { runningTools, stopTool, backgroundTool, background } = stream;
@@ -386,7 +380,7 @@ export default function Conversation({
         [runningTools, stopTool, backgroundTool, background, subagents],
     );
     // The streaming message continues the stored answer of the same turn (the last item, no user message after it):
-    // one answer with one process line, not two.
+    // one answer, not two.
     const lastItem = items[items.length - 1];
     const mergeLive = hasLive && !pending && lastItem?.kind === 'agent';
     const shown = useMemo<TranscriptItem[]>(() => {
@@ -468,8 +462,6 @@ export default function Conversation({
             active={it.key === activeKey}
             controls={controls}
             results={placed.byItem.get(it.key)}
-            processOpen={processOpen[it.key]}
-            onProcessOpen={(o) => setProcessOpen((c) => ({ ...c, [it.key]: o }))}
         />
     );
     const empty =
@@ -552,7 +544,7 @@ export default function Conversation({
             {liveItem && answer(liveItem, true)}
             {placed.unplaced.length > 0 && <ResultAttachments chatId={chat?.id} artifacts={placed.unplaced} />}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
-            {/* the agent works, but no answer of this turn shows yet: "Thinking …" as in the design */}
+            {/* the agent works, but nothing of this turn's answer shows yet: a subtle hint, never in place of the steps */}
             {(running || pending) && !activeKey && !resuming && !chat?.starting && !stream.compacting && (
                 <WorkingIndicator
                     label={

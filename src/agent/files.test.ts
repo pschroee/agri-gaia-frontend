@@ -16,6 +16,7 @@ import {
     formatBytes,
     mergeArtifacts,
     pastedFiles,
+    outputsByStepPart,
     placeOutputs,
     previewKind,
     READABLE_FORMATS,
@@ -426,6 +427,30 @@ describe('placeOutputs', () => {
         const list = [art('x.csv', { kind: 'output' })];
         expect(placeOutputs([{ kind: 'user', key: 'u1' }], list).unplaced.map((a) => a.name)).toEqual(['x.csv']);
         expect(placeOutputs(items, undefined).byItem.size).toBe(0);
+    });
+});
+
+describe('outputsByStepPart', () => {
+    it('puts a file under the step list of its tool call, the rest at the end of the answer', () => {
+        const parts = [
+            { type: 'thinking' },
+            { type: 'steps', steps: [{ id: 't1' }, { id: 't2' }] },
+            { type: 'text' },
+            { type: 'steps', steps: [{ id: 't3' }] },
+        ];
+        const results = [
+            art('a.png', { kind: 'output', tool_call_id: 't2' }),
+            art('b.csv', { kind: 'output', tool_call_id: 't3' }),
+            art('c.pdf', { kind: 'output', tool_call_id: 't1' }),
+            art('late.txt', { kind: 'output' }),
+            art('other.txt', { kind: 'output', tool_call_id: 'elsewhere' }),
+        ];
+        const { byPart, rest } = outputsByStepPart(parts, results);
+        expect(byPart.get(1)?.map((a) => a.name)).toEqual(['a.png', 'c.pdf']);
+        expect(byPart.get(3)?.map((a) => a.name)).toEqual(['b.csv']);
+        expect([...byPart.keys()].sort()).toEqual([1, 3]);
+        expect(rest.map((a) => a.name)).toEqual(['late.txt', 'other.txt']);
+        expect(outputsByStepPart(parts, undefined)).toEqual({ byPart: new Map(), rest: [] });
     });
 });
 

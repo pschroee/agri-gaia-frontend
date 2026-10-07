@@ -83,19 +83,21 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   **Transcript:** empty chat with symbol and "No messages yet. Describe what you want to do." in the middle (only then
   the conversation fills the height; otherwise approvals follow right after the last answer). User messages are light
   green bubbles on the right (`agentColors.userBubble` `#e3efe8`, radius 16/16/4/16, 85 % in the panel), their
-  attachments as file cards directly above. An answer (`AgentBlock`) is text without a bubble, then the subagents it
-  started as one card (`SubagentCard`: robot, title, state, chevron; replaces the links under the `subagent` call), the
-  files it handed over as cards and a **Copy** button (Markdown of the text parts, `answerMarkdown`; `copyText` in
-  `src/agent/clipboard.ts` falls back to `execCommand('copy')`; the icon shows a tick for 1.2 s). **Process line**
-  (`ProcessLine.tsx`, decision 3): thinking and steps of an answer behind one collapsed line above its text ("Thought
-  9 s · 3 tool calls · 1 failed", `processSummary` in `src/agent/answer.ts`); opened, the thinking blocks (each
-  collapsible on its own) and the steps (`StepList plain`) in order. All text parts stay visible, also those between
-  steps (`splitAnswer` joins step lists that become neighbours). While the turn runs (`activeKey`: the live answer, else
-  the last stored answer of a running chat with no user message after it), "Thinking …" with the design's 4 px bar
-  stands at the answer's end (`showsWorking`: not while text streams), with the running step below it (Stop and "Move
-  to background" stay) or "Waiting for your approval …". The live message is joined to the stored answer of the same
-  turn, so a turn is one answer with one line. Without an answer yet the same indicator stands at the end. Approval
-  cards, queue, "Jump to latest", compaction and background notes are unchanged.
+  attachments as file cards directly above. An answer (`AgentBlock`) shows its parts **in the order they happened and
+  live** (issue #57, as before #54; the summary line "Thought 9 s · 3 tool calls" of #54 and its `ProcessLine` are
+  gone, because it doubled the thinking blocks and hid the steps while they ran): text as Markdown without a bubble,
+  each thinking block as one collapsed "Thinking · 3 s" (`ThinkingBlock`, one level), each run of tool calls as a
+  `StepList` box with state icon, duration and the per-step controls (Stop, "Move to background"), and the files those
+  calls handed over as cards right below their step list (`outputsByStepPart` in `src/agent/files.ts`). Below the
+  answer the subagents it started as one card (`SubagentCard`: robot, title, state, chevron; replaces the links under
+  the `subagent` call), files placed by time only (`placeOutputs`) and, once the turn is over, a **Copy** button
+  (Markdown of the text parts, `answerMarkdown` in `src/agent/answer.ts`; `copyText` in `src/agent/clipboard.ts` falls
+  back to `execCommand('copy')`; the icon shows a tick for 1.2 s). The live message is joined to the stored answer of
+  the same turn (`activeKey`: the live answer, else the last stored answer of a running chat with no user message after
+  it), so a turn is one answer. Only while nothing of the running turn's answer shows yet, "The agent is working …"
+  with the design's 4 px bar (`WorkingIndicator.tsx`) stands at the end, or "Waiting for your approval …" / "Resuming
+  the chat …"; never in place of the steps. The subagent view shows it only while the run has no answer yet or is
+  quiet. Approval cards, queue, "Jump to latest", compaction and background notes are unchanged.
   **Field** (`ChatInput`): selection chip above it (28 px pill tinted in the primary colour, kind icon, name in mono);
   an outlined box (radius 8, 2 px primary while focused via `:focus-within`) with the staged files as cards (168 px)
   above the text (`InputBase`, two rows), below paperclip, model, thinking level and a round 36 px send button (grey
@@ -191,7 +193,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `api.<base>/datasets` mocked; no chip without a selection, the sent `context` per message.
 - **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
   `message_update` with `thinking_start|delta|end`) show as collapsed muted lines "Thinking · 4.2 s" (`ThinkingBlock`)
-  inside the answer's opened process line (issue #54), live as "Thinking … n s". The live message is assembled by the pure reducer
+  in the answer where they happened (issue #57), live as "Thinking … n s". The live message is assembled by the pure reducer
   `src/agent/live.ts` (text, thinking and tool calls by `contentIndex`); `liveParts` and `buildTranscript` turn live and
   stored messages into the same parts. **pi stores no timing per block:** the duration is measured only while the block
   streams, kept in memory by `timestamp:contentIndex`, and handed to the stored message; after a page reload, or for
