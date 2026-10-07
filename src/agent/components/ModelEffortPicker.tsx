@@ -18,7 +18,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import MemoryOutlinedIcon from '@mui/icons-material/MemoryOutlined';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 
-import { effortLabel, modelName, pickerState, priceHint, switchFailure } from '../modelChoice';
+import { effortLabel, modelName, pickerState, switchFailure } from '../modelChoice';
 import type { Chat, ContextTooLarge, Model } from '../types';
 import ContextTooLargeDialog from './ContextTooLargeDialog';
 
@@ -118,7 +118,7 @@ export default function ModelEffortPicker({
     const state = pickerState(chat, busy);
     const name = (id: string) => modelName(models, id);
     // the chat's own model stays selectable even when the gateway no longer lists it
-    const options: Pick<Model, 'id' | 'name' | 'provider' | 'pricing' | 'tariff' | 'peak_now'>[] =
+    const options: Pick<Model, 'id' | 'name' | 'provider'>[] =
         chat && !models.some((m) => m.id === chat.model)
             ? [{ id: chat.model, name: chat.model, provider: chat.model.split('/')[0] }, ...models]
             : models;
@@ -215,7 +215,6 @@ export default function ModelEffortPicker({
             >
                 {options.map((m) => {
                     const current = m.id === chat?.model;
-                    const price = priceHint(m);
                     return (
                         <MenuItem key={m.id} selected={current} onClick={() => pickModel(m.id)} sx={{ maxWidth: 360 }}>
                             <ListItemIcon sx={{ minWidth: 28 }}>
@@ -223,7 +222,7 @@ export default function ModelEffortPicker({
                             </ListItemIcon>
                             <ListItemText
                                 primary={m.name}
-                                secondary={price ? `${m.provider} · ${price}` : m.provider}
+                                secondary={m.provider}
                                 primaryTypographyProps={{ fontSize: 13.5 }}
                                 secondaryTypographyProps={{ fontSize: 11.5, sx: { whiteSpace: 'normal' } }}
                             />

@@ -28,24 +28,6 @@ export function modelName(models: Pick<Model, 'id' | 'name'>[], id: string): str
     return models.find((m) => m.id === id)?.name || id;
 }
 
-const usd = (n: number) => `$${n >= 1 ? n.toFixed(2) : String(parseFloat(n.toFixed(3)))}`;
-
-/**
- * Price hint of a model ("$0.28 in · $0.42 out per 1M tokens"), with the tariff in effect when the provider has
- * peak hours. Undefined without pricing.
- */
-export function priceHint(m: Pick<Model, 'pricing' | 'tariff' | 'peak_now'>): string | undefined {
-    const p = m.pricing;
-    if (!p) return undefined;
-    let text = `${usd(p.input)} in · ${usd(p.output)} out per 1M tokens`;
-    if (m.tariff && m.peak_now !== undefined) {
-        text += m.peak_now
-            ? ' · peak tariff now'
-            : ` · off-peak now (×${Math.round(m.tariff.offpeak_factor * 100) / 100})`;
-    }
-    return text;
-}
-
 /** Thinking levels per model, as the gateway reported them for the user's chats (the model list carries none). */
 export function levelsByModel(chats: Pick<Chat, 'model' | 'thinking_levels'>[]): Record<string, string[]> {
     const out: Record<string, string[]> = {};
