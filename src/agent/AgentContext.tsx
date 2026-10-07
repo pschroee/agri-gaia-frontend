@@ -2,12 +2,13 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
-import { AgentApiError, agentApi, silentLogin } from './api';
+import { AgentApiError, agentApi, approvalEventsUrl, silentLogin } from './api';
+import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './approvalFeed';
 import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
-import type { Chat, Config, Me, Model } from './types';
+import type { Approval, Chat, Config, Me, Model } from './types';
 import type { Compacting } from './usage';
 
 export type SessionStatus = 'checking' | 'ready' | 'signed-out' | 'error';
@@ -49,6 +50,12 @@ type AgentState = {
     setCompacting: (chatId: string, c: Compacting | undefined) => void;
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
+    /** Open approvals across all the user's chats, oldest first, live from GET /events (approvalFeed.ts). */
+    pendingApprovals: Approval[];
+    /** Their number (badge of the floating button). */
+    pendingApprovalCount: number;
+    /** The stream across chats is open (otherwise the count comes from polling every 15 s). */
+    approvalsLive: boolean;
 };
 
 const AgentContext = createContext<AgentState | undefined>(undefined);
@@ -91,6 +98,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [creatingChat, setCreatingChat] = useState(false);
     const [newChatError, setNewChatError] = useState<string>();
     const [freshChat, setFreshChat] = useState<FreshChat>();
+    const [pending, dispatchPending] = useReducer(pendingReducer, emptyPending);
+    const [approvalsLive, setApprovalsLive] = useState(false);
+    const pendingVersion = useRef(0);
+    pendingVersion.current = pending.version;
     const checking = useRef(false);
     const creating = useRef(false);
 
@@ -140,6 +151,25 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         const t = setInterval(() => void refreshChats(), 15000);
         return () => clearInterval(t);
     }, [status, refreshChats]);
+
+    useEffect(() => {
+        if (status !== 'ready') {
+            dispatchPending({ type: 'reset' });
+            setApprovalsLive(false);
+            return undefined;
+        }
+        return startApprovalFeed({
+            openStream: () => new EventSource(approvalEventsUrl, { withCredentials: true }),
+            fetchPending: () => agentApi.pendingApprovals(),
+            dispatch: dispatchPending,
+            version: () => pendingVersion.current,
+            onLive: setApprovalsLive,
+            isUnauthorized: (e) => e instanceof AgentApiError && e.status === 401,
+            onUnauthorized: () => setStatus('signed-out'),
+        });
+    }, [status]);
+
+    const pendingApprovals = useMemo(() => pendingList(pending), [pending]);
 
     useEffect(() => {
         if (status !== 'ready') return;
@@ -260,6 +290,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setCompacting,
             panelOpen,
             setPanelOpen,
+            pendingApprovals,
+            pendingApprovalCount: pendingApprovals.length,
+            approvalsLive,
         }),
         [
             status,
@@ -285,6 +318,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setCompacting,
             panelOpen,
             setPanelOpen,
+            pendingApprovals,
+            approvalsLive,
         ],
     );
 
