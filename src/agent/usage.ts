@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 // Context usage and tokens of a chat and of single answers, prepared for display. The gateway reports the context
-// per chat (pi's get_session_stats) and the tokens per chat (LLM proxy) and per stored answer. It records costs as
-// well; the platform does not show them.
+// per chat (pi's get_session_stats) and the tokens per chat and per stored answer (pi's usage). It records costs as
+// well; the platform does not show them (issue #43).
 
 import type { ContextUsage, PiEvent, StoredMessage, Usage } from './types';
 
