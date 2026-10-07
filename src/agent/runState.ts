@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Run state of a chat for the status line, the chat list and the panel header, plus the texts of the run controls
-// (stop, let it rest). Pure functions, unit-tested.
+// Run state of a chat for the status line, the chat list and the panel header, plus the texts of the run control
+// (stop). Pure functions, unit-tested. The gateway's idle state (`dormant`: session saved, sandbox released after
+// AGW_IDLE_TIMEOUT) is never shown (issue #31): such a chat counts as idle, and opening it resumes it at once.
 
 import type { Chat, StoredMessage } from './types';
 import type { PageContext } from './pageContext';
@@ -12,11 +13,10 @@ import type { PageContext } from './pageContext';
  * - `working`: pi works on a turn
  * - `waiting`: the turn is blocked on an approval of the user
  * - `starting`: a new chat waits for its first sandbox (the pool had no free slot)
- * - `resuming`: a dormant chat is being rebuilt in a fresh sandbox
- * - `idle`: active (sandbox assigned), nothing running
- * - `dormant`: resting, session saved and sandbox released; the next message resumes it
+ * - `resuming`: the chat is being loaded into a fresh sandbox (on opening it, or by a message)
+ * - `idle`: nothing running; the gateway's `dormant` counts as idle too, it is not shown
  */
-export type RunState = 'working' | 'waiting' | 'starting' | 'resuming' | 'idle' | 'dormant';
+export type RunState = 'working' | 'waiting' | 'starting' | 'resuming' | 'idle';
 
 type RunChat = Pick<Chat, 'state' | 'running' | 'resuming' | 'starting' | 'pending_approvals'>;
 
@@ -33,9 +33,9 @@ export function runStateOf(
     if (chat.resuming || opts.resumeRunning) return 'resuming';
     const pending = opts.pendingApprovals ?? chat.pending_approvals ?? 0;
     if (chat.running) return pending > 0 ? 'waiting' : 'working';
-    // an open approval also keeps a chat that is not marked running from resting
+    // an open approval also keeps a chat that is not marked running from idling
     if (pending > 0 && chat.state === 'active') return 'waiting';
-    return chat.state === 'dormant' ? 'dormant' : 'idle';
+    return 'idle';
 }
 
 export const RUN_STATE_LABEL: Record<RunState, string> = {
@@ -44,7 +44,6 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
     starting: 'Starting',
     resuming: 'Resuming',
     idle: 'Idle',
-    dormant: 'Resting',
 };
 
 /** Short label for chat lists (lower case, next to the date). */
@@ -54,16 +53,14 @@ export const RUN_STATE_SHORT: Record<RunState, string> = {
     starting: 'starting',
     resuming: 'resuming',
     idle: 'active',
-    dormant: 'resting',
 };
 
 export const RUN_STATE_HINT: Record<RunState, string> = {
     working: 'The agent works on your request. Messages you send now are queued.',
     waiting: 'The agent waits for your decision on an approval.',
     starting: 'No sandbox was free; one is being started for this chat. You can type already: your message goes to the agent once the sandbox is ready.',
-    resuming: 'The chat was resting; its sandbox is being rebuilt.',
-    idle: 'Sandbox ready. Let the chat rest to release it; your next message resumes it.',
-    dormant: 'The chat is resting: session saved, sandbox released. Your next message resumes it.',
+    resuming: 'The chat is being loaded into a sandbox. You can type already: your message goes to the agent once it is ready.',
+    idle: 'Ready for your next message.',
 };
 
 /** Does the state count as a running turn (timer, stop button)? */
@@ -106,18 +103,6 @@ export function formatElapsed(ms: number): string {
 export function abortErrorText(status: number | undefined, message: string): string {
     if (status === 409) return 'The agent had already stopped.';
     return `Stopping failed: ${message}`;
-}
-
-/**
- * Message for a failed "Let it rest". The gateway answers 409 with an open approval ("chat has a pending
- * approval") and while the agent works ("agent is working").
- */
-export function suspendErrorText(status: number | undefined, message: string): string {
-    if (status === 409 && /approval/i.test(message)) {
-        return 'The chat cannot rest while an approval is open: the agent waits for your decision. Approve or reject it first, then let the chat rest.';
-    }
-    if (status === 409) return 'The agent is working. Stop it or wait until it is done, then let the chat rest.';
-    return `Could not let the chat rest: ${message}`;
 }
 
 /** A message sent outside the queue whose user message is not stored yet (shown greyed in the transcript). */

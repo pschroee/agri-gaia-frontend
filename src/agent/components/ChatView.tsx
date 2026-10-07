@@ -44,7 +44,7 @@ type Props = {
  * One chat: delegation strip with blocked calls on top, the conversation and pending approvals in the
  * middle (scrolls), queued messages and the input field at the bottom. The middle follows the end of the
  * transcript while the user is there; after scrolling up, a "Jump to latest" button counts the new entries.
- * Above the input, the run status shows what the agent does and offers "Stop" and "Let it rest".
+ * Above the input, the run status shows what the agent does and offers "Stop".
  */
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
     const stream = useChatStream(chatId);
@@ -201,7 +201,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     onSendNow={stream.sendQueueNow}
                 />
                 {runState && (
-                    <RunStatus state={runState} since={since} onAbort={stream.abort} onSuspend={stream.suspend} />
+                    <RunStatus state={runState} since={since} onAbort={stream.abort} />
                 )}
                 <ChatInput
                     onSend={onSend}

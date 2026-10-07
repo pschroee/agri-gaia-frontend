@@ -2,11 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Resuming a dormant chat in a fresh sandbox, from the SSE event "resume" (API.md, ResumeStep). The steps are only
-// known live: pi stores nothing about them, so after a page reload the block is gone. Pure state logic and texts,
-// after the gateway's web UI (web/src/lib/resume.ts, applyResumeStep in web/src/lib/stream.ts).
+// Resuming a chat in a fresh sandbox, from the SSE event "resume" (API.md, ResumeStep). The steps are only known
+// live: pi stores nothing about them, so after a page reload the block is gone. Pure state logic and texts, after the
+// gateway's web UI (web/src/lib/resume.ts, applyResumeStep in web/src/lib/stream.ts). Since issue #31 a chat the
+// gateway let idle is resumed as soon as it is opened (POST …/resume, `shouldResumeOnOpen`), not on the next message.
 
-import type { ResumePhase, ResumeStep } from './types';
+import type { Chat, ResumePhase, ResumeStep } from './types';
 
 export type StepPhase = Exclude<ResumePhase, 'ready' | 'failed'>;
 
@@ -32,8 +33,10 @@ export type ResumeView = {
     error?: string;
     /** Highest stored message seq when the resume started; the user message that triggered it comes later. */
     afterSeq: number;
-    /** The first sandbox of a new chat (gateway `start`), not a resume of a resting chat. */
+    /** The first sandbox of a new chat (gateway `start`), not a resume of an idle chat. */
     start?: boolean;
+    /** Started by opening the chat (POST …/resume), not by a message: sits where it started, before later messages. */
+    opened?: boolean;
 };
 
 const freshSteps = (): ResumeStepView[] => RESUME_PHASES.map((phase) => ({ phase, status: 'pending' }));
@@ -42,10 +45,17 @@ const freshSteps = (): ResumeStepView[] => RESUME_PHASES.map((phase) => ({ phase
  * Applies one SSE step. A step with a new id starts a new resume (earlier ones stay, finished). Steps of an
  * unknown phase are ignored; "ready" and "failed" end the resume.
  */
-export function applyResumeStep(list: ResumeView[], step: ResumeStep, lastSeq: number): ResumeView[] {
+export function applyResumeStep(
+    list: ResumeView[],
+    step: ResumeStep,
+    lastSeq: number,
+    opened = false,
+): ResumeView[] {
     const i = list.findIndex((r) => r.id === step.id);
     const found: ResumeView =
-        i >= 0 ? list[i] : { id: step.id, state: 'running', steps: freshSteps(), afterSeq: lastSeq };
+        i >= 0
+            ? list[i]
+            : { id: step.id, state: 'running', steps: freshSteps(), afterSeq: lastSeq, ...(opened && { opened }) };
     const cur: ResumeView = step.start && !found.start ? { ...found, start: true } : found;
     let next: ResumeView;
     if (step.phase === 'ready') {
@@ -136,7 +146,7 @@ export function resumeSummary(r: ResumeView, formatMs: (ms: number | undefined) 
     if (r.state === 'running') return r.start ? 'Starting a sandbox for the chat …' : 'Resuming the chat …';
     if (r.state === 'failed') {
         const why = r.error ? `: ${r.error}` : '';
-        return r.start ? `Starting the sandbox failed${why}. Your next message tries again.` : `Resuming failed${why}`;
+        return r.start ? `Starting the sandbox failed${why}` : `Resuming failed${why}`;
     }
     const total = formatMs(r.totalMs);
     const warn = r.steps.some((s) => s.status === 'warning') ? ' · with warning' : '';
@@ -144,10 +154,23 @@ export function resumeSummary(r: ResumeView, formatMs: (ms: number | undefined) 
 }
 
 /**
- * Position of a resume in the transcript: right after the first user message stored after it started (the
- * message that triggered it), otherwise at the end. Returns the index of the item to insert after, or -1 for
- * the end.
+ * Position of a resume a message triggered in the transcript: right after the first user message stored after it
+ * started (the message that triggered it), otherwise at the end. Returns the index of the item to insert after, or
+ * -1 for the end. A resume on opening the chat sits before the first item stored after it started instead
+ * (`noticeAnchor`), so a message typed meanwhile follows it.
  */
 export function resumeAnchor(items: { kind: string; seq?: number }[], r: Pick<ResumeView, 'afterSeq'>): number {
     return items.findIndex((it) => it.kind === 'user' && it.seq !== undefined && it.seq > r.afterSeq);
+}
+
+/**
+ * Should opening this chat resume it (POST …/resume)? Only a chat the gateway let idle (`dormant`) that is not
+ * being resumed or started already, and only once per opened view (`requested`): when the gateway lets an open chat
+ * idle again later, the next message resumes it, so an open tab does not keep a sandbox busy.
+ */
+export function shouldResumeOnOpen(
+    chat: Pick<Chat, 'state' | 'resuming' | 'starting'> | undefined,
+    requested: boolean,
+): boolean {
+    return !!chat && !requested && chat.state === 'dormant' && !chat.resuming && !chat.starting;
 }

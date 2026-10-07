@@ -5,7 +5,6 @@
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Tooltip from '@mui/material/Tooltip';
-import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
 
 import { RUN_STATE_HINT, RUN_STATE_LABEL, RUN_STATE_SHORT, formatElapsed, isRunning } from '../runState';
 import type { RunState } from '../runState';
@@ -18,14 +17,12 @@ export const RUN_STATE_COLOR: Record<RunState, string> = {
     starting: agentColors.green,
     resuming: agentColors.green,
     idle: agentColors.ok,
-    dormant: '#757575',
 };
 
-/** Dot, spinner or moon in front of the state. Working pulses. */
+/** Dot or spinner in front of the state. Working pulses. */
 export function RunStateIcon({ state, size = 8 }: { state: RunState; size?: number }) {
     const color = RUN_STATE_COLOR[state];
     if (state === 'resuming' || state === 'starting') return <CircularProgress size={size + 3} sx={{ color, flex: 'none' }} />;
-    if (state === 'dormant') return <BedtimeOutlinedIcon sx={{ fontSize: size + 5, color, flex: 'none' }} />;
     return (
         <Box
             component="span"
@@ -90,7 +87,7 @@ export default function RunStateChip({ state, since, short = false, framed = fal
                     minWidth: 0,
                     boxSizing: 'border-box',
                     fontSize: framed ? 12 : 11,
-                    color: state === 'idle' || state === 'dormant' ? 'text.secondary' : color,
+                    color: state === 'idle' ? 'text.secondary' : color,
                     ...(framed && {
                         border: 1,
                         borderColor: state === 'waiting' ? agentColors.amberLine : 'divider',
