@@ -10,6 +10,7 @@ import Button from '@mui/material/Button';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 
 import { useAgentOptional } from '../AgentContext';
+import { dropUnknownSubagent } from '../chatSubagents';
 import { withLiveOptions } from '../commands';
 import { modelName } from '../modelChoice';
 import { freshChatFor } from '../newChat';
@@ -94,10 +95,12 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     const selectSubagent = agent?.selectSubagent;
     const subagentId = agent?.selectedSubagent;
     const subRun = subagentId ? runs.find((r) => r.runId === subagentId) : undefined;
-    // a run the loaded chat does not know (gone or another chat's): back to the chat
+    // a run the loaded chat does not know (gone or another chat's): back to the chat, but only once the chat is loaded
+    // (a subagent picked under another chat comes with its chat, before this view has loaded anything; issue #60)
     useEffect(() => {
-        if (subagentId && !stream.loading && !subRun) selectSubagent?.(undefined);
-    }, [subagentId, subRun, stream.loading, selectSubagent]);
+        if (dropUnknownSubagent({ subagentId, known: !!subRun, loaded: stream.loaded, loading: stream.loading }))
+            selectSubagent?.(undefined);
+    }, [subagentId, subRun, stream.loaded, stream.loading, selectSubagent]);
     const anyRunLive = runs.some((r) => isLiveStatus(runStatus(r, { chatRunning, now: Date.now() })));
     const now = useNow(anyRunLive || chatRunning, 2000);
     const subStatus = subRun ? runStatus(subRun, { chatRunning, now }) : undefined;

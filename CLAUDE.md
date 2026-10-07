@@ -75,9 +75,21 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `TransitionProps.onEntered`), the chats below (open one bold and tinted, state chip, "n waiting", titles wrap), Enter
   opens the first match. The search (`searchChats` in `src/agent/chatSearch.ts`, unit-tested) matches every word of the
   query in the title, over all chats (without a query the newest 20 plus an older selected one), and the open chat's
-  subagents by title: the chat is listed for a matching subagent, and only the matching subagents show under it. **Only
-  the open chat's subagents are known in the frontend**; other chats with `subagents > 0` show a static "🤖 n" badge,
-  the open one the toggle "🤖 n ⌃/⌄" (#48 behaviour). The list's maximum height is measured on opening (window height
+  subagents by title: the chat is listed for a matching subagent, and only the matching subagents show under it. The
+  open chat's subagents come from its view (toggle "🤖 n ⌃/⌄", #48 behaviour). **Every other chat with `subagents > 0`
+  has the same toggle (issue #60)**, in the panel and in the history of `/ai-agent`: the first expand loads the chat's
+  short list `GET /agent/api/chats/{id}/subagent-runs` (gateway PR for #60; reads the database only, never opens or
+  wakes the chat, so it must not go through `agentApi.chat` or `resume`), shown as "Loading subagents …" meanwhile,
+  then cached in `AgentContext` (`chatRuns`, shared by panel and history) and loaded again only when the chat's
+  `subagents` count changed or a run was live and the list is older than 15 s (`needsLoad`). Titles and states use
+  the open chat's rules (`summaryRun` maps a short run onto `runTitle`/`runStatus`; `task_head` carries the first lines
+  of the task so headings and tags are skipped as before). Clicking such a sub-entry calls `selectChat(chatId, runId)`,
+  which opens the chat with that subagent's view; `ChatView` drops an unknown subagent only once the chat has been
+  loaded (`dropUnknownSubagent`), otherwise the fresh view would drop it before its first load. "Search chats" also
+  finds subagents of other chats once their list is loaded (`others` of `searchChats`). Pure logic in
+  `src/agent/chatSubagents.ts`, unit-tested; open state per chat in `useChatSubagentGroups`. Render check: answer
+  `…/subagent-runs` with a delay and check that neither `GET chats/{id}` nor `POST …/resume` of that chat goes out
+  before a sub-entry is clicked. The list's maximum height is measured on opening (window height
   minus the row's bottom and the footer), otherwise MUI moves a long list up over the field. With a subagent open the
   field is violet (label "Subagent", 2 px border), a back arrow sits in it and the title reads "chat › 🤖 subagent".
   **Transcript:** empty chat with symbol and "No messages yet. Describe what you want to do." in the middle (only then

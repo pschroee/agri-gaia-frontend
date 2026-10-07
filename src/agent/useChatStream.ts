@@ -82,6 +82,8 @@ export type ChatStream = {
     /** Compaction running right now (SSE compaction_start until compaction_end), seen live in this view. */
     compacting?: Compacting;
     loading: boolean;
+    /** The chat and its messages have been loaded once for this view. */
+    loaded: boolean;
     error?: string;
     connected: boolean;
     reload: () => Promise<void>;
@@ -718,6 +720,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         pending,
         compacting,
         loading,
+        loaded,
         error,
         connected,
         reload,

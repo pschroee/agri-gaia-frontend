@@ -52,3 +52,27 @@ describe('searchChats', () => {
         expect(searchChats(chats, 'csv', { chatId: undefined, subagents: [] }).chats).toEqual([]);
     });
 });
+
+describe('searchChats with subagents of other chats (issue #60)', () => {
+    it('finds another chat by a loaded subagent and lists only the matching ones', () => {
+        const others = {
+            c2: [{ title: 'Download MNIST' }, { title: 'Build the dataset' }],
+            c3: [{ title: 'Count rows' }],
+        };
+        const r = searchChats(chats, 'mnist download', { chatId: 'c1', subagents, others });
+        // c2 matches by title as well as by a subagent
+        expect(r.chats.map((c) => c.id)).toEqual(['c2']);
+        expect(r.others).toEqual({ c2: [{ title: 'Download MNIST' }] });
+        const rows = searchChats(chats, 'rows', { chatId: 'c1', subagents, others });
+        expect(rows.chats.map((c) => c.id)).toEqual(['c3']);
+        expect(rows.others).toEqual({ c3: [{ title: 'Count rows' }] });
+        // not loaded: not found; without a query nothing changes
+        expect(searchChats(chats, 'rows', { chatId: 'c1', subagents }).chats).toEqual([]);
+        expect(searchChats(chats, '', { chatId: 'c1', subagents, others }).others).toBeUndefined();
+    });
+
+    it('takes the open chat from its own runs, not from an older short list', () => {
+        const r = searchChats(chats, 'stale', { chatId: 'c1', subagents, others: { c1: [{ title: 'stale title' }] } });
+        expect(r.chats).toEqual([]);
+    });
+});

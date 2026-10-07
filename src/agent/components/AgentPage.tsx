@@ -17,11 +17,14 @@ import { useAgent } from '../AgentContext';
 import { chatTitle, formatRelativeDay } from '../format';
 import { AgentTab, agentTabOf } from '../panelCarry';
 import { runSince, runStateOf } from '../runState';
+import type { SubagentNavItem } from '../subagents';
+import { useChatSubagentGroups } from '../useChatSubagentGroups';
 import { useSubagentNav } from '../useSubagentNav';
 import { useRenameChat } from '../useRenameChat';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
 import ChatView from './ChatView';
+import { GroupNote } from './ChatSelector';
 import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename';
 import { ChatTokens, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
@@ -34,9 +37,71 @@ import { GroupToggleButton, SubagentBreadcrumb, SubagentEntryContent } from './S
 import { agentColors } from './tokens';
 import { FOOTER_HEIGHT } from './AgentContextPanel';
 
+/** Sub-entries under a history entry: the open chat's, or another chat's from its short list (issue #60). */
+function HistorySubagents({
+    items,
+    selectedRunId,
+    onSelect,
+}: {
+    items: SubagentNavItem[];
+    selectedRunId?: string;
+    onSelect: (runId: string) => void;
+}) {
+    return (
+        <Box
+            component="ul"
+            data-testid="agent-history-subagents"
+            sx={{
+                listStyle: 'none',
+                m: 0,
+                mb: 0.75,
+                p: 0,
+                pl: 1.5,
+                display: 'grid',
+                // minmax(0, 1fr): titles ellipsize instead of widening the history column
+                gridTemplateColumns: 'minmax(0, 1fr)',
+                rowGap: 0.25,
+            }}
+        >
+            {items.map((it) => {
+                const active = selectedRunId === it.runId;
+                return (
+                    <Box
+                        component="li"
+                        key={it.runId}
+                        role="button"
+                        tabIndex={0}
+                        aria-current={active ? 'true' : undefined}
+                        data-testid="agent-subagent-entry"
+                        data-run-id={it.runId}
+                        onClick={() => onSelect(it.runId)}
+                        onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onSelect(it.runId)}
+                        sx={{
+                            px: 1,
+                            py: 0.6,
+                            borderRadius: 1,
+                            cursor: 'pointer',
+                            fontSize: 12.5,
+                            color: active ? 'text.primary' : 'text.secondary',
+                            bgcolor: active ? agentColors.subagentTint : undefined,
+                            borderLeft: `2px solid ${active ? agentColors.subagent : 'transparent'}`,
+                            '&:hover': {
+                                bgcolor: active ? agentColors.subagentTint : 'action.hover',
+                            },
+                        }}
+                    >
+                        <SubagentEntryContent item={it} />
+                    </Box>
+                );
+            })}
+        </Box>
+    );
+}
+
 function History() {
     const { chats, selectedChatId, selectChat } = useAgent();
     const sub = useSubagentNav();
+    const groups = useChatSubagentGroups(chats);
     const rename = useRenameChat();
     return (
         <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, overflowY: 'auto', minHeight: 0 }}>
@@ -60,6 +125,8 @@ function History() {
                 const on = c.id === selectedChatId;
                 const state = runStateOf(c);
                 const withSubs = on && c.id === sub.chatId && sub.items.length > 0;
+                // another chat with subagents: its group loads on the first expand, without waking it (issue #60)
+                const other = !withSubs && (c.subagents ?? 0) > 0 ? groups.group(c) : undefined;
                 const editing = rename.state.chatId === c.id;
                 const failure = rename.state.error?.chatId === c.id ? rename.state.error.text : undefined;
                 return (
@@ -149,6 +216,15 @@ function History() {
                                         />
                                     </Box>
                                 )}
+                                {other && (
+                                    <Box component="span" sx={{ ml: 'auto' }}>
+                                        <GroupToggleButton
+                                            open={other.open}
+                                            count={c.subagents ?? 0}
+                                            onToggle={() => groups.toggle(c)}
+                                        />
+                                    </Box>
+                                )}
                             </Box>
                             {failure && (
                                 <Box
@@ -164,58 +240,20 @@ function History() {
                             )}
                         </Box>
                         {withSubs && sub.open && (
-                            <Box
-                                component="ul"
-                                data-testid="agent-history-subagents"
-                                sx={{
-                                    listStyle: 'none',
-                                    m: 0,
-                                    mb: 0.75,
-                                    p: 0,
-                                    pl: 1.5,
-                                    display: 'grid',
-                                    // minmax(0, 1fr): titles ellipsize instead of widening the history column
-                                    gridTemplateColumns: 'minmax(0, 1fr)',
-                                    rowGap: 0.25,
-                                }}
-                            >
-                                {sub.items.map((it) => {
-                                    const active = sub.selected?.runId === it.runId;
-                                    return (
-                                        <Box
-                                            component="li"
-                                            key={it.runId}
-                                            role="button"
-                                            tabIndex={0}
-                                            aria-current={active ? 'true' : undefined}
-                                            data-testid="agent-subagent-entry"
-                                            data-run-id={it.runId}
-                                            onClick={() => sub.select(it.runId)}
-                                            onKeyDown={(e) =>
-                                                (e.key === 'Enter' || e.key === ' ') && sub.select(it.runId)
-                                            }
-                                            sx={{
-                                                px: 1,
-                                                py: 0.6,
-                                                borderRadius: 1,
-                                                cursor: 'pointer',
-                                                fontSize: 12.5,
-                                                color: active ? 'text.primary' : 'text.secondary',
-                                                bgcolor: active ? agentColors.subagentTint : undefined,
-                                                borderLeft: `2px solid ${
-                                                    active ? agentColors.subagent : 'transparent'
-                                                }`,
-                                                '&:hover': {
-                                                    bgcolor: active ? agentColors.subagentTint : 'action.hover',
-                                                },
-                                            }}
-                                        >
-                                            <SubagentEntryContent item={it} />
-                                        </Box>
-                                    );
-                                })}
-                            </Box>
+                            <HistorySubagents
+                                items={sub.items}
+                                selectedRunId={sub.selected?.runId}
+                                onSelect={sub.select}
+                            />
                         )}
+                        {other?.open &&
+                            (other.items?.length ? (
+                                <HistorySubagents items={other.items} onSelect={(runId) => selectChat(c.id, runId)} />
+                            ) : (
+                                <Box sx={{ mb: 0.75 }}>
+                                    <GroupNote loading={other.loading} error={other.error} indent={1.5} />
+                                </Box>
+                            ))}
                     </Fragment>
                 );
             })}

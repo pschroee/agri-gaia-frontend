@@ -20,6 +20,7 @@ import type {
     Pool,
     QueueEntry,
     SendResult,
+    SubagentRunSummary,
     ToolExecution,
     Variant,
 } from './types';
@@ -221,6 +222,9 @@ export const agentApi = {
     /** Model calls recorded at the LLM proxy (incl. subagents), for the tokens per subagent run. */
     llmCalls: (id: string) =>
         request<LLMCall[]>(`chats/${enc(id)}/llm_calls`).then((l) => (Array.isArray(l) ? l : [])),
+    /** Short list of a chat's subagent runs; reading it does not wake the chat (gateway issue #60). */
+    subagentRuns: (id: string) =>
+        request<SubagentRunSummary[]>(`chats/${enc(id)}/subagent-runs`).then((l) => (Array.isArray(l) ? l : [])),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
     /** Platform calls of the user's chats across all chats (query from activityQuery); 404 on older gateways. */
     activity: (query: string) => request<ActivityPage>(`activity${query}`),
