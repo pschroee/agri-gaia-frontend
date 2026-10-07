@@ -75,7 +75,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   decision logic is the pure `stickReducer`, unit-tested; measuring in a render check must wait for a painted frame
   (rAF, then `setTimeout`), because a measurement inside rAF runs before that frame's ResizeObserver.
 - **Idle chats are invisible (issue #31):** the gateway still lets an unused chat idle after `AGW_IDLE_TIMEOUT`
-  (`state: "dormant"`), but the UI never shows it: `runStateOf` maps it to `idle`, there is no "resting" label, icon or
+  (`state: "dormant"`), but the UI never shows it: `runStateOf` maps it to `idle` (shown nowhere, #35), there is no "resting" label, icon or
   hint and no manual "Let it rest" (suspend) button. Opening or selecting such a chat (panel, `/ai-agent`, also on page
   load) calls `POST /agent/api/chats/{id}/resume` (gateway PR for #31). The decision is taken once per opened view
   (`resumeOnOpen` in `src/agent/resume.ts`), after the first load of the chat with its messages and once the SSE stream
@@ -141,13 +141,20 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   and a hover counts only after a real mousemove, because the opening panel puts the send button under the pointer
   resting on the floating button and the browser fires a mouseover without movement. Keyboard focus still opens it.
 - **Run control:** `RunStatus` above the input shows the run state of the open chat with a running timer and is the
-  only place to stop the agent (`POST …/abort`; the input only sends) or to let an idle chat rest (`POST …/suspend`).
-  The state comes from the pure `runStateOf` in `src/agent/runState.ts`: `working`, `waiting` (running with an open
-  approval; the live approval list beats the chat's counter), `resuming`, `idle` (active, sandbox assigned) and
-  `dormant` (shown as "resting"); the timer uses `running_since`, otherwise the last user message. After an abort the
-  queue is held (`QueueList`, "Send now"). `suspend` answers 409 with an open approval or while running; the text
-  comes from `suspendErrorText`. The open `ChatView` hands its chat to `updateChat` of the context, so the history
-  list, the chat selector and the panel header chip follow live, not only every 15 s.
+  only place to stop the agent (`POST …/abort`; the input only sends). The state comes from the pure `runStateOf` in
+  `src/agent/runState.ts`: `working`, `waiting` (running with an open approval; the live approval list beats the
+  chat's counter), `starting`, `resuming` and `idle` (nothing running; the gateway's `dormant` counts as idle). The
+  timer uses `running_since`, otherwise the last user message. After an abort the queue is held (`QueueList`, "Send
+  now"). The open `ChatView` hands its chat to `updateChat` of the context, so the history list, the chat selector and
+  the panel header chip follow live, not only every 15 s.
+- **A state shows only while something happens (issue #35):** `runStateText(state, place)` in `src/agent/runState.ts`
+  (unit-tested) decides per place (`header`: panel header and the chat header of `/ai-agent`; `list`: history list and
+  the panel's chat selector; `bar`: `RunStatus`). A ready chat (idle, active or dormant) shows nothing anywhere, no
+  "active", "Idle" or "ready". Starting and resuming show a muted "loading" chip in header and lists, their steps in the
+  transcript (`ResumeBlock`, "Starting a sandbox …"), no status bar. Working and waiting show everywhere. The bar is
+  open only while a turn runs or a failed stop has its message (`showRunStatus`) and opens and closes with a short MUI
+  `Collapse` (180/220 ms) instead of reserving empty space, keeping its last text while it closes. `RunStateChip`
+  renders nothing where the place has no text. The Status tab still names states (`activityText` in `status.ts`).
 - **Resuming a dormant chat:** sending to a dormant chat resumes it; the response to `POST …/messages` comes only after
   resuming. The SSE event `resume` (`ResumeStep`, phases acquire → session → settings → workspace → inputs, then
   `ready` or `failed`) feeds the pure `applyResumeStep` in `src/agent/resume.ts`; `ResumeBlock` shows the steps live
