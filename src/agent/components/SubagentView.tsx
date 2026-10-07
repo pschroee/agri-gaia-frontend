@@ -18,6 +18,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
 import { isLiveStatus, runTranscript, subagentStateText } from '../subagents';
 import type { RunStatus, SubagentNavItem, SubagentRun } from '../subagents';
+import type { ToolExecution } from '../types';
 import { AgentBlock, UserBubble } from './Conversation';
 import EllipsisText from './EllipsisText';
 import type { Files, Thinking } from './Conversation';
@@ -248,14 +249,17 @@ export function SubagentTranscript({
     status,
     dense,
     chatId,
+    executions,
 }: {
     run: SubagentRun;
     status: RunStatus;
     dense: boolean;
     chatId: string;
+    /** The chat's tool executions (exit codes, output excerpts of the subagent's calls). */
+    executions?: ToolExecution[];
 }) {
     const live = isLiveStatus(status);
-    const items = useMemo(() => runTranscript(run, live), [run, live]);
+    const items = useMemo(() => runTranscript(run, live, executions), [run, live, executions]);
     const [open, setOpen] = useState<Record<string, boolean>>({});
     const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo<Thinking>(() => ({ open, onOpenChange }), [open, onOpenChange]);

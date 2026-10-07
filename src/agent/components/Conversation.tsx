@@ -43,6 +43,7 @@ import ThinkingBlock from './ThinkingBlock';
 import WorkingIndicator from './WorkingIndicator';
 import { agentColors } from './tokens';
 
+/** Open state of thinking blocks and of tool steps' details (keys `stepOpenKey`), kept across transcript reloads. */
 export type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
 
 export type Files = { chatId?: string; known: Artifact[] };
@@ -207,7 +208,7 @@ export function AgentBlock({
                 const files = placed.byPart.get(i);
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
-                        <StepList steps={p.steps} controls={controls} />
+                        <StepList steps={p.steps} controls={controls} expand={thinking} />
                         {files && <ResultAttachments chatId={chatId} artifacts={files} />}
                     </Fragment>
                 );
@@ -361,8 +362,8 @@ export default function Conversation({
 }) {
     const { chat, live, resumes, pending } = stream;
     const liveP = useMemo(() => liveParts(live), [live]);
-    // Open state chosen per thinking block (collapsed until opened); kept here so it survives the switch from live to
-    // stored message.
+    // Open state chosen per thinking block and per tool step (collapsed until opened); kept here so it survives the
+    // switch from live to stored message and every reload of the transcript.
     const [open, setOpen] = useState<Record<string, boolean>>({});
     const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);

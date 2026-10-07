@@ -6,11 +6,13 @@ import { useState } from 'react';
 
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import BlockIcon from '@mui/icons-material/Block';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import MoveDownIcon from '@mui/icons-material/MoveDown';
@@ -23,6 +25,7 @@ import type { BackgroundTask } from '../types';
 import { formatMs } from '../format';
 import type { SubagentNavItem } from '../subagents';
 import type { Step, StepStatus } from '../transcript';
+import StepDetail from './StepDetail';
 import { agentColors, blockSx, MONO } from './tokens';
 
 const STATUS_LABEL: Record<StepStatus, string> = {
@@ -73,6 +76,15 @@ export type StepControls = {
     /** The runs each `subagent` call started, listed in a card below the answer and opened on click (#48, #54). */
     subagents?: { byCall: Map<string, SubagentNavItem[]>; onOpen: (runId: string) => void };
 };
+
+/**
+ * Open state of the steps' details, kept by the caller so it survives reloads of the transcript and the switch from
+ * live to stored message (like the thinking blocks); keyed by `stepOpenKey`.
+ */
+export type StepExpand = { open: Record<string, boolean>; onOpenChange: (key: string, open: boolean) => void };
+
+/** Key of a step in the open state (shared with the thinking blocks' record, so it gets a prefix). */
+export const stepOpenKey = (id: string) => `step:${id}`;
 
 const TONE_COLOR = { running: agentColors.green, ok: agentColors.ok, error: agentColors.red, muted: 'text.secondary' };
 
@@ -164,13 +176,57 @@ function RunningControls({
     );
 }
 
-function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
+function StepRow({
+    s,
+    controls,
+    open,
+    onToggle,
+}: {
+    s: Step;
+    controls?: StepControls;
+    open: boolean;
+    onToggle: () => void;
+}) {
     const [error, setError] = useState<string>();
     const controllable = s.status === 'running' && !!controls?.running.has(s.id);
     const task = controls?.background.get(s.id);
     return (
-        <Box component="li" data-testid="agent-step" data-step-id={s.id} sx={{ minWidth: 0 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+        <Box component="li" data-testid="agent-step" data-step-id={s.id} data-open={open} sx={{ minWidth: 0 }}>
+            <Box
+                role="button"
+                tabIndex={0}
+                aria-expanded={open}
+                aria-label={`${open ? 'Hide' : 'Show'} details of ${s.tool}`}
+                data-testid="agent-step-row"
+                onClick={onToggle}
+                onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                    e.preventDefault();
+                    onToggle();
+                }}
+                sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    minWidth: 0,
+                    cursor: 'pointer',
+                    borderRadius: 0.5,
+                    mx: -0.5,
+                    px: 0.5,
+                    '&:hover': { bgcolor: 'action.hover' },
+                    '&:focus-visible': { outline: `2px solid ${agentColors.green}`, outlineOffset: -2 },
+                }}
+            >
+                <ChevronRightIcon
+                    sx={{
+                        fontSize: 16,
+                        flex: 'none',
+                        mr: -0.5,
+                        color: 'text.secondary',
+                        transition: 'transform 150ms',
+                        transform: open ? 'rotate(90deg)' : 'none',
+                    }}
+                />
                 <Tooltip title={STATUS_LABEL[s.status]}>
                     <Box sx={{ display: 'flex', flex: 'none' }}>
                         <StatusIcon status={s.status} />
@@ -210,13 +266,25 @@ function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
                         ? formatMs(s.durationMs) ?? ''
                         : STATUS_LABEL[s.status]}
                 </Typography>
-                {controllable && controls && <RunningControls id={s.id} controls={controls} onError={setError} />}
+                {controllable && controls && (
+                    // the controls act on the command; they do not open its details
+                    <Box
+                        onClick={(e) => e.stopPropagation()}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        sx={{ display: 'flex' }}
+                    >
+                        <RunningControls id={s.id} controls={controls} onError={setError} />
+                    </Box>
+                )}
             </Box>
             {error && (
                 <Typography role="alert" sx={{ fontSize: 11.5, color: agentColors.red, pl: 3 }}>
                     {error}
                 </Typography>
             )}
+            <Collapse in={open} unmountOnExit>
+                <StepDetail step={s} />
+            </Collapse>
         </Box>
     );
 }
@@ -224,9 +292,26 @@ function StepRow({ s, controls }: { s: Step; controls?: StepControls }) {
 /**
  * Compact list of the tool calls of one agent step, in the answer where they happened (as before issue #54, restored
  * by #57): status, tool name in monospace, a hint at the arguments and the measured duration. A running foreground
- * command offers "Move to background" and "Stop"; a call that started a background task names it.
+ * command offers "Move to background" and "Stop"; a call that started a background task names it. A click on a step
+ * opens its details below it (issue #58: command or arguments, platform requests, result); several can be open.
  */
-export default function StepList({ steps, controls }: { steps: Step[]; controls?: StepControls }) {
+export default function StepList({
+    steps,
+    controls,
+    expand,
+}: {
+    steps: Step[];
+    controls?: StepControls;
+    /** Open state kept by the caller; without it the list keeps its own (e.g. in the task strip). */
+    expand?: StepExpand;
+}) {
+    const [own, setOwn] = useState<Record<string, boolean>>({});
+    const openOf = (id: string) => !!(expand ? expand.open[stepOpenKey(id)] : own[id]);
+    const toggle = (id: string) => {
+        const next = !openOf(id);
+        if (expand) expand.onOpenChange(stepOpenKey(id), next);
+        else setOwn((c) => ({ ...c, [id]: next }));
+    };
     const total = steps.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
     const anyDuration = steps.some((s) => s.durationMs !== undefined);
     return (
@@ -247,7 +332,7 @@ export default function StepList({ steps, controls }: { steps: Step[]; controls?
                 sx={{ listStyle: 'none', m: 0, px: 1.5, pb: 1, display: 'grid', rowGap: 0.75 }}
             >
                 {steps.map((s) => (
-                    <StepRow key={s.id} s={s} controls={controls} />
+                    <StepRow key={s.id} s={s} controls={controls} open={openOf(s.id)} onToggle={() => toggle(s.id)} />
                 ))}
             </Box>
         </Box>

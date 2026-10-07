@@ -27,6 +27,7 @@ import { applyResumeStep, closeResumes, resumeOnOpen } from './resume';
 import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
+import { partialsReducer } from './stepDetail';
 import { mergeLLMCalls, mergeRunMeta, mergeSubagentEntries } from './subagents';
 import { compactingAfter } from './usage';
 import type { Compacting } from './usage';
@@ -72,6 +73,8 @@ export type ChatStream = {
     live?: LiveMessage;
     /** Thinking blocks measured while streaming, by thinkingKey (pi stores no timing). */
     thinkingTimes: Record<string, ThinkingTime>;
+    /** Output so far of running tool calls by tool call ID (pi's tool_execution_update), for the steps' details. */
+    partials: Record<string, string>;
     /** Resumes (and starts) of the chat seen live in this view (SSE "resume"), in order. */
     resumes: ResumeView[];
     /** Sent outside the queue, not stored yet (e.g. while the chat is being resumed). */
@@ -177,6 +180,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [subagentRuns, setSubagentRuns] = useState<SubagentRunMeta[]>([]);
     const [llmCalls, setLLMCalls] = useState<LLMCall[]>([]);
     const runningTimer = useRef<ReturnType<typeof setTimeout>>();
+    // output so far of running calls: kept in a ref per event, shown at most every 250 ms
+    const [partials, setPartials] = useState<Record<string, string>>({});
+    const partialsRef = useRef<Record<string, string>>({});
+    const partialsTimer = useRef<ReturnType<typeof setTimeout>>();
     const reloadTimer = useRef<ReturnType<typeof setTimeout>>();
     const pendingClear = useRef<'ended' | 'all'>();
     const chatRef = useRef<Chat>();
@@ -258,6 +265,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setApprovals([]);
         setSocketCalls([]);
         setExecutions([]);
+        partialsRef.current = {};
+        setPartials({});
         setArtifacts([]);
         dispatchLive({ type: 'reset' });
         pendingClear.current = undefined;
@@ -317,6 +326,20 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         const d = ev.data as { type: string; message?: { role?: string }; [k: string]: unknown };
                         dispatchLive({ type: 'pi', event: d, now: Date.now() });
                         dispatchRunning({ type: 'pi', event: d });
+                        const nextPartials = partialsReducer(partialsRef.current, d);
+                        if (nextPartials !== partialsRef.current) {
+                            partialsRef.current = nextPartials;
+                            if (d.type === 'tool_execution_end') {
+                                if (partialsTimer.current) clearTimeout(partialsTimer.current);
+                                partialsTimer.current = undefined;
+                                setPartials(nextPartials);
+                            } else if (!partialsTimer.current) {
+                                partialsTimer.current = setTimeout(() => {
+                                    partialsTimer.current = undefined;
+                                    if (!stopped) setPartials(partialsRef.current);
+                                }, 250);
+                            }
+                        }
                         // the gateway registers a foreground command a moment after pi reports it
                         if (d.type === 'tool_execution_start' && d.toolName === 'bash') {
                             if (runningTimer.current) clearTimeout(runningTimer.current);
@@ -417,6 +440,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             if (retry) clearTimeout(retry);
             if (reloadTimer.current) clearTimeout(reloadTimer.current);
             if (runningTimer.current) clearTimeout(runningTimer.current);
+            if (partialsTimer.current) clearTimeout(partialsTimer.current);
+            partialsTimer.current = undefined;
             es?.close();
         };
     }, [chatId, load, scheduleReload]);
@@ -688,6 +713,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         liveText,
         live: liveState.message,
         thinkingTimes: liveState.times,
+        partials,
         resumes,
         pending,
         compacting,

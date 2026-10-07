@@ -51,7 +51,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     // the current chat's stream lives above page and panel, so it survives the move between them (issue #50)
     const stream = useSharedChatStream(chatId);
     const draft = useChatDraft(chatId);
-    const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, send } = stream;
+    const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, partials, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
     // the open chat's live state goes to the chat list and the panel header
@@ -70,8 +70,15 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     }, [chatId, compacting, setCompacting]);
     const items = useMemo(
         () =>
-            buildTranscript(messages, { approvals, socketCalls, executions, running: !!chat?.running, thinkingTimes }),
-        [messages, approvals, socketCalls, executions, chat?.running, thinkingTimes],
+            buildTranscript(messages, {
+                approvals,
+                socketCalls,
+                executions,
+                running: !!chat?.running,
+                thinkingTimes,
+                partials,
+            }),
+        [messages, approvals, socketCalls, executions, chat?.running, thinkingTimes, partials],
     );
     // subagents (issue #48): published for the chat selector and the history, looked into read-only here
     const runs = useMemo(
@@ -202,7 +209,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                             </Alert>
                         )}
                         {subRun && subStatus ? (
-                            <SubagentTranscript run={subRun} status={subStatus} dense={dense} chatId={chatId} />
+                            <SubagentTranscript
+                                run={subRun}
+                                status={subStatus}
+                                dense={dense}
+                                chatId={chatId}
+                                executions={stream.executions}
+                            />
                         ) : (
                             <Conversation stream={stream} items={items} dense={dense} subagents={subagentLinks} />
                         )}

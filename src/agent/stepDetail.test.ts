@@ -195,9 +195,9 @@ describe('platform calls', () => {
             method: 'DELETE',
             path: '/datasets/5',
             body: '{\n  "key": "k"\n}',
-            status: 'waiting for your approval',
             approval: { state: 'pending' },
         });
+        expect(p.request.status).toBeUndefined();
     });
 
     it('marks a failed MCP call red and shows the arguments of a named tool', () => {

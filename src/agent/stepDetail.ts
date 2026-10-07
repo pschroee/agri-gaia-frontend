@@ -278,9 +278,8 @@ export function platformRequests(step: Step, named: PlatformRequest[]): Platform
             ...r,
             body: (approval && approvalBody(approval)) ?? r.body,
             effect: effectOf(r.method, r.path ?? ''),
+            // no status: the gateway logged no call; a pending approval says so in its own line
             approval,
-            status: approval?.state === 'pending' ? 'waiting for your approval' : undefined,
-            tone: approval?.state === 'pending' ? 'muted' : undefined,
         });
     });
     return out;
