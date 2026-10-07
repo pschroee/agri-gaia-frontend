@@ -105,19 +105,31 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   a part with `audience: "agent"` (today the preferred browser language of the first message) is context for the model
   only and is cut out (`isAgentOnly`), never shown as user text. Decide by that mark, not by `type` or the text; the
   gateway fills it in for old rows too (gateway API.md, *Origin of instructions*).
-- **Page context:** a message from the panel carries the platform page and the open or selected object (issue #13;
-  gateway API.md, *Page context*): `pageContextOf` in `src/agent/pageContext.ts` maps the route to the gateway's page id
-  (`/data` → `datasets`, `/models/7` → model 7, `/edge/3` → edge device 3; none on `/ai-agent`, debug pages or open data)
-  and takes the object from a detail route or from what the page publishes with `usePublishPageSelection`
-  (`src/agent/pageSelection.tsx`, a no-op without the agent): `DataManagement` publishes exactly one checked dataset,
-  `ModelDetails` and `EdgeDetails` the loaded object with its name. Ids must be canonical integers, names are cleaned of
-  control and formatting characters and cut to 200 characters, otherwise the gateway answers 400. `ChatInput` shows the
-  context as a chip above the field ("Refers to smarttail-bucht-3-kw31"); its cross leaves it out until the page or
-  object changes (`visibleContext`, keyed by page and id). Sent messages show a muted "Refers to …" above the bubble,
-  taken only from the structured `context` of the gateway's `page_context` source (the note itself is `audience:
-  "agent"` and cut out); queued rows show it from `QueueEntry.context`. `sectionOf` uses the same route table. Slash
-  commands carry no context. The context never grants rights; the
-  delegation decides. Unit tests in `pageContext.test.ts`, `transcript.test.ts`, `queue.test.ts`.
+- **Page context:** a message from the panel carries the platform page and the open or selected objects (issue #13,
+  several since issue #45; gateway API.md, *Page context*): `pageContextOf` in `src/agent/pageContext.ts` maps the route
+  to the gateway's page id (`/data` → `datasets`, `/models/7` → model 7, `/edge/3` → edge device 3; none on `/ai-agent`,
+  debug pages or open data) and takes the objects from a detail route or from what the page publishes with
+  `usePublishPageSelection` (`src/agent/pageSelection.tsx`, a no-op without the agent; one object or a list, the
+  selection changes only when its content does): `DataManagement` publishes all checked datasets, `ModelDetails` and
+  `EdgeDetails` the loaded object with its name. Ids must be canonical integers, names are cleaned of control and
+  formatting characters and cut to 200 characters, each id once, at most 50 objects, otherwise the gateway answers 400.
+  **The page goes with every message silently; there is no chip for it** (issue #45: the model read "Refers to
+  Datasets" as the topic and asked about the page instead of answering a general question; the gateway's note now
+  calls the context background). `ChatInput` shows a chip only for a selection (`hasSelection`): one object by name
+  ("smarttail-bucht-3-kw31"), several as one chip with the count ("2 datasets", tooltip lists the names). Its cross
+  leaves the selection out of the next message only (`visibleContext` then gives the page alone; the removal is keyed
+  by page and ids and ends after a send, so the chip comes back while the selection stays). The placeholder is neutral
+  ("Ask the agent …") or names the selection ("Ask about the 2 selected datasets …", `inputPlaceholder`); the panel
+  passes no section placeholder any more. **Wire form** (`wireContext`): one object as `object` (every gateway since
+  #13), several as `objects` (gateway PR for #45). A gateway before #45 answers 400 `unknown field "objects"`;
+  `sendMessage` then sends the page alone once more (`isOldGatewayRefusal`), never one object of several. Read
+  contexts from the gateway with `contextObjects` (`objects`, else the single `object` of older rows). Sent messages
+  show a muted "Refers to …" above the bubble ("Refers to Datasets", "Refers to 2 datasets"), taken only from the
+  structured `context` of the gateway's `page_context` source (the note itself is `audience: "agent"` and cut out);
+  queued rows show it from `QueueEntry.context`. `sectionOf` uses the same route table. Slash commands carry no
+  context. The context never grants rights; the delegation decides. Unit tests in `pageContext.test.ts`,
+  `transcript.test.ts`, `queue.test.ts`. Render check: check boxes on `/data` with `/agent/api/**` and
+  `api.<base>/datasets` mocked; no chip without a selection, the sent `context` per message.
 - **Thinking:** thinking blocks of the model (`{type: "thinking"}` in stored assistant messages, live via
   `message_update` with `thinking_start|delta|end`) show as a collapsed muted line "Thinking · 4.2 s" between text and
   tool steps (`ThinkingBlock`), live as "Thinking … n s". The live message is assembled by the pure reducer
