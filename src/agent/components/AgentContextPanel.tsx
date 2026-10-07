@@ -204,7 +204,7 @@ export default function AgentContextPanel() {
                             </Tooltip>
                         </Box>
                     )}
-                    {/* with a chat open, the input's placeholder names the section and the room goes to the context */}
+                    {/* with a chat open the room goes to the context; the page goes with every message without a chip */}
                     {section && !selected && (
                         <Box
                             sx={{
@@ -247,7 +247,6 @@ export default function AgentContextPanel() {
                                 key={selectedChatId}
                                 chatId={selectedChatId}
                                 dense
-                                placeholder={section ? `Ask about ${section} …` : undefined}
                                 header={<ChatSelector />}
                             />
                         ) : (
