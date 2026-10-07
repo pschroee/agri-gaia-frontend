@@ -372,3 +372,25 @@ export function placeOutputs(
     }
     return { byItem, unplaced };
 }
+
+/**
+ * Splits the files placed under one answer (placeOutputs) between its step lists and its end (issue #57): a file
+ * handed over by a tool call shows under the step list of that call, as before #54; one without a call of this answer
+ * (placed by time) stays at the end of the answer. Keys of `byPart` are the indexes of the step parts in `parts`.
+ */
+export function outputsByStepPart(
+    parts: { type: string; steps?: { id: string }[] }[],
+    results: Artifact[] | undefined,
+): { byPart: Map<number, Artifact[]>; rest: Artifact[] } {
+    const byPart = new Map<number, Artifact[]>();
+    const rest: Artifact[] = [];
+    if (!results?.length) return { byPart, rest };
+    const partOfCall = new Map<string, number>();
+    parts.forEach((p, i) => p.steps?.forEach((s) => partOfCall.set(s.id, i)));
+    for (const a of results) {
+        const i = a.tool_call_id ? partOfCall.get(a.tool_call_id) : undefined;
+        if (i === undefined) rest.push(a);
+        else byPart.set(i, [...(byPart.get(i) ?? []), a]);
+    }
+    return { byPart, rest };
+}
