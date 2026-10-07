@@ -13,12 +13,12 @@ import Typography from '@mui/material/Typography';
 import DownloadIcon from '@mui/icons-material/Download';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
-import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 
 import { artifactUrl } from '../api';
-import { artifactSummary, formatBytes, previewKind, splitArtifacts } from '../files';
+import { artifactSummary, fileTypeOf, formatBytes, previewKind, splitArtifacts } from '../files';
 import { formatClock } from '../format';
 import type { Artifact } from '../types';
+import { FileTypeIcon, MiddleName } from './Attachments';
 import ImagePreview from './ImagePreview';
 import { agentColors, blockSx, MONO } from './tokens';
 
@@ -33,16 +33,23 @@ function ArtifactRow({ chatId, artifact: a }: { chatId: string; artifact: Artifa
             sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.5, minWidth: 0 }}
         >
             {image ? (
-                <ImagePreview src={url} alt={a.name} label={a.name} filename={a.name} tile={32} />
-            ) : (
-                <Box sx={{ width: 32, flex: 'none', display: 'grid', placeItems: 'center' }}>
-                    <InsertDriveFileOutlinedIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                <Box sx={{ width: 36, height: 36, flex: 'none', lineHeight: 0 }}>
+                    <ImagePreview
+                        src={url}
+                        alt={a.name}
+                        label={a.name}
+                        filename={a.name}
+                        tile={36}
+                        fallback={<FileTypeIcon type="image" />}
+                    />
                 </Box>
+            ) : (
+                <FileTypeIcon type={fileTypeOf(a)} />
             )}
             <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography noWrap title={a.name} sx={{ fontFamily: MONO, fontSize: 12 }}>
-                    {a.name}
-                </Typography>
+                <Box title={a.name} sx={{ fontFamily: MONO }}>
+                    <MiddleName name={a.name} />
+                </Box>
                 <Typography noWrap sx={{ fontSize: 11, color: 'text.secondary' }}>
                     {formatBytes(a.size)} · {a.content_type.split(';')[0] || 'file'} · {formatClock(a.created_at)}
                 </Typography>
