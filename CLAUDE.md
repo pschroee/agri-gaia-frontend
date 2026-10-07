@@ -188,8 +188,10 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   context …", later the stored entry (role `compaction`, with sizes and cost). `ChatCost` shows `cost` (LLM proxy,
   incl. subagents and compactions) with a split by `cost_other` and `llm_calls`. Each answer gets a muted line with
   tokens, cost and tariff from the stored assistant messages (`cost`, `peak`; pi's flat `usage.cost.total` only as
-  "≈" fallback). Panel: ring and total cost in the header (the section chip then gives way; the input's placeholder
-  names the section); `/ai-agent`: a chat header with title, ring, tokens and cost.
+  "≈" fallback). Panel: ring and an "Open in agent page" button in the header, no cost (issue #33;
+  the section chip then gives way; the input's placeholder names the section). The button (`expandToAgentPage` in
+  `src/agent/expand.ts`, unit-tested) selects the chat, closes the panel and navigates to `/ai-agent` (Chat tab) with
+  react-router; without a selected chat there is no button. `/ai-agent`: a chat header with title, ring, tokens and cost.
 - **Slash commands:** typing `/` at the start of the input opens `SlashCommandMenu` (MUI Popper right above the field,
   as wide as it; focus stays in the field, which is an ARIA combobox). The list comes from `GET /chats/{id}/commands`
   (loaded with the chat and again whenever the input is exactly `/`), `/todos` (terminal only) is hidden; `/model` and

@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import Drawer from '@mui/material/Drawer';
@@ -14,12 +14,14 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CloseIcon from '@mui/icons-material/Close';
+import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 
 import { useAgent } from '../AgentContext';
+import { expandToAgentPage } from '../expand';
 import { sectionOf } from '../format';
 import { isRunning, runSince, runStateOf } from '../runState';
 import ChatView from './ChatView';
-import { ChatCost, ContextMeter } from './ContextMeter';
+import { ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
 import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
@@ -90,7 +92,8 @@ function ChatSelector() {
  * content makes room for it (PageContainer).
  */
 export default function AgentContextPanel() {
-    const { status, panelOpen, setPanelOpen, selectedChatId, chatsLoaded, chats, compacting } = useAgent();
+    const { status, panelOpen, setPanelOpen, selectedChatId, selectChat, chatsLoaded, chats, compacting } = useAgent();
+    const navigate = useNavigate();
     const section = sectionOf(useLocation().pathname);
     // live through updateChat of the open ChatView
     const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
@@ -144,10 +147,21 @@ export default function AgentContextPanel() {
                     {selected && (
                         <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                             <ContextMeter chat={selected} compacting={compacting[selected.id]} />
-                            <ChatCost chat={selected} />
+                            {/* the cost stays on /ai-agent and under each answer; here the chat moves to the full page */}
+                            <Tooltip title="Open in agent page">
+                                <IconButton
+                                    size="small"
+                                    onClick={() =>
+                                        expandToAgentPage(selected.id, { selectChat, setPanelOpen, navigate })
+                                    }
+                                    aria-label="Open in agent page"
+                                >
+                                    <OpenInFullIcon fontSize="small" />
+                                </IconButton>
+                            </Tooltip>
                         </Box>
                     )}
-                    {/* with a chat open, the input's placeholder names the section and the room goes to context and cost */}
+                    {/* with a chat open, the input's placeholder names the section and the room goes to the context */}
                     {section && !selected && (
                         <Box
                             sx={{
