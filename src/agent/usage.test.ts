@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 
 import { buildTranscript } from './transcript';
 import type { ContextUsage, StoredMessage } from './types';
-import type { AnswerUsage } from './usage';
 import {
     answerUsage,
     cacheHitRate,
@@ -14,7 +13,6 @@ import {
     compactionReason,
     contextLevel,
     describeContext,
-    formatAnswerUsage,
     formatPercent,
     formatTokensShort,
 } from './usage';
@@ -139,12 +137,10 @@ describe('answerUsage', () => {
             assistant(4, { cost: 0.0004, peak: false }),
         ]);
         expect(u).toEqual({ input: 2000, output: 400, cacheRead: 4000, calls: 2 });
-        expect(formatAnswerUsage(u as AnswerUsage)).toBe('2,000 in · 400 out · 4,000 cache');
     });
     it("ignores pi's flat price", () => {
         const u = answerUsage([assistant(2, {}, { input: 10, output: 5, cost: { total: 0.002 } } as never)]);
         expect(u).toEqual({ input: 10, output: 5, cacheRead: 0, calls: 1 });
-        expect(formatAnswerUsage(u as AnswerUsage)).toBe('10 in · 5 out');
     });
     it('is undefined without assistant messages', () => {
         expect(answerUsage([user(1, 'hi')])).toBeUndefined();

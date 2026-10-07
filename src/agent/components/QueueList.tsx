@@ -10,7 +10,6 @@ import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
@@ -18,7 +17,6 @@ import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SendIcon from '@mui/icons-material/Send';
 
-import { contextLabel, contextTitle } from '../pageContext';
 import { isHeld, queuePreview, queueStatusText } from '../queue';
 import type { QueueRow } from '../queue';
 import type { Chat } from '../types';
@@ -151,30 +149,6 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                             {r.attachments.length > 0 &&
                                 ` · ${r.attachments.length === 1 ? r.attachments[0] : `${r.attachments.length} files`}`}
                         </Typography>
-                        {r.context && (
-                            <Box
-                                data-testid="agent-queue-context"
-                                title={`Refers to ${contextTitle(r.context)}`}
-                                sx={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 0.25,
-                                    fontSize: 11.5,
-                                    color: 'text.secondary',
-                                    flex: '0 1 auto',
-                                    maxWidth: '40%',
-                                    minWidth: 0,
-                                }}
-                            >
-                                <PlaceOutlinedIcon sx={{ fontSize: 13, flex: 'none' }} aria-label="Refers to" />
-                                <Box
-                                    component="span"
-                                    sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                                >
-                                    {contextLabel(r.context)}
-                                </Box>
-                            </Box>
-                        )}
                         <Typography
                             sx={{
                                 fontSize: 10.5,

@@ -92,7 +92,7 @@ export type AgentPart =
 /** seq: the stored message the item comes from (the first one for an agent block; missing for the live one). */
 export type TranscriptItem =
     /** files: names of the attachments (inputs) that went with the message. */
-    /** context: page context the message was sent with (structured, from the gateway's source), shown as "Refers to …". */
+    /** context: page context the message was sent with (structured, from the gateway's source); not shown since issue #46. */
     | { kind: 'user'; key: string; seq?: number; text: string; files?: string[]; context?: PageContext }
     /** note: a background task's end, parsed for the compact line (gateway type "background"). */
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }

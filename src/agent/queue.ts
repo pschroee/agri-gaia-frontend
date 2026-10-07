@@ -196,7 +196,7 @@ export type QueueRow = {
     /** Short line shown instead of the text (gateway notes). */
     label?: string;
     attachments: string[];
-    /** Page context the message was sent with ("Refers to …"). */
+    /** Page context the message was sent with (kept as data, not shown since issue #46). */
     context?: PageContext;
     system: boolean;
     state: QueueRowState;

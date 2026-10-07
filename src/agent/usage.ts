@@ -158,13 +158,6 @@ export function answerUsage(messages: Pick<StoredMessage, 'message'>[]): AnswerU
     return u;
 }
 
-/** "1,234 in · 567 out · 8,900 cache" for the muted line under an answer. */
-export function formatAnswerUsage(u: AnswerUsage): string {
-    const parts = [`${formatTokens(u.input)} in`, `${formatTokens(u.output)} out`];
-    if (u.cacheRead) parts.push(`${formatTokens(u.cacheRead)} cache`);
-    return parts.join(' · ');
-}
-
 /** Share of input served from the cache, cacheRead / (input + cacheRead); undefined without input. */
 export function cacheHitRate(input: number | undefined, cacheRead: number | undefined): number | undefined {
     const total = (input ?? 0) + (cacheRead ?? 0);
