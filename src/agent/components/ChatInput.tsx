@@ -12,15 +12,20 @@ import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import SendIcon from '@mui/icons-material/Send';
+import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
+import CloseIcon from '@mui/icons-material/Close';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
+import { AgentApiError } from '../api';
 import { isSlashCommand } from '../commands';
 import { PageContext, contextKey, visibleContext } from '../pageContext';
 import { canSend, checkSizes, emptyStaged, stagedReducer } from '../files';
 import type { FreshChat } from '../newChat';
 import type { Artifact, Command } from '../types';
+import { RUN_STATE_HINT, abortErrorText, inputControls, inputStatusText, isRunning } from '../runState';
+import type { RunState } from '../runState';
 import { sendTipIdle, sendTipReducer } from '../sendTooltip';
 import { useFileDrop } from '../useFileDrop';
 import { useSlashCommands } from '../useSlashCommands';
@@ -28,6 +33,7 @@ import { useAgentDropTarget } from './AgentDropZone';
 import SlashCommandMenu, { optionId } from './SlashCommandMenu';
 import { StagedAttachments } from './Attachments';
 import { PageContextChip } from './PageContextChip';
+import { Elapsed, RUN_STATE_COLOR, RunStateIcon } from './RunStateChip';
 import { agentColors } from './tokens';
 
 type Props = {
@@ -41,6 +47,12 @@ type Props = {
     chatId?: string;
     /** The agent works: the input stays usable, sending queues the message. */
     running?: boolean;
+    /** Run state of the chat: while a turn runs (working or waiting), Stop sits in the field and the state below it. */
+    runState?: RunState;
+    /** Start of the running turn (ms), for the timer below the field. */
+    since?: number;
+    /** Stops the running turn (`POST …/abort`). */
+    onAbort?: () => Promise<void>;
     disabled?: boolean;
     placeholder?: string;
     hint?: string;
@@ -64,8 +76,11 @@ type Props = {
 const NO_COMMANDS: Command[] = [];
 
 /**
- * Message field with send (Enter) and a hint line below. While the agent works, sending is not blocked: the
- * gateway queues the message and the queue above the field shows it. Stopping lives in the run status above.
+ * Message field with send (Enter) and a row below (model, thinking level, run state, hint). While a turn runs, the
+ * send arrow becomes Stop (issue #39); with text in the field the queue arrow sits next to it and Enter queues: the
+ * gateway queues the message and the queue above the field shows it. Escape never stops. The run state ("Working ·
+ * 12 s", "Needs approval", "Stopping …") shows small in the row below the field, a failed stop as a short
+ * line until the state changes or the user dismisses it.
  */
 export default function ChatInput({
     onSend,
@@ -73,6 +88,9 @@ export default function ChatInput({
     maxFileMb,
     chatId,
     running,
+    runState,
+    since,
+    onAbort,
     disabled,
     placeholder,
     hint,
@@ -100,6 +118,16 @@ export default function ChatInput({
     const listId = `agent-slash-${useId().replace(/:/g, '')}`;
     const slash = useSlashCommands(onCommand ? commands ?? NO_COMMANDS : NO_COMMANDS, text, setText);
     const justSlash = text === '/';
+    // stop: "Stopping …" from the click until the turn has ended (the chat event follows the response)
+    const [stopBusy, setStopBusy] = useState(false);
+    const [stopRequested, setStopRequested] = useState(false);
+    const [stopError, setStopError] = useState<string>();
+    const turnRuns = isRunning(runState);
+    useEffect(() => {
+        if (!turnRuns) setStopRequested(false);
+    }, [turnRuns]);
+    // a new state makes an old stop error obsolete
+    useEffect(() => setStopError(undefined), [runState]);
     useEffect(() => {
         if (justSlash && onCommand) onCommandsOpen?.();
     }, [justSlash, onCommand, onCommandsOpen]);
@@ -167,6 +195,28 @@ export default function ChatInput({
     const uploading = staged.uploading > 0;
     const sendable = onCommand && isSlashCommand(text.trim()) ? true : canSend(text, staged);
 
+    const stop = async () => {
+        if (!onAbort || stopBusy) return;
+        setStopBusy(true);
+        setStopError(undefined);
+        try {
+            await onAbort();
+            setStopRequested(true);
+        } catch (e) {
+            const status = e instanceof AgentApiError ? e.status : undefined;
+            setStopError(abortErrorText(status, e instanceof Error ? e.message : String(e)));
+        } finally {
+            setStopBusy(false);
+        }
+    };
+    const stopping = stopBusy || (stopRequested && turnRuns);
+    const hasContent = text.trim() !== '' || staged.files.length > 0;
+    const controls = inputControls(onAbort ? runState : undefined, hasContent, running);
+    const queueing = controls.enter === 'queue';
+    const statusText = inputStatusText(runState, stopping);
+    const showStatus = !!runState && !!statusText;
+
+    // Enter sends or queues; Escape is left alone (the slash menu closes with it), it never stops the agent
     const onKeyDown = (e: KeyboardEvent) => {
         if (slash.onKeyDown(e)) return;
         if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -231,7 +281,7 @@ export default function ChatInput({
                 value={text}
                 disabled={disabled}
                 placeholder={
-                    running
+                    queueing
                         ? 'Queue another message …'
                         : `${placeholder ?? 'Ask the agent …'}${onCommand ? ' (/ for commands)' : ''}`
                 }
@@ -275,34 +325,59 @@ export default function ChatInput({
                         </InputAdornment>
                     ) : undefined,
                     endAdornment: (
-                        <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 1.5 }}>
-                            <Tooltip
-                                title={
-                                    running
-                                        ? 'Queue message (goes to the agent when the current run ends)'
-                                        : 'Send (Enter)'
-                                }
-                                open={sendTip.open}
-                                onOpen={(e) =>
-                                    sendTipEvent({ type: 'open', by: e.type.startsWith('mouse') ? 'hover' : 'focus' })
-                                }
-                                onClose={() => sendTipEvent({ type: 'close' })}
-                            >
-                                <span
-                                    onMouseMove={() => sendTipEvent({ type: 'move' })}
-                                    onMouseLeave={() => sendTipEvent({ type: 'leave' })}
+                        <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 1.5, gap: 0.25 }}>
+                            {controls.buttons.includes('stop') && (
+                                <Tooltip title="Stop">
+                                    <span>
+                                        <IconButton
+                                            size="small"
+                                            color="error"
+                                            disabled={stopping}
+                                            onClick={() => void stop()}
+                                            aria-label="Stop"
+                                            data-testid="agent-stop"
+                                        >
+                                            {stopping ? (
+                                                <CircularProgress size={16} color="inherit" aria-label="Stopping" />
+                                            ) : (
+                                                <StopCircleOutlinedIcon fontSize="small" />
+                                            )}
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
+                            )}
+                            {controls.buttons.some((b) => b !== 'stop') && (
+                                <Tooltip
+                                    title={
+                                        queueing
+                                            ? 'Queue message (goes to the agent when the current run ends)'
+                                            : 'Send (Enter)'
+                                    }
+                                    open={sendTip.open}
+                                    onOpen={(e) =>
+                                        sendTipEvent({
+                                            type: 'open',
+                                            by: e.type.startsWith('mouse') ? 'hover' : 'focus',
+                                        })
+                                    }
+                                    onClose={() => sendTipEvent({ type: 'close' })}
                                 >
-                                    <IconButton
-                                        size="small"
-                                        color="primary"
-                                        disabled={disabled || busy || !sendable}
-                                        onClick={() => void send()}
-                                        aria-label={running ? 'Queue message' : 'Send'}
+                                    <span
+                                        onMouseMove={() => sendTipEvent({ type: 'move' })}
+                                        onMouseLeave={() => sendTipEvent({ type: 'leave' })}
                                     >
-                                        <SendIcon fontSize="small" />
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
+                                        <IconButton
+                                            size="small"
+                                            color="primary"
+                                            disabled={disabled || busy || !sendable}
+                                            onClick={() => void send()}
+                                            aria-label={queueing ? 'Queue message' : 'Send'}
+                                        >
+                                            <SendIcon fontSize="small" />
+                                        </IconButton>
+                                    </span>
+                                </Tooltip>
+                            )}
                         </InputAdornment>
                     ),
                 }}
@@ -318,16 +393,70 @@ export default function ChatInput({
                     {error ?? staged.error}
                 </Typography>
             )}
+            {stopError && (
+                <Box role="alert" sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                    <Typography sx={{ fontSize: 11.5, color: agentColors.amberText, flex: 1, minWidth: 0 }}>
+                        {stopError}
+                    </Typography>
+                    <IconButton
+                        size="small"
+                        aria-label="Dismiss"
+                        onClick={() => setStopError(undefined)}
+                        sx={{ p: 0.25, my: -0.5 }}
+                    >
+                        <CloseIcon sx={{ fontSize: 14 }} />
+                    </IconButton>
+                </Box>
+            )}
             {(toolbar || !error) && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: toolbar ? -0.5 : 0 }}>
-                    {toolbar && <Box sx={{ flex: '1 1 auto', minWidth: 0, ml: -0.75 }}>{toolbar}</Box>}
+                    {toolbar && (
+                        // next to the run state the picker keeps its width (a fraction of a pixel less wraps it);
+                        // the state's label gives way instead
+                        <Box sx={{ flex: showStatus ? '1 0 auto' : '1 1 auto', minWidth: 0, ml: -0.75 }}>{toolbar}</Box>
+                    )}
+                    {showStatus && (
+                        <Box
+                            component="span"
+                            role="status"
+                            aria-live="polite"
+                            data-testid="agent-run-status"
+                            title={RUN_STATE_HINT[runState]}
+                            sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.6,
+                                // gives way before model and thinking level wrap: the label shrinks, dot and timer stay
+                                flex: '0 1000 auto',
+                                minWidth: 0,
+                                overflow: 'hidden',
+                                fontSize: 11,
+                                whiteSpace: 'nowrap',
+                                color: RUN_STATE_COLOR[runState],
+                            }}
+                        >
+                            <RunStateIcon state={runState} size={7} />
+                            <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {statusText}
+                            </Box>
+                            {turnRuns && since !== undefined && (
+                                <Box component="span" sx={{ flex: 'none', display: 'inline-flex', gap: 0.6 }}>
+                                    <span>·</span>
+                                    <Elapsed since={since} />
+                                </Box>
+                            )}
+                        </Box>
+                    )}
                     {toolbar && dense ? (
-                        <Tooltip title={hint ?? 'Write actions need your approval.'}>
-                            <LockOutlinedIcon
-                                aria-label={hint ?? 'Write actions need your approval.'}
-                                sx={{ fontSize: 14, color: 'text.secondary', flex: 'none' }}
-                            />
-                        </Tooltip>
+                        // in the narrow panel the lock gives way to the run state (the approval card says it anyway)
+                        !showStatus && (
+                            <Tooltip title={hint ?? 'Write actions need your approval.'}>
+                                <LockOutlinedIcon
+                                    aria-label={hint ?? 'Write actions need your approval.'}
+                                    sx={{ fontSize: 14, color: 'text.secondary', flex: 'none' }}
+                                />
+                            </Tooltip>
+                        )
                     ) : (
                         <Typography
                             sx={{

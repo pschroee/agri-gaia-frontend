@@ -41,9 +41,10 @@ export function runStateOf(
 
 /**
  * Where a state can show: `header` is the chip in the panel header and the chat header of /ai-agent, `list` the
- * history list and the panel's chat selector, `bar` the status bar above the input.
+ * history list and the panel's chat selector, `input` the row below the input field (next to model and thinking
+ * level; issue #39, there is no status bar above the input any more).
  */
-export type StatePlace = 'header' | 'list' | 'bar';
+export type StatePlace = 'header' | 'list' | 'input';
 
 /** Loading the chat into a sandbox, for a dormant chat (resuming) or a new one without a warm slot (starting). */
 export const isLoading = (s: RunState | undefined) => s === 'starting' || s === 'resuming';
@@ -54,8 +55,9 @@ export const isRunning = (s: RunState | undefined) => s === 'working' || s === '
 const TEXT: Record<StatePlace, Partial<Record<RunState, string>>> = {
     header: { working: 'working', waiting: 'needs approval', starting: 'loading', resuming: 'loading' },
     list: { working: 'working', waiting: 'waiting for approval', starting: 'loading', resuming: 'loading' },
-    // loading has its steps in the transcript (ResumeBlock, "Starting a sandbox …"), not in the bar
-    bar: { working: 'Working', waiting: 'Waiting for approval' },
+    // loading has its steps in the transcript (ResumeBlock, "Starting a sandbox …"), not below the input
+    // short enough to sit next to model and thinking level in the 400 px panel
+    input: { working: 'Working', waiting: 'Needs approval' },
 };
 
 /**
@@ -63,14 +65,42 @@ const TEXT: Record<StatePlace, Partial<Record<RunState, string>>> = {
  * something happens: a ready chat (the gateway's `active` or `dormant`, nothing running) shows nowhere, there is no
  * "active" or "Idle". Loading shows as "loading" in header and lists, its steps in the transcript; working and
  * waiting show everywhere. Errors are not a run state: a failed resume stays in its block in the transcript, a failed
- * stop in the status bar (`showRunStatus`).
+ * stop below the input field (`ChatInput`, only until the state changes or the user dismisses it).
  */
 export function runStateText(state: RunState | undefined, place: StatePlace): string | undefined {
     return state ? TEXT[place][state] : undefined;
 }
 
-/** Is the status bar above the input open? While a turn runs, and as long as a failed stop has its message. */
-export const showRunStatus = (state: RunState | undefined, error?: string) => isRunning(state) || !!error;
+/** A button at the end of the input field. `queue`: send while the agent works, the gateway queues the message. */
+export type InputButton = 'send' | 'queue' | 'stop';
+
+export type InputControls = {
+    /** Buttons at the end of the field, left to right; the last one is the primary action (Enter does the same). */
+    buttons: InputButton[];
+    /** What the primary action and Enter do with text in the field. */
+    enter: 'send' | 'queue';
+};
+
+/**
+ * Buttons of the input field (issue #39). Stop lives in the field again, there is no status bar above it:
+ * - nothing running: the send arrow;
+ * - a turn runs (working or waiting for approval) and the field is empty: the send arrow becomes Stop;
+ * - a turn runs and there is text: Stop moves left and the queue arrow takes the last place, Enter queues.
+ * The last place is always what fits the field's content, so a click there after typing never stops the agent by
+ * mistake (stopping cancels the turn; a queued message can be removed again). `queued`: the gateway queues a message
+ * sent now (the chat runs); without it, a running state counts.
+ */
+export function inputControls(state: RunState | undefined, hasText: boolean, queued = isRunning(state)): InputControls {
+    const enter = queued ? 'queue' : 'send';
+    if (!isRunning(state)) return { buttons: [enter], enter };
+    return { buttons: hasText ? ['stop', enter] : ['stop'], enter };
+}
+
+/** Text of the run state below the input field: "Stopping …" from the click until the turn has ended. */
+export function inputStatusText(state: RunState | undefined, stopping = false): string | undefined {
+    if (stopping && isRunning(state)) return 'Stopping …';
+    return runStateText(state, 'input');
+}
 
 export const RUN_STATE_HINT: Record<RunState, string> = {
     working: 'The agent works on your request. Messages you send now are queued.',
