@@ -21,7 +21,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { AgentApiError } from '../api';
 import { isSlashCommand } from '../commands';
 import { PageContext, contextKey, visibleContext } from '../pageContext';
-import { canSend, checkSizes, emptyStaged, stagedReducer } from '../files';
+import { attachHint, canSend, checkSizes, emptyStaged, stagedReducer, uploadErrorText } from '../files';
 import type { FreshChat } from '../newChat';
 import type { Artifact, Command } from '../types';
 import { RUN_STATE_HINT, abortErrorText, inputControls, inputStatusText, isRunning } from '../runState';
@@ -143,7 +143,7 @@ export default function ChatInput({
             // the size note stays visible next to the uploaded files
             if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
         } catch (e) {
-            dispatchStaged({ type: 'upload_failed', error: `Upload failed: ${e instanceof Error ? e.message : String(e)}` });
+            dispatchStaged({ type: 'upload_failed', error: uploadErrorText(e, maxFileMb) });
         }
     };
 
@@ -300,13 +300,7 @@ export default function ChatInput({
                 InputProps={{
                     startAdornment: onUpload ? (
                         <InputAdornment position="start" sx={{ alignSelf: 'flex-end', mb: 1.5, mr: 0.25, ml: -0.75 }}>
-                            <Tooltip
-                                title={
-                                    maxFileMb
-                                        ? `Attach files (placed under /workspace/inputs/, at most ${maxFileMb} MB each)`
-                                        : 'Attach files (placed under /workspace/inputs/)'
-                                }
-                            >
+                            <Tooltip title={attachHint(maxFileMb)}>
                                 <span>
                                     <IconButton
                                         size="small"

@@ -9,6 +9,7 @@ import type { SxProps, Theme } from '@mui/material/styles';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 import { useAgentOptional } from '../AgentContext';
+import { READABLE_FORMATS } from '../files';
 import { useFileDrop } from '../useFileDrop';
 import { agentColors } from './tokens';
 
@@ -81,6 +82,9 @@ export default function AgentDropZone({ children, sx }: { children: ReactNode; s
                         Drop files to upload
                         <Box component="span" sx={{ fontSize: 12.5, fontWeight: 400, color: 'text.secondary' }}>
                             {target ? 'They are attached to your next message' : 'A new chat starts with them'}
+                        </Box>
+                        <Box component="span" sx={{ fontSize: 11.5, fontWeight: 400, color: 'text.secondary' }}>
+                            {READABLE_FORMATS}
                         </Box>
                     </Box>
                 )}

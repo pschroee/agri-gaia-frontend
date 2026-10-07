@@ -8,6 +8,7 @@ import {
     artifactApprovalView,
     artifactsOfCalls,
     artifactSummary,
+    attachHint,
     canSend,
     checkSizes,
     emptyStaged,
@@ -15,13 +16,16 @@ import {
     formatBytes,
     mergeArtifacts,
     previewKind,
+    READABLE_FORMATS,
     splitArtifacts,
     splitAttachments,
     splitFileName,
     stagedReducer,
     truncateMiddle,
+    uploadErrorText,
     withAttachments,
 } from './files';
+import { AgentApiError } from './api';
 import { emptyQueue, queueReducer, queueRows } from './queue';
 import { buildTranscript } from './transcript';
 import type { Artifact, StoredMessage } from './types';
@@ -83,12 +87,56 @@ describe('checkSizes', () => {
         const r = checkSizes(files, 2);
         expect(r.ok.map((f) => f.name)).toEqual(['small.csv', 'exact.bin']);
         expect(r.tooBig.map((f) => f.name)).toEqual(['big.zip']);
-        expect(r.error).toBe('Too large (at most 2 MB per file): big.zip');
+        expect(r.error).toBe('Not uploaded, larger than 2 MB per file: big.zip (2 MB)');
     });
 
     it('lets everything through without a known limit', () => {
         expect(checkSizes(files, undefined)).toEqual({ ok: files, tooBig: [] });
         expect(checkSizes(files, 0).tooBig).toEqual([]);
+    });
+});
+
+describe('Office documents (issue #42)', () => {
+    const office = [
+        { name: 'report.docx', size: 37_000 },
+        { name: 'pens.xlsx', size: 5_400 },
+        { name: 'results.pptx', size: 29_000 },
+    ];
+
+    it('lets Word, Excel and PowerPoint files through the size check like any file', () => {
+        expect(checkSizes(office, 50)).toEqual({ ok: office, tooBig: [] });
+        const big = { name: 'slides.pptx', size: 61 * 1024 * 1024 };
+        const r = checkSizes([...office, big], 50);
+        expect(r.ok).toEqual(office);
+        expect(r.error).toBe('Not uploaded, larger than 50 MB per file: slides.pptx (61 MB)');
+    });
+
+    it('names the readable formats and the limit in the paperclip hint', () => {
+        for (const f of ['Word', 'Excel', 'PowerPoint', 'PDF', 'CSV', 'images']) expect(READABLE_FORMATS).toContain(f);
+        expect(attachHint(50)).toBe(`Attach files (${READABLE_FORMATS}, at most 50 MB each). They are placed under /workspace/inputs/.`);
+        expect(attachHint(undefined)).toBe(`Attach files (${READABLE_FORMATS}). They are placed under /workspace/inputs/.`);
+    });
+
+    it('turns a 413 into a size message, other failures stay as they are', () => {
+        expect(uploadErrorText(new AgentApiError(413, 'slides.pptx is larger than 50 MB'), 50)).toBe(
+            'Not uploaded: slides.pptx is larger than 50 MB (the limit per file).',
+        );
+        // a proxy's 413 without the gateway's text
+        expect(uploadErrorText(new AgentApiError(413, '413 Request Entity Too Large'), 50)).toBe(
+            'Not uploaded: the file is too large for the server (at most 50 MB per file).',
+        );
+        expect(uploadErrorText(new AgentApiError(413, '413 Request Entity Too Large'), undefined)).toBe(
+            'Not uploaded: the file is too large for the server.',
+        );
+        expect(uploadErrorText(new AgentApiError(500, 'storage down'), 50)).toBe('Upload failed: storage down');
+        expect(uploadErrorText('offline', 50)).toBe('Upload failed: offline');
+    });
+
+    it('shows Office files with their type icon', () => {
+        expect(fileTypeOf({ name: 'report.docx' })).toBe('word');
+        expect(fileTypeOf({ name: 'old.xls' })).toBe('spreadsheet');
+        expect(fileTypeOf({ name: 'results.pptx' })).toBe('presentation');
+        expect(fileTypeOf({ name: 'page.htm' })).toBe('text');
     });
 });
 
