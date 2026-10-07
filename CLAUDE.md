@@ -250,12 +250,24 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
 - **Files:** attachments, the chat's artifacts and display images, as in the gateway's own UI (API.md, *Attachments to
   messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files anywhere on the
   agent area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
-  `GET /config` are refused before uploading and named. Uploaded files sit as chips above the field until sent; sending
+  `GET /config` are refused before uploading and named. Uploaded files sit as tiles above the field until sent; sending
   posts their names as `attachments` with the text (text may be empty), also when the message is queued (the queue row
   names the files); a failed send puts text and chips back; a slash command leaves the chips for the next message.
   The gateway appends the block `[Attachments in /workspace/inputs/]` to the stored user message; `buildTranscript`
-  splits it off (`splitAttachments`) and the user bubble shows the files below it (images as tiles that enlarge, others as
-  chips downloading `…/artifacts/{name}?kind=input`). **Artifacts:** `ArtifactStrip` on top of the chat (only with
+  splits it off (`splitAttachments`) and the user bubble shows the files below it as tiles (images enlarge, others
+  download `…/artifacts/{name}?kind=input`). **Tiles (issue #41, as in the gateway's UI):** one look for staged files,
+  a sent message and the results a tool call handed over (`ResultAttachments` below its steps, matched by
+  `tool_call_id`, `artifactsOfCalls`): 158 px wide (two fit in the panel, also in a user message at 88 %), a
+  36 px square with the thumbnail (only `previewKind` image: raster type **and** extension; a name the artifact list
+  does not know yet never gets one) or a type icon (`fileTypeOf`: extension first, then content type; PDF, Word,
+  spreadsheet, presentation, text incl. CSV, archive, image, file), the name truncated in the middle (`splitFileName`:
+  the head ellipsizes, the last four stem characters and the extension stay, `MiddleName`), size, full name in the
+  tooltip; staged tiles have the remove cross inside the tile and scroll after three rows. A file tile in the
+  transcript is one download link (`::after` over the tile), an image's thumbnail opens `ImagePreview` (its `fallback`
+  shows the type icon if loading fails). The opened `ArtifactStrip` uses the same icons and middle names. Render check:
+  names short, long, 220 characters without spaces, an image, a PDF, SVG and a renamed `.png` (`text/html`), staged,
+  sent and as results, panel and `/ai-agent`; no element wider than its box (the head's ellipsis and the clipped tail
+  excepted), tail, size and cross inside the tile, no request for the SVG or the renamed file. **Artifacts:** `ArtifactStrip` on top of the chat (only with
   files), collapsed "Files 2 results · 1 upload", opened results and uploads with download; opening reloads
   `GET …/artifacts`, the SSE event `artifact` adds new ones. A pending approval of kind `artifact_upload` shows in
   `ApprovalCard` with name, size, type and the text preview (none for images), "Allow" / "Reject". **Display images:**
