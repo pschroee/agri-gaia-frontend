@@ -5,7 +5,7 @@
 import { createTheme } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 
-import { withoutPopoverScrollLock } from './menuTheme';
+import { agentAreaTheme, withFixedTooltips, withoutPopoverScrollLock } from './menuTheme';
 
 describe('withoutPopoverScrollLock', () => {
     it('switches the scroll lock of popovers off', () => {
@@ -33,5 +33,43 @@ describe('withoutPopoverScrollLock', () => {
         const t = withoutPopoverScrollLock(createTheme());
         expect(t.components?.MuiModal).toBeUndefined();
         expect(t.components?.MuiDialog).toBeUndefined();
+    });
+});
+
+describe('withFixedTooltips', () => {
+    it('positions tooltips with the fixed strategy', () => {
+        const t = withFixedTooltips(createTheme());
+        expect(t.components?.MuiTooltip?.defaultProps?.PopperProps?.popperOptions).toEqual({ strategy: 'fixed' });
+    });
+
+    it('keeps other tooltip defaults, other popper props and other components', () => {
+        const outer = createTheme({
+            components: {
+                MuiTooltip: { defaultProps: { arrow: true, PopperProps: { disablePortal: false } } },
+                MuiButton: { defaultProps: { disableRipple: true } },
+            },
+        });
+        const t = withFixedTooltips(outer);
+        expect(t.components?.MuiTooltip?.defaultProps?.arrow).toBe(true);
+        expect(t.components?.MuiTooltip?.defaultProps?.PopperProps).toEqual({
+            disablePortal: false,
+            popperOptions: { strategy: 'fixed' },
+        });
+        expect(t.components?.MuiButton?.defaultProps).toEqual({ disableRipple: true });
+        expect(outer.components?.MuiTooltip?.defaultProps?.PopperProps).toEqual({ disablePortal: false });
+    });
+
+    it('gives every tooltip the same popper props object, so popper is not rebuilt on each render', () => {
+        const a = withFixedTooltips(createTheme()).components?.MuiTooltip?.defaultProps?.PopperProps?.popperOptions;
+        const b = withFixedTooltips(createTheme()).components?.MuiTooltip?.defaultProps?.PopperProps?.popperOptions;
+        expect(a).toBe(b);
+    });
+});
+
+describe('agentAreaTheme', () => {
+    it('combines popovers without scroll lock and fixed tooltips', () => {
+        const t = agentAreaTheme(createTheme());
+        expect(t.components?.MuiPopover?.defaultProps?.disableScrollLock).toBe(true);
+        expect(t.components?.MuiTooltip?.defaultProps?.PopperProps?.popperOptions).toEqual({ strategy: 'fixed' });
     });
 });

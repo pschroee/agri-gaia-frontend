@@ -24,3 +24,35 @@ export function withoutPopoverScrollLock(outer: Theme): Theme {
         },
     };
 }
+
+/**
+ * Tooltips positioned with `position: fixed` instead of `absolute`, for the agent area only.
+ *
+ * MUI portals a tooltip into body and positions it absolutely next to its anchor, so it counts towards the
+ * document's scrollable area. The context panel slides out to the right when it closes, and the "Close" tooltip of
+ * its close button, still open under the pointer, follows the button past the right edge of the window: the document
+ * becomes 11 to 14 px wider than the window and a horizontal scrollbar shows at the bottom for about 200 ms (issue
+ * #28). A fixed tooltip never adds to the scrollable area, like the fixed panel itself. Tooltips still follow their
+ * anchor when the page scrolls (Popper listens to scroll events).
+ */
+export const FIXED_TOOLTIP_POPPER = { popperOptions: { strategy: 'fixed' as const } };
+
+export function withFixedTooltips(outer: Theme): Theme {
+    const tooltip = outer.components?.MuiTooltip;
+    return {
+        ...outer,
+        components: {
+            ...outer.components,
+            MuiTooltip: {
+                ...tooltip,
+                defaultProps: {
+                    ...tooltip?.defaultProps,
+                    PopperProps: { ...tooltip?.defaultProps?.PopperProps, ...FIXED_TOOLTIP_POPPER },
+                },
+            },
+        },
+    };
+}
+
+/** Theme of the agent area: popovers without scroll lock and fixed tooltips. */
+export const agentAreaTheme = (outer: Theme): Theme => withFixedTooltips(withoutPopoverScrollLock(outer));
