@@ -14,7 +14,6 @@ import Typography from '@mui/material/Typography';
 import SendIcon from '@mui/icons-material/Send';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import CloseIcon from '@mui/icons-material/Close';
-import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
@@ -55,11 +54,8 @@ type Props = {
     onAbort?: () => Promise<void>;
     disabled?: boolean;
     placeholder?: string;
-    hint?: string;
-    /** Controls in the row below the field (model and thinking level); the hint then moves to the right. */
+    /** Controls in the row below the field (model and thinking level). */
     toolbar?: ReactNode;
-    /** Narrow layout: with a toolbar, the hint shrinks to its icon with a tooltip. */
-    dense?: boolean;
     /** Slash commands offered while the input starts with "/"; without onCommand, "/…" is sent as a message. */
     commands?: Command[];
     /** Runs "/…"; false: it failed and the transcript explains, the text goes back into the field. */
@@ -79,7 +75,7 @@ type Props = {
 const NO_COMMANDS: Command[] = [];
 
 /**
- * Message field with send (Enter) and a row below (model, thinking level, run state, hint). While a turn runs, the
+ * Message field with send (Enter) and a row below (model, thinking level, run state). While a turn runs, the
  * send arrow becomes Stop (issue #39); with text in the field the queue arrow sits next to it and Enter queues: the
  * gateway queues the message and the queue above the field shows it. Escape never stops. The run state ("Working ·
  * 12 s", "Needs approval", "Stopping …") shows small in the row below the field, a failed stop as a short
@@ -96,9 +92,7 @@ export default function ChatInput({
     onAbort,
     disabled,
     placeholder,
-    hint,
     toolbar,
-    dense,
     commands,
     onCommand,
     onCommandsOpen,
@@ -408,7 +402,7 @@ export default function ChatInput({
                     </IconButton>
                 </Box>
             )}
-            {(toolbar || !error) && (
+            {(toolbar || showStatus) && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: toolbar ? -0.5 : 0 }}>
                     {toolbar && (
                         // next to the run state the picker keeps its width (a fraction of a pixel less wraps it);
@@ -446,32 +440,6 @@ export default function ChatInput({
                                 </Box>
                             )}
                         </Box>
-                    )}
-                    {toolbar && dense ? (
-                        // in the narrow panel the lock gives way to the run state (the approval card says it anyway)
-                        !showStatus && (
-                            <Tooltip title={hint ?? 'Write actions need your approval.'}>
-                                <LockOutlinedIcon
-                                    aria-label={hint ?? 'Write actions need your approval.'}
-                                    sx={{ fontSize: 14, color: 'text.secondary', flex: 'none' }}
-                                />
-                            </Tooltip>
-                        )
-                    ) : (
-                        <Typography
-                            sx={{
-                                fontSize: 11,
-                                color: 'text.secondary',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: 0.5,
-                                flex: toolbar ? 'none' : undefined,
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            <LockOutlinedIcon sx={{ fontSize: 12 }} />
-                            {hint ?? 'Write actions need your approval.'}
-                        </Typography>
                     )}
                 </Box>
             )}
