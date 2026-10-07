@@ -53,8 +53,35 @@ export function formatBytes(n: number | undefined): string {
 }
 
 /**
- * Size check before uploading: files above the gateway's limit per file (artifact_max_mb) are left out and named.
- * Without a known limit everything goes; the gateway checks again. Empty files are allowed.
+ * Formats the agent reads (gateway skill `documents`, issue #42): Office files and PDF are converted in the sandbox,
+ * text and images are read directly. Any other file can still be attached; the gateway checks only the size.
+ */
+export const READABLE_FORMATS = 'Word, Excel, PowerPoint, PDF, CSV, text, HTML, EPUB and images';
+
+/** Tooltip of the paperclip: the readable formats, the size limit when known and where the files land. */
+export function attachHint(maxMb: number | undefined): string {
+    const limit = maxMb && maxMb > 0 ? `, at most ${maxMb} MB each` : '';
+    return `Attach files (${READABLE_FORMATS}${limit}). They are placed under /workspace/inputs/.`;
+}
+
+/**
+ * Text of a failed upload. The gateway refuses a file above its limit with 413 and "<name> is larger than <n> MB";
+ * a proxy in front may answer 413 without that text. Both become a size message instead of "Upload failed: 413 …".
+ */
+export function uploadErrorText(e: unknown, maxMb: number | undefined): string {
+    const message = e instanceof Error ? e.message : String(e);
+    const status = typeof e === 'object' && e !== null && 'status' in e ? (e as { status: unknown }).status : undefined;
+    if (status === 413) {
+        if (/ is larger than \d+ MB$/.test(message)) return `Not uploaded: ${message} (the limit per file).`;
+        const limit = maxMb && maxMb > 0 ? ` (at most ${maxMb} MB per file)` : '';
+        return `Not uploaded: the file is too large for the server${limit}.`;
+    }
+    return `Upload failed: ${message}`;
+}
+
+/**
+ * Size check before uploading: files above the gateway's limit per file (artifact_max_mb) are left out and named
+ * with their size. Without a known limit everything goes; the gateway checks again. Empty files are allowed.
  */
 export function checkSizes<F extends { name: string; size: number }>(
     files: F[],
@@ -65,7 +92,9 @@ export function checkSizes<F extends { name: string; size: number }>(
     const tooBig = files.filter((f) => f.size > limit);
     const ok = files.filter((f) => f.size <= limit);
     const error = tooBig.length
-        ? `Too large (at most ${maxMb} MB per file): ${tooBig.map((f) => f.name).join(', ')}`
+        ? `Not uploaded, larger than ${maxMb} MB per file: ${tooBig
+              .map((f) => `${f.name} (${formatBytes(f.size)})`)
+              .join(', ')}`
         : undefined;
     return { ok, tooBig, error };
 }
@@ -183,7 +212,7 @@ const EXT_GROUPS: [FileType, string][] = [
     ['word', 'doc docx odt rtf'],
     ['spreadsheet', 'xls xlsx xlsm ods'],
     ['presentation', 'ppt pptx odp'],
-    ['text', 'txt md csv tsv json jsonl xml yaml yml log html py ipynb ts js sh'],
+    ['text', 'txt md csv tsv json jsonl xml yaml yml log html htm py ipynb ts js sh'],
     ['archive', 'zip tar gz tgz bz2 xz 7z rar'],
 ];
 const TYPE_BY_EXT = new Map(EXT_GROUPS.flatMap(([t, exts]) => exts.split(' ').map((e) => [e, t] as const)));
