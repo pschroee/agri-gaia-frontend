@@ -14,7 +14,7 @@ import AlertSnackbar from '../../components/common/AlertSnackbar';
 import { internetHint } from '../settings';
 import type { Chat } from '../types';
 import { useChatSettings } from '../useChatSettings';
-import { agentColors } from './tokens';
+import { agentColors, rowIconButtonSx } from './tokens';
 
 /**
  * Internet access of the chat's sandbox: a globe that shows the state. In the narrow panel the globe itself is the
@@ -41,13 +41,10 @@ export default function InternetToggle({ chat, compact = false }: { chat: Chat; 
                 disabled={busy}
                 onClick={toggle}
                 sx={{
-                    flex: 'none',
+                    ...rowIconButtonSx,
                     color,
                     bgcolor: on ? agentColors.greenTint : undefined,
-                    border: 1,
                     borderColor: on ? agentColors.greenLine : 'divider',
-                    borderRadius: 1,
-                    p: '6px',
                 }}
             >
                 {busy ? <CircularProgress size={16} /> : <Icon sx={{ fontSize: 18 }} />}

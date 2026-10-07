@@ -141,3 +141,6 @@ export function thinkingLabel(part: { durationMs?: number; liveSince?: number },
     const d = formatMs(part.durationMs);
     return d ? `Thinking · ${d}` : 'Thinking';
 }
+
+/** Title of a chat as shown everywhere; a chat the gateway has not named yet is "Untitled chat". */
+export const chatTitle = (chat: { title?: string } | undefined): string => chat?.title?.trim() || 'Untitled chat';
