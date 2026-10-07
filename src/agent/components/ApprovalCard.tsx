@@ -47,7 +47,11 @@ function InternetItem({ approval, onDecide }: { approval: Approval; onDecide: (a
     const { busy, decide } = useDecide(onDecide);
     const t = internetApprovalText(approval);
     return (
-        <Box data-testid="agent-internet-approval" sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}>
+        <Box
+            data-testid="agent-internet-approval"
+            data-approval-id={approval.id}
+            sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}
+        >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
                 <PublicIcon sx={{ fontSize: 17, color: agentColors.green }} aria-hidden />
                 <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{t.title}</Typography>
@@ -102,7 +106,11 @@ function ArtifactItem({ approval, onDecide }: { approval: Approval; onDecide: (a
     const v = artifactApprovalView(approval);
     const Icon = v.image ? ImageOutlinedIcon : InsertDriveFileOutlinedIcon;
     return (
-        <Box data-testid="agent-artifact-approval" sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}>
+        <Box
+            data-testid="agent-artifact-approval"
+            data-approval-id={approval.id}
+            sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}
+        >
             <Typography sx={{ fontSize: 12.5, color: 'text.secondary', mb: 0.5 }}>
                 New result file from the agent
             </Typography>
@@ -166,7 +174,11 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
     const effect = approval.kind === 'platform_write' ? effectOf(method, path) : undefined;
 
     return (
-        <Box sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}>
+        <Box
+            data-testid="agent-platform-approval"
+            data-approval-id={approval.id}
+            sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}
+        >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{title}</Typography>
                 {effect && <EffectChip effect={effect} />}

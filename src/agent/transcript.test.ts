@@ -4,8 +4,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildTranscript, isAbortText, isAbortedAnswer, stepStatus } from './transcript';
-import type { PiMessage, StoredMessage } from './types';
+import { buildTranscript, isAbortText, isAbortedAnswer, liveParts, parseArgs, stepStatus } from './transcript';
+import type { Approval, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
 
 const stored = (seq: number, message: PiMessage): StoredMessage => ({
     seq,
@@ -280,5 +280,128 @@ describe('page context', () => {
     it('shows no marker for plain messages', () => {
         const items = buildTranscript([userMsg(1, 'hello', { origin: 'user', sources: [{ kind: 'user' }] })], ctx);
         expect(items[0]).not.toHaveProperty('context');
+    });
+});
+
+describe('arguments and results per step (issue #58)', () => {
+    const command = "cd /workspace && python3 - <<'EOF'\nprint(1)\nEOF";
+    const messages = [
+        stored(1, { role: 'user', content: [{ type: 'text', text: 'Run it' }] }),
+        stored(2, {
+            role: 'assistant',
+            content: [
+                { type: 'toolCall', id: 'c1', name: 'bash', arguments: { command } },
+                {
+                    type: 'toolCall',
+                    id: 'c2',
+                    name: 'mcp_platform_request',
+                    arguments: '{"method":"DELETE","path":"/datasets/5","body":{"key":"k"}}',
+                },
+            ],
+        }),
+        stored(3, { role: 'toolResult', toolCallId: 'c1', content: [{ type: 'text', text: '1\n' }], isError: false }),
+        stored(4, { role: 'toolResult', toolCallId: 'c2', content: 'HTTP 404\n{}', isError: true }),
+    ];
+    const exec = (id: number, call: string, extra: Partial<ToolExecution> = {}): ToolExecution => ({
+        id,
+        chat_id: 'chat',
+        session: 'main',
+        tool_call_id: call,
+        tool: 'bash',
+        op: 'bash',
+        args: {},
+        output_bytes: 2,
+        started_at: '2026-10-06T10:00:01Z',
+        duration_ms: 120,
+        ...extra,
+    });
+    const sock = (id: number, call: string, op = 'platform'): SocketCall => ({
+        id,
+        slot_id: 's',
+        via: 'mcp',
+        op,
+        detail: 'DELETE /datasets/5',
+        result: 'error 404',
+        created_at: '2026-10-06T10:00:02Z',
+        tool_call_id: call,
+    });
+    const approval: Approval = {
+        id: 'ap1',
+        chat_id: 'chat',
+        kind: 'platform_write',
+        via: 'mcp',
+        name: 'DELETE /datasets/5',
+        size: 11,
+        sha256: '',
+        content_type: 'application/json',
+        state: 'approved',
+        created_at: '2026-10-06T10:00:01Z',
+        tool_call_id: 'c2',
+    };
+
+    it('keeps the full arguments, the result text and its error flag', () => {
+        const items = buildTranscript(messages, ctx);
+        const agent = items[1];
+        const steps = agent.kind === 'agent' && agent.parts[0].type === 'steps' ? agent.parts[0].steps : [];
+        expect(steps).toHaveLength(2);
+        expect(steps[0]).toMatchObject({
+            name: 'bash',
+            tool: 'bash',
+            args: { command },
+            result: { text: '1\n', isError: false },
+        });
+        // arguments that came as JSON text are parsed, the summary stays short
+        expect(steps[1]).toMatchObject({
+            name: 'mcp_platform_request',
+            tool: 'platform.request',
+            summary: 'DELETE /datasets/5',
+            args: { method: 'DELETE', path: '/datasets/5', body: { key: 'k' } },
+            result: { text: 'HTTP 404\n{}', isError: true },
+            status: 'error',
+        });
+    });
+
+    it('attaches executions, platform calls and approvals of the same call', () => {
+        const items = buildTranscript(messages, {
+            ...ctx,
+            executions: [exec(1, 'c1', { exit_code: 0, output_excerpt: '1\n' }), exec(2, 'other')],
+            socketCalls: [sock(1, 'c2'), sock(2, 'c2', 'internet'), sock(3, 'c9')],
+            approvals: [approval],
+        });
+        const agent = items[1];
+        const steps = agent.kind === 'agent' && agent.parts[0].type === 'steps' ? agent.parts[0].steps : [];
+        expect(steps[0].executions?.map((e) => e.id)).toEqual([1]);
+        expect(steps[0].durationMs).toBe(120);
+        expect(steps[0].platformCalls).toBeUndefined();
+        expect(steps[1].platformCalls?.map((c) => c.id)).toEqual([1]);
+        expect(steps[1].approvals?.map((a) => a.id)).toEqual(['ap1']);
+    });
+
+    it('hands the output so far to a running call only', () => {
+        const running = messages.slice(0, 2);
+        const items = buildTranscript(running, { ...ctx, running: true, partials: { c1: 'partial', c2: 'x' } });
+        const agent = items[1];
+        const steps = agent.kind === 'agent' && agent.parts[0].type === 'steps' ? agent.parts[0].steps : [];
+        expect(steps.map((s) => s.partial)).toEqual(['partial', 'x']);
+        const done = buildTranscript(messages, { ...ctx, partials: { c1: 'partial' } });
+        const a2 = done[1];
+        expect(a2.kind === 'agent' && a2.parts[0].type === 'steps' && a2.parts[0].steps[0].partial).toBeUndefined();
+    });
+
+    it('keeps the arguments of a call that is still streaming', () => {
+        const parts = liveParts({
+            blocks: [{ type: 'toolCall', id: 'c7', name: 'write', arguments: { path: 'a.txt', content: 'x' } }],
+            ended: false,
+        });
+        expect(parts).toMatchObject([
+            { type: 'steps', steps: [{ id: 'c7', name: 'write', args: { path: 'a.txt', content: 'x' } }] },
+        ]);
+    });
+
+    it('parses JSON text and leaves anything else unchanged', () => {
+        expect(parseArgs('{"a":1}')).toEqual({ a: 1 });
+        expect(parseArgs('{"a":')).toBe('{"a":');
+        expect(parseArgs({ b: 2 })).toEqual({ b: 2 });
+        expect(parseArgs(undefined)).toBeUndefined();
     });
 });

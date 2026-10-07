@@ -338,6 +338,10 @@ export type ToolExecution = {
     args: Record<string, unknown>;
     exit_code?: number;
     error?: string;
+    /** Beginning and end of the output, at most 4 KiB (NUL shows as "␀"). */
+    output_excerpt?: string;
+    /** SHA-256 of the whole output. */
+    output_sha256?: string;
     output_bytes: number;
     started_at: string;
     duration_ms: number;

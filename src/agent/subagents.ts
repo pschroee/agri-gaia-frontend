@@ -5,9 +5,9 @@
 // Subagent runs: entries from the subagents' session files grouped per run, with name and state from pi-subagents
 // (subagent_runs), their own steps and the model calls recorded at the LLM proxy. Pure functions, after the gateway's own
 // web/src/lib/subagents.ts and subagent-overview.ts.
-import { displayToolName, summarizeArgs } from './transcript';
+import { byToolCall, displayToolName, parseArgs, summarizeArgs } from './transcript';
 import type { AgentPart, Step, TranscriptItem } from './transcript';
-import type { LLMCall, StoredMessage, SubagentEntry, SubagentRunMeta } from './types';
+import type { LLMCall, StoredMessage, SubagentEntry, SubagentRunMeta, ToolExecution } from './types';
 
 export type SubagentRun = {
     runId: string;
@@ -267,7 +267,14 @@ export type RunItem =
  * result belongs to its call by ID, otherwise to the oldest open call of the same name. Open calls run while the run
  * runs, otherwise they did not finish.
  */
-export function runItems(run: Pick<SubagentRun, 'entries'>, live: boolean): RunItem[] {
+export function runItems(
+    run: Pick<SubagentRun, 'entries'>,
+    live: boolean,
+    executions: ToolExecution[] = [],
+): RunItem[] {
+    const execsByCall = byToolCall(executions);
+    const durationOf = (l: ToolExecution[] | undefined) =>
+        l ? l.reduce((sum, e) => sum + (e.duration_ms ?? 0), 0) : undefined;
     const items: RunItem[] = [];
     const open: { step: Step; name: string; callId?: string }[] = [];
     const steps = (): Step[] => {
@@ -282,11 +289,16 @@ export function runItems(run: Pick<SubagentRun, 'entries'>, live: boolean): RunI
         if (e.kind === 'task' || e.kind === 'text') {
             if (p.text?.trim()) items.push({ type: e.kind, key: e.entry_id, text: p.text });
         } else if (e.kind === 'tool_call') {
+            const execs = p.id ? execsByCall.get(p.id) : undefined;
             const step: Step = {
                 id: e.entry_id,
                 tool: displayToolName(p.name ?? 'tool'),
                 summary: summarizeArgs(p.arguments),
                 status: live ? 'running' : 'stopped',
+                name: p.name,
+                args: parseArgs(p.arguments),
+                executions: execs,
+                durationMs: durationOf(execs),
             };
             steps().push(step);
             open.push({ step, name: p.name ?? '', callId: p.id });
@@ -294,9 +306,12 @@ export function runItems(run: Pick<SubagentRun, 'entries'>, live: boolean): RunI
             let i = p.tool_call_id ? open.findIndex((o) => o.callId === p.tool_call_id) : -1;
             if (i < 0) i = open.findIndex((o) => !p.name || !o.name || o.name === p.name);
             const status = p.is_error ? 'error' : 'done';
-            if (i < 0) steps().push({ id: e.entry_id, tool: displayToolName(p.name ?? 'tool'), status });
+            const result = { text: p.text ?? '', isError: !!p.is_error };
+            if (i < 0)
+                steps().push({ id: e.entry_id, tool: displayToolName(p.name ?? 'tool'), status, name: p.name, result });
             else {
                 open[i].step.status = status;
+                open[i].step.result = result;
                 open.splice(i, 1);
             }
         }
@@ -379,10 +394,14 @@ export function toggleGroup(statuses: RunStatus[], toggle: GroupToggle | undefin
  * and tool calls (as step lists with their result: done, failed, still running or not finished) joined into agent
  * blocks until the next task.
  */
-export function runTranscript(run: Pick<SubagentRun, 'entries' | 'runId'>, live: boolean): TranscriptItem[] {
+export function runTranscript(
+    run: Pick<SubagentRun, 'entries' | 'runId'>,
+    live: boolean,
+    executions?: ToolExecution[],
+): TranscriptItem[] {
     const out: TranscriptItem[] = [];
     let agent: Extract<TranscriptItem, { kind: 'agent' }> | undefined;
-    for (const it of runItems(run, live)) {
+    for (const it of runItems(run, live, executions)) {
         if (it.type === 'task') {
             agent = undefined;
             out.push({ kind: 'user', key: `${run.runId}:${it.key}`, text: it.text.trim() });

@@ -63,6 +63,9 @@ export function stepStatus(
     return flags.answerAborted ? 'aborted' : 'stopped';
 }
 
+/** pi's result of a tool call: its text blocks and whether pi reports it as an error. */
+export type StepResult = { text: string; isError: boolean };
+
 export type Step = {
     id: string;
     tool: string;
@@ -70,6 +73,20 @@ export type Step = {
     status: StepStatus;
     /** Sum of the operations the gateway ran for this call; missing for tools without sandbox execution. */
     durationMs?: number;
+    /** Tool name as the agent called it (bash, mcp_platform_request …); `tool` is the shortened display name. */
+    name?: string;
+    /** Arguments as stored with the call, parsed when they came as JSON text (issue #58). */
+    args?: unknown;
+    /** pi's result; missing while the call runs or when it never ended. */
+    result?: StepResult;
+    /** Operations the gateway ran for the call in the execution sandbox (exit code, output excerpt). */
+    executions?: ToolExecution[];
+    /** Platform calls of the socket log made by this call (op "platform"), oldest first. */
+    platformCalls?: SocketCall[];
+    /** Approvals this call asked for. */
+    approvals?: Approval[];
+    /** Output so far of a running call (pi's tool_execution_update, live only). */
+    partial?: string;
 };
 
 /** Thinking of the model. id identifies the block across live and stored message (for its open state). */
@@ -201,6 +218,28 @@ export function displayToolName(name: string): string {
     return name.replace(/^mcp_platform_/, 'platform.').replace(/^mcp_/, '');
 }
 
+/** Arguments as an object when they came as JSON text; anything else unchanged. */
+export function parseArgs(args: unknown): unknown {
+    if (typeof args !== 'string') return args;
+    try {
+        return JSON.parse(args) as unknown;
+    } catch {
+        return args;
+    }
+}
+
+/** Groups entries by their tool call ID (entries without one are left out), keeping their order. */
+export function byToolCall<T extends { tool_call_id?: string }>(list: T[]): Map<string, T[]> {
+    const out = new Map<string, T[]>();
+    for (const e of list) {
+        if (!e.tool_call_id) continue;
+        const l = out.get(e.tool_call_id);
+        if (l) l.push(e);
+        else out.set(e.tool_call_id, [e]);
+    }
+    return out;
+}
+
 const SUMMARY_KEYS = ['command', 'path', 'pattern', 'method', 'url', 'query', 'name', 'id', 'dataset_id', 'model_id'];
 
 /** A short hint at the arguments of a tool call (command, path …), at most 60 characters. */
@@ -234,6 +273,8 @@ type Context = {
     running: boolean;
     /** Thinking blocks measured live (live.ts), by thinkingKey. */
     thinkingTimes?: Record<string, ThinkingTime>;
+    /** Output so far of running calls, by tool call ID (pi's tool_execution_update). */
+    partials?: Record<string, string>;
 };
 
 /** Appends a tool step to the parts, joining it with a directly preceding step list. */
@@ -256,6 +297,9 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
     for (const e of ctx.executions) {
         durations.set(e.tool_call_id, (durations.get(e.tool_call_id) ?? 0) + (e.duration_ms ?? 0));
     }
+    const execsByCall = byToolCall(ctx.executions);
+    const platformByCall = byToolCall(ctx.socketCalls.filter((c) => c.op === 'platform'));
+    const approvalsByCall = byToolCall(ctx.approvals);
     const pending = new Set(ctx.approvals.filter((a) => a.state === 'pending').map((a) => a.tool_call_id));
     const blocked = new Set(ctx.socketCalls.filter(isBlocked).map((c) => c.tool_call_id));
     const rejected = new Set(ctx.approvals.filter((a) => a.state === 'rejected').map((a) => a.tool_call_id));
@@ -266,14 +310,28 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
     const answerRows = new Map<Extract<TranscriptItem, { kind: 'agent' }>, StoredMessage[]>();
 
     const stepFor = (id: string, name: string, args: unknown, answerAborted: boolean): Step => {
-        const status = stepStatus(results.get(id), {
+        const res = results.get(id);
+        const status = stepStatus(res, {
             blocked: blocked.has(id),
             pending: pending.has(id),
             rejected: rejected.has(id),
             running: ctx.running,
             answerAborted,
         });
-        return { id, tool: displayToolName(name), summary: summarizeArgs(args), status, durationMs: durations.get(id) };
+        return {
+            id,
+            tool: displayToolName(name),
+            summary: summarizeArgs(args),
+            status,
+            durationMs: durations.get(id),
+            name,
+            args: parseArgs(args),
+            result: res ? { text: textOf(res.content), isError: !!res.isError } : undefined,
+            executions: execsByCall.get(id),
+            platformCalls: platformByCall.get(id),
+            approvals: approvalsByCall.get(id),
+            partial: !res && status === 'running' ? ctx.partials?.[id] : undefined,
+        };
     };
 
     for (const m of messages) {
@@ -407,6 +465,8 @@ export function liveParts(msg: LiveMessage | undefined): AgentPart[] {
                 tool: displayToolName(b.name),
                 summary: summarizeArgs(b.arguments),
                 status: 'running',
+                name: b.name,
+                args: parseArgs(b.arguments),
             });
         }
     });
