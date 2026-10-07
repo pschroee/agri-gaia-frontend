@@ -97,6 +97,24 @@ describe('applyResumeStep', () => {
     });
 });
 
+describe('start of a new chat', () => {
+    it('keeps the start mark of the gateway and names it in the texts', () => {
+        const steps = [step('acquire', 'running', { start: true }), step('acquire', 'done', { start: true })];
+        const [r] = run(steps, 0);
+        expect(r.start).toBe(true);
+        expect(resumeSummary(r, formatMs)).toBe('Starting a sandbox for the chat …');
+        expect(resumeSummary({ ...r, state: 'done', totalMs: 16200 }, formatMs)).toBe('Started in a fresh sandbox · 16.2 s');
+        expect(resumeSummary({ ...r, state: 'failed', error: 'No free slot in the pool' }, formatMs)).toBe(
+            'Starting the sandbox failed: No free slot in the pool. Your next message tries again.',
+        );
+    });
+
+    it('marks a resume as start even when the first step seen lacks the mark', () => {
+        const [r] = run([step('acquire', 'running'), step('session', 'running', { start: true })], 0);
+        expect(r.start).toBe(true);
+    });
+});
+
 describe('closeResumes', () => {
     it('finishes resumes whose ready event got lost', () => {
         const list = run([step('acquire', 'done'), step('session', 'running')]);

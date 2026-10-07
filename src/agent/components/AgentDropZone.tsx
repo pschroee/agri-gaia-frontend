@@ -8,6 +8,7 @@ import Box from '@mui/material/Box';
 import type { SxProps, Theme } from '@mui/material/styles';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 
+import { useAgentOptional } from '../AgentContext';
 import { useFileDrop } from '../useFileDrop';
 import { agentColors } from './tokens';
 
@@ -36,12 +37,19 @@ export function useAgentDropTarget(upload: Target | undefined): boolean {
 /**
  * Drop area over the whole agent area (context panel, chat area of /ai-agent): files dragged anywhere onto it
  * show an overlay "Drop files to upload" and go to the open chat's input, which uploads them like the paperclip
- * (staged as attachments of the next message). Without an open chat the area takes no files.
+ * (staged as attachments of the next message). Without an open chat, dropped files start a new chat (issue #30),
+ * whose input takes them the same way.
  */
 export default function AgentDropZone({ children, sx }: { children: ReactNode; sx?: SxProps<Theme> }) {
     const [target, setTarget] = useState<{ fn: Target }>();
     const register = useCallback((fn: Target | undefined) => setTarget(fn ? { fn } : undefined), []);
-    const { active, handlers } = useFileDrop(target?.fn);
+    const agent = useAgentOptional();
+    const startNewChat = agent?.startNewChat;
+    const startWith = useMemo<Target | undefined>(
+        () => (agent?.status === 'ready' && startNewChat ? (files) => void startNewChat(files) : undefined),
+        [agent?.status, startNewChat],
+    );
+    const { active, handlers } = useFileDrop(target?.fn ?? startWith);
     const value = useMemo(() => register, [register]);
     return (
         <DropTargetContext.Provider value={value}>
@@ -72,7 +80,7 @@ export default function AgentDropZone({ children, sx }: { children: ReactNode; s
                         <UploadFileIcon sx={{ fontSize: 36 }} />
                         Drop files to upload
                         <Box component="span" sx={{ fontSize: 12.5, fontWeight: 400, color: 'text.secondary' }}>
-                            They are attached to your next message
+                            {target ? 'They are attached to your next message' : 'A new chat starts with them'}
                         </Box>
                     </Box>
                 )}

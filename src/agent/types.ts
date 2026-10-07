@@ -137,6 +137,11 @@ export type Chat = {
     artifact_count: number;
     pending_approvals: number;
     resuming?: boolean;
+    /**
+     * A new chat created with `async` waits for its first sandbox (gateway issue #30); `resuming` is set as well. A
+     * message sent meanwhile goes out once the sandbox is there.
+     */
+    starting?: boolean;
     /** Queued messages not yet delivered. */
     queued?: number;
     /** Queued entries are not sent on their own (after an abort, for a dormant chat, above a turn limit). */
@@ -463,6 +468,11 @@ export type CreateChatRequest = {
     delegation?: Delegation;
     /** Preferred language of the browser (BCP 47, navigator.language); the agent uses it only when a message shows no clear language. */
     language?: string;
+    /**
+     * Return at once even when the pool has no free slot: the chat then comes back with `starting` and gets its
+     * sandbox in the background (gateway issue #30). With a free slot the chat comes back ready.
+     */
+    async?: boolean;
 };
 
 /** Defaults and limits of the gateway (GET /config), the subset the platform UI uses. */
@@ -560,6 +570,8 @@ export type ResumeStep = {
     files?: number;
     at: string;
     ms?: number;
+    /** The first sandbox of a new chat (created with `async`), not a resume of a resting chat. */
+    start?: boolean;
 };
 
 export type SendResult = { ok: boolean; resumed: boolean; queued?: boolean; queue_id?: string };

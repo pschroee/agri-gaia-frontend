@@ -12,6 +12,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { useAgentOptional } from '../AgentContext';
 import { withLiveOptions } from '../commands';
 import { modelName } from '../modelChoice';
+import { freshChatFor } from '../newChat';
 import type { PageContext } from '../pageContext';
 import { useCurrentPageContext } from '../pageSelection';
 import { resumeRunning } from '../resume';
@@ -50,7 +51,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
-    const since = runSince(chat, messages);
+    // a new chat waiting for its sandbox counts from its creation
+    const since = runState === 'starting' && chat ? Date.parse(chat.created_at) || undefined : runSince(chat, messages);
     // the open chat's live state goes to the chat list and the panel header
     const agent = useAgentOptional();
     const updateChat = agent?.updateChat;
@@ -102,6 +104,10 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
         [jumpToLatest, runCommand, models],
     );
     const commands = useMemo(() => withLiveOptions(stream.commands, chat), [stream.commands, chat]);
+    // just created by "New chat": the input takes the focus (and dropped files)
+    const start = freshChatFor(agent?.freshChat, chatId);
+    const takeFreshChat = agent?.takeFreshChat;
+    const onStartTaken = useCallback(() => takeFreshChat?.(chatId), [takeFreshChat, chatId]);
 
     return (
         <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -209,6 +215,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     onCommand={onCommand}
                     onCommandsOpen={stream.refreshCommands}
                     pageContext={pageContext}
+                    start={start}
+                    onStartTaken={onStartTaken}
                     toolbar={
                         <ModelEffortPicker
                             chat={stream.chat}

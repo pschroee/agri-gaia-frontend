@@ -19,6 +19,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { isSlashCommand } from '../commands';
 import { PageContext, contextKey, visibleContext } from '../pageContext';
 import { canSend, checkSizes, emptyStaged, stagedReducer } from '../files';
+import type { FreshChat } from '../newChat';
 import type { Artifact, Command } from '../types';
 import { sendTipIdle, sendTipReducer } from '../sendTooltip';
 import { useFileDrop } from '../useFileDrop';
@@ -55,6 +56,9 @@ type Props = {
     onCommandsOpen?: () => void;
     /** Context of the current platform page; shown as a removable chip and sent with the next message. */
     pageContext?: PageContext;
+    /** The chat was just created by "New chat": take the focus and upload its files, then call onStartTaken. */
+    start?: FreshChat;
+    onStartTaken?: () => void;
 };
 
 const NO_COMMANDS: Command[] = [];
@@ -78,6 +82,8 @@ export default function ChatInput({
     onCommand,
     onCommandsOpen,
     pageContext,
+    start,
+    onStartTaken,
 }: Props) {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
@@ -90,6 +96,7 @@ export default function ChatInput({
     // controlled tooltip of the send button (sendTooltip.ts: not after a send, not without real pointer movement)
     const [sendTip, sendTipEvent] = useReducer(sendTipReducer, sendTipIdle);
     const fileRef = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLTextAreaElement>(null);
     const listId = `agent-slash-${useId().replace(/:/g, '')}`;
     const slash = useSlashCommands(onCommand ? commands ?? NO_COMMANDS : NO_COMMANDS, text, setText);
     const justSlash = text === '/';
@@ -111,6 +118,19 @@ export default function ChatInput({
             dispatchStaged({ type: 'upload_failed', error: `Upload failed: ${e instanceof Error ? e.message : String(e)}` });
         }
     };
+
+    // A chat just created by "New chat": the field is ready at once, files dropped without an open chat are attached.
+    // Handled once per entry (StrictMode runs effects twice in development).
+    const uploadRef = useRef(upload);
+    uploadRef.current = upload;
+    const handledStart = useRef<FreshChat>();
+    useEffect(() => {
+        if (!start || handledStart.current === start) return;
+        handledStart.current = start;
+        inputRef.current?.focus();
+        if (start.files.length) void uploadRef.current(start.files);
+        onStartTaken?.();
+    }, [start, onStartTaken]);
 
     const send = async () => {
         const t = text.trim();
@@ -216,6 +236,7 @@ export default function ChatInput({
                         : `${placeholder ?? 'Ask the agent …'}${onCommand ? ' (/ for commands)' : ''}`
                 }
                 ref={setAnchor}
+                inputRef={inputRef}
                 onChange={(e) => setText(e.target.value)}
                 onKeyDown={onKeyDown}
                 sx={{ bgcolor: '#fff', '& .MuiInputBase-input': { fontSize: 14 } }}

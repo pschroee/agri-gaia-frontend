@@ -49,13 +49,14 @@ export function compactErrorText(e: unknown): string {
  * resumes; for a dormant chat the hint says that compacting resumes it first.
  */
 export function compactNowState(
-    chat: Pick<Chat, 'running' | 'resuming' | 'state'> | undefined,
+    chat: Pick<Chat, 'running' | 'resuming' | 'starting' | 'state'> | undefined,
     compacting: Compacting | undefined,
     busy = false,
 ): { disabled: boolean; hint?: string } {
     if (!chat) return { disabled: true };
     if (compacting || busy) return { disabled: true, hint: 'Compacting the context …' };
     if (chat.running) return { disabled: true, hint: 'Only possible while the agent is not working.' };
+    if (chat.starting) return { disabled: true, hint: 'The sandbox of the chat is being prepared; nothing to compact yet.' };
     if (chat.resuming) return { disabled: true, hint: 'The chat is resuming; try again in a moment.' };
     if (chat.state === 'dormant') return { disabled: false, hint: 'Resumes the chat in a sandbox, then compacts.' };
     return { disabled: false, hint: 'Summarises older parts of the conversation now.' };

@@ -7,7 +7,6 @@ import { describe, expect, it } from 'vitest';
 import { AgentApiError } from './api';
 import {
     allowedLevels,
-    effortAfterCreate,
     effortLabel,
     levelsByModel,
     modelName,
@@ -18,7 +17,7 @@ import {
 } from './modelChoice';
 import type { Chat } from './types';
 
-type PickChat = Pick<Chat, 'model' | 'running' | 'resuming' | 'thinking_levels' | 'pending_model'>;
+type PickChat = Pick<Chat, 'model' | 'running' | 'resuming' | 'starting' | 'thinking_levels' | 'pending_model'>;
 const chat = (extra: Partial<PickChat> = {}): PickChat => ({
     model: 'deepseek/deepseek-flash',
     running: false,
@@ -59,6 +58,13 @@ describe('pickerState', () => {
         const s = pickerState(chat());
         expect(s).toMatchObject({ modelDisabled: false, effortDisabled: false, levels: ['off', 'low', 'high'] });
         expect(s.modelHint).toBeUndefined();
+    });
+
+    it('locks both while a new chat waits for its sandbox', () => {
+        const s = pickerState(chat({ resuming: true, starting: true }));
+        expect(s.modelDisabled).toBe(true);
+        expect(s.effortDisabled).toBe(true);
+        expect(s.modelHint).toBe('Can be changed once the sandbox of the chat is ready.');
     });
 
     it('locks both while the agent works, with a tooltip', () => {
@@ -153,18 +159,3 @@ describe('texts', () => {
     });
 });
 
-describe('effortAfterCreate', () => {
-    it('sets a chosen level the model reports', () => {
-        expect(effortAfterCreate('high', { thinking_level: 'medium', thinking_levels: ['off', 'high'] })).toBe('high');
-    });
-
-    it('skips the default, the current level and levels the model does not report', () => {
-        expect(effortAfterCreate('', { thinking_level: 'medium' })).toBeUndefined();
-        expect(effortAfterCreate('high', { thinking_level: 'high' })).toBeUndefined();
-        expect(effortAfterCreate('max', { thinking_level: 'off', thinking_levels: ['off', 'high'] })).toBeUndefined();
-    });
-
-    it('tries the level when the new chat does not report levels yet', () => {
-        expect(effortAfterCreate('high', {})).toBe('high');
-    });
-});

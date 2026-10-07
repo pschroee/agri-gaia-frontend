@@ -89,13 +89,17 @@ export const RUNNING_HINT = 'Can be changed once the agent has finished its resp
  * gateway answers 409; with a scheduled switch (pending_model) the model stays locked until the compaction ends.
  */
 export function pickerState(
-    chat: Pick<Chat, 'model' | 'running' | 'resuming' | 'thinking_levels' | 'pending_model'> | undefined,
+    chat: Pick<Chat, 'model' | 'running' | 'resuming' | 'starting' | 'thinking_levels' | 'pending_model'> | undefined,
     busy = false,
 ): PickerState {
     if (!chat) return { modelDisabled: true, effortDisabled: true, levels: [] };
     const levels = allowedLevels(chat.model, chat);
     const locked = chat.running || !!chat.resuming;
-    const lockHint = chat.resuming ? 'Can be changed once the chat has resumed.' : RUNNING_HINT;
+    const lockHint = chat.starting
+        ? 'Can be changed once the sandbox of the chat is ready.'
+        : chat.resuming
+          ? 'Can be changed once the chat has resumed.'
+          : RUNNING_HINT;
     const pending = chat.pending_model || undefined;
     let modelHint: string | undefined;
     if (pending) modelHint = 'The model switches after the running compaction.';
@@ -141,17 +145,4 @@ export function tooLargeText(d: ContextTooLarge, name: string): string {
         `The conversation so far has ${num(d.tokens)} tokens. ${name} takes at most ${num(d.limit)} ` +
         `(context window ${num(d.window)}). Compact the history first? The chat then continues with ${name}.`
     );
-}
-
-/**
- * Thinking level to set after creating a chat: only a chosen level the new chat's model reports and that differs
- * from what pi already set; undefined otherwise (empty choice = model default).
- */
-export function effortAfterCreate(
-    chosen: string,
-    created: Pick<Chat, 'thinking_level' | 'thinking_levels'>,
-): string | undefined {
-    if (!chosen || chosen === created.thinking_level) return undefined;
-    if (created.thinking_levels?.length && !created.thinking_levels.includes(chosen)) return undefined;
-    return chosen;
 }

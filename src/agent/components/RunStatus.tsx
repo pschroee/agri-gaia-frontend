@@ -31,6 +31,7 @@ type Props = {
 const SUBLINE: Record<RunState, string> = {
     working: 'messages you send now are queued',
     waiting: 'decide on the approval above',
+    starting: 'starting a sandbox, you can type already',
     resuming: 'rebuilding the sandbox',
     idle: 'sandbox ready',
     dormant: 'your next message resumes it',
@@ -119,7 +120,7 @@ export default function RunStatus({ state, since, onAbort, onSuspend }: Props) {
                         }}
                     >
                         {stopping ? 'Stopping …' : RUN_STATE_LABEL[state]}
-                        {running && since !== undefined && (
+                        {(running || state === 'starting') && since !== undefined && (
                             <>
                                 {' · '}
                                 <Elapsed since={since} />

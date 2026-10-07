@@ -2,11 +2,9 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
 import MenuItem from '@mui/material/MenuItem';
@@ -14,7 +12,6 @@ import Select from '@mui/material/Select';
 import Toolbar from '@mui/material/Toolbar';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import AddIcon from '@mui/icons-material/Add';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CloseIcon from '@mui/icons-material/Close';
 
@@ -24,7 +21,7 @@ import { isRunning, runSince, runStateOf } from '../runState';
 import ChatView from './ChatView';
 import { ChatCost, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
-import NewChatDialog from './NewChatDialog';
+import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
 import SignInNotice from './SignInNotice';
@@ -34,11 +31,12 @@ export const AGENT_PANEL_WIDTH = 400;
 /** Height of the fixed platform footer. */
 export const FOOTER_HEIGHT = 30;
 
-/** Chat selector with the open chat's internet switch (the globe) and "New chat". */
-function ChatSelector({ onNew }: { onNew: () => void }) {
+/** Chat selector with the open chat's internet switch (the globe) and "New chat" (creates the chat at once). */
+function ChatSelector() {
     const { chats, selectedChatId, selectChat } = useAgent();
     const selected = chats.find((c) => c.id === selectedChatId);
     return (
+        <Box sx={{ display: 'grid', gap: 1 }}>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Select
                 size="small"
@@ -80,9 +78,9 @@ function ChatSelector({ onNew }: { onNew: () => void }) {
                 })}
             </Select>
             {selected && <InternetToggle chat={selected} compact />}
-            <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={onNew} sx={{ flex: 'none' }}>
-                New chat
-            </Button>
+            <NewChatButton sx={{ flex: 'none' }} />
+        </Box>
+        <NewChatError />
         </Box>
     );
 }
@@ -93,7 +91,6 @@ function ChatSelector({ onNew }: { onNew: () => void }) {
  */
 export default function AgentContextPanel() {
     const { status, panelOpen, setPanelOpen, selectedChatId, chatsLoaded, chats, compacting } = useAgent();
-    const [newOpen, setNewOpen] = useState(false);
     const section = sectionOf(useLocation().pathname);
     // live through updateChat of the open ChatView
     const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
@@ -194,15 +191,15 @@ export default function AgentContextPanel() {
                                 chatId={selectedChatId}
                                 dense
                                 placeholder={section ? `Ask about ${section} …` : undefined}
-                                header={<ChatSelector onNew={() => setNewOpen(true)} />}
+                                header={<ChatSelector />}
                             />
                         ) : (
                             <Box sx={{ p: 1.75, display: 'grid', gap: 1.5 }}>
-                                <ChatSelector onNew={() => setNewOpen(true)} />
+                                <ChatSelector />
                                 {chatsLoaded && chats.length === 0 && (
                                     <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                                        Start a chat to let the agent work with your datasets, models and trainings. You
-                                        choose which rights it gets.
+                                        Start a chat to let the agent work with your datasets, models and trainings, or
+                                        drop files here to start one with them.
                                     </Typography>
                                 )}
                             </Box>
@@ -210,7 +207,6 @@ export default function AgentContextPanel() {
                     </Box>
                 )}
             </AgentDropZone>
-            <NewChatDialog open={newOpen} onClose={() => setNewOpen(false)} />
         </Drawer>
     );
 }

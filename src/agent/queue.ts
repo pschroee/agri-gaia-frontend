@@ -252,8 +252,9 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
  * Will a new message probably be queued? Then it is shown in the queue right away instead of the history. The
  * gateway's response (`queued`) decides.
  */
-export function expectQueued(chat: Pick<Chat, 'running' | 'resuming'> | undefined): boolean {
-    return !!chat?.running || !!chat?.resuming;
+export function expectQueued(chat: Pick<Chat, 'running' | 'resuming' | 'starting'> | undefined): boolean {
+    // a new chat waiting for its sandbox takes the message directly (the gateway holds it until the sandbox is there)
+    return !!chat?.running || (!!chat?.resuming && !chat?.starting);
 }
 
 /** Single-line preview of a queued text. */

@@ -174,6 +174,10 @@ describe('held state and texts', () => {
         expect(expectQueued(undefined)).toBe(false);
     });
 
+    it('sends directly to a new chat waiting for its sandbox (the gateway holds the message, it is not queued)', () => {
+        expect(expectQueued({ running: false, resuming: true, starting: true })).toBe(false);
+    });
+
     it('explains the state in the header', () => {
         expect(queueStatusText(running)).toBe('goes to the agent after its current step');
         expect(queueStatusText({ ...idleHeld, hold_reason: 'abort' })).toBe(

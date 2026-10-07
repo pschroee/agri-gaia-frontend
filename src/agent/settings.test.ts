@@ -54,6 +54,10 @@ describe('compactNowState', () => {
     it('is locked while the agent works, resumes or compacts', () => {
         expect(compactNowState({ ...idle, running: true }, undefined).disabled).toBe(true);
         expect(compactNowState({ ...idle, resuming: true }, undefined).disabled).toBe(true);
+        expect(compactNowState({ ...idle, resuming: true, starting: true }, undefined)).toEqual({
+            disabled: true,
+            hint: 'The sandbox of the chat is being prepared; nothing to compact yet.',
+        });
         expect(compactNowState(idle, { reason: 'manual', since: 1 })).toEqual({
             disabled: true,
             hint: 'Compacting the context …',

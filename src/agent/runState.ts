@@ -11,13 +11,14 @@ import type { PageContext } from './pageContext';
 /**
  * - `working`: pi works on a turn
  * - `waiting`: the turn is blocked on an approval of the user
+ * - `starting`: a new chat waits for its first sandbox (the pool had no free slot)
  * - `resuming`: a dormant chat is being rebuilt in a fresh sandbox
  * - `idle`: active (sandbox assigned), nothing running
  * - `dormant`: resting, session saved and sandbox released; the next message resumes it
  */
-export type RunState = 'working' | 'waiting' | 'resuming' | 'idle' | 'dormant';
+export type RunState = 'working' | 'waiting' | 'starting' | 'resuming' | 'idle' | 'dormant';
 
-type RunChat = Pick<Chat, 'state' | 'running' | 'resuming' | 'pending_approvals'>;
+type RunChat = Pick<Chat, 'state' | 'running' | 'resuming' | 'starting' | 'pending_approvals'>;
 
 /**
  * Derives the run state. `pendingApprovals` is the live count of the open view (approvals arrive over SSE before
@@ -28,6 +29,7 @@ export function runStateOf(
     opts: { pendingApprovals?: number; resumeRunning?: boolean } = {},
 ): RunState | undefined {
     if (!chat) return undefined;
+    if (chat.starting) return 'starting';
     if (chat.resuming || opts.resumeRunning) return 'resuming';
     const pending = opts.pendingApprovals ?? chat.pending_approvals ?? 0;
     if (chat.running) return pending > 0 ? 'waiting' : 'working';
@@ -39,6 +41,7 @@ export function runStateOf(
 export const RUN_STATE_LABEL: Record<RunState, string> = {
     working: 'Working',
     waiting: 'Waiting for approval',
+    starting: 'Starting',
     resuming: 'Resuming',
     idle: 'Idle',
     dormant: 'Resting',
@@ -48,6 +51,7 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
 export const RUN_STATE_SHORT: Record<RunState, string> = {
     working: 'working',
     waiting: 'waiting for approval',
+    starting: 'starting',
     resuming: 'resuming',
     idle: 'active',
     dormant: 'resting',
@@ -56,6 +60,7 @@ export const RUN_STATE_SHORT: Record<RunState, string> = {
 export const RUN_STATE_HINT: Record<RunState, string> = {
     working: 'The agent works on your request. Messages you send now are queued.',
     waiting: 'The agent waits for your decision on an approval.',
+    starting: 'No sandbox was free; one is being started for this chat. You can type already: your message goes to the agent once the sandbox is ready.',
     resuming: 'The chat was resting; its sandbox is being rebuilt.',
     idle: 'Sandbox ready. Let the chat rest to release it; your next message resumes it.',
     dormant: 'The chat is resting: session saved, sandbox released. Your next message resumes it.',
