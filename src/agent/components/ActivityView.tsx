@@ -19,11 +19,14 @@ import {
     activityQuery,
     activityRows,
     formatDuration,
+    KIND_FILTERS,
+    KindFilter,
     mergePages,
     OUTCOME_FILTERS,
     Period,
     PERIOD_PHRASE,
     PERIODS,
+    shownText,
 } from '../activity';
 import { AgentApiError, agentApi } from '../api';
 import { Effect } from '../format';
@@ -77,11 +80,13 @@ const LEGEND: { effect: Effect; text: string }[] = [
 
 /**
  * Activity of the agent across all of the user's chats: key figures of the period and every platform call with its
- * effect, result and duration. Everything comes from the gateway's GET /activity in pages of PAGE_SIZE; the figures
- * cover the whole period, the table the pages loaded so far.
+ * effect, result and duration, plus the internet switches (requested, approved, switched off, by the agent or by the
+ * user; gateway issue #37). Everything comes from the gateway's GET /activity in pages of PAGE_SIZE; the figures
+ * cover the platform calls of the whole period (never the internet switches), the table the pages loaded so far.
  */
 export default function ActivityView({ refreshKey }: { refreshKey: number }) {
     const [period, setPeriod] = useState<Period>('7d');
+    const [kind, setKind] = useState<KindFilter>('all');
     const [outcome, setOutcome] = useState<ActivityOutcome | ''>('');
     const [page, setPage] = useState<ActivityPage>();
     const [pending, setPending] = useState<Approval[]>([]);
@@ -98,7 +103,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         setError(undefined);
         try {
             const [p, approvals] = await Promise.all([
-                agentApi.activity(activityQuery({ period, outcome })),
+                agentApi.activity(activityQuery({ period, kind, outcome })),
                 agentApi.pendingApprovals().catch(() => [] as Approval[]),
             ]);
             if (gen !== generation.current) return;
@@ -113,7 +118,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         } finally {
             if (gen === generation.current) setLoading(false);
         }
-    }, [period, outcome]);
+    }, [period, kind, outcome]);
 
     useEffect(() => {
         void load();
@@ -124,7 +129,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         const gen = generation.current;
         setLoadingMore(true);
         try {
-            const next = await agentApi.activity(activityQuery({ period, outcome, before: page.next_before }));
+            const next = await agentApi.activity(activityQuery({ period, kind, outcome, before: page.next_before }));
             if (gen === generation.current) setPage((prev) => (prev ? mergePages(prev, next) : next));
         } catch (e) {
             if (gen === generation.current) setError(e instanceof Error ? e.message : String(e));
@@ -133,7 +138,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         }
     };
 
-    const rows = useMemo(() => (page ? activityRows(page) : []), [page]);
+    const rows = useMemo(() => (page ? activityRows(page, outcome ? 'platform' : kind) : []), [page, kind, outcome]);
     const f = page ? activityFigures(page) : undefined;
     const when = PERIOD_PHRASE[period];
     const dash = (v: number | undefined) => (f ? v ?? 0 : '–');
@@ -165,10 +170,29 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
                 </ToggleButtonGroup>
                 <Select
                     size="small"
+                    value={kind}
+                    onChange={(e) => {
+                        const k = e.target.value as KindFilter;
+                        setKind(k);
+                        // Results belong to platform calls.
+                        if (k === 'internet') setOutcome('');
+                    }}
+                    inputProps={{ 'aria-label': 'Show' }}
+                    sx={{ minWidth: 180, fontSize: 14 }}
+                >
+                    {KIND_FILTERS.map((k) => (
+                        <MenuItem key={k.value} value={k.value} sx={{ fontSize: 14 }}>
+                            {k.label}
+                        </MenuItem>
+                    ))}
+                </Select>
+                <Select
+                    size="small"
                     value={outcome}
                     displayEmpty
+                    disabled={kind === 'internet'}
                     onChange={(e) => setOutcome(e.target.value as ActivityOutcome | '')}
-                    inputProps={{ 'aria-label': 'Result' }}
+                    inputProps={{ 'aria-label': 'Result of platform calls' }}
                     sx={{ minWidth: 200, fontSize: 14 }}
                 >
                     {OUTCOME_FILTERS.map((o) => (
@@ -219,6 +243,10 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
                     emptyText={
                         outcome
                             ? `No platform calls with this result ${when}.`
+                            : kind === 'internet'
+                            ? `No internet switches ${when}.`
+                            : kind === 'all'
+                            ? `No platform calls or internet switches ${when}.`
                             : period === 'all'
                             ? 'The agent has not called the platform yet.'
                             : `The agent has not called the platform ${when}.`
@@ -228,11 +256,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
             {page && rows.length > 0 && (
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-                        {outcome
-                            ? `Shows ${rows.length} ${rows.length === 1 ? 'call' : 'calls'} with this result.`
-                            : `Shows ${rows.length} of ${f?.total ?? rows.length} ${
-                                  f?.total === 1 ? 'call' : 'calls'
-                              }.`}
+                        {shownText(rows, f?.total, kind, outcome)}
                     </Typography>
                     {page.next_before ? (
                         <Button size="small" onClick={() => void loadMore()} disabled={loadingMore}>
