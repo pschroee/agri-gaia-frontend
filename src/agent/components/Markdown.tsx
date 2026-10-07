@@ -7,14 +7,16 @@ import { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
 
+import { isAcceptanceFence } from '../acceptance';
 import { imageSource, MARKDOWN_IMAGE, parseMarkdownImage } from '../images';
 import { isFenceOpen, mermaidReady, readFence } from '../mermaid';
+import AcceptanceReportBlock from './AcceptanceReportBlock';
 import ImagePreview, { ImageNote } from './ImagePreview';
 import MermaidDiagram from './MermaidDiagram';
 import { codeBlockSx, MONO } from './tokens';
 
 // A small Markdown renderer for agent answers: paragraphs, headings, lists, block quotes, fenced code,
-// tables, Mermaid diagrams (MermaidDiagram) and the inline forms code, bold, italic, links and images. It builds React elements, never HTML strings.
+// tables, Mermaid diagrams (MermaidDiagram), acceptance reports of subagents (AcceptanceReportBlock) and the inline forms code, bold, italic, links and images. It builds React elements, never HTML strings.
 
 /** Where images of this text may come from: the chat and the ID of the stored answer (images.ts). */
 export type ImageContext = { chatId?: string; msgId?: string };
@@ -157,6 +159,17 @@ export default function Markdown({
                         code={fence.body}
                         ready={mermaidReady(fence, streaming)}
                         index={diagrams++}
+                        gap={gap}
+                    />,
+                );
+                continue;
+            }
+            if (isAcceptanceFence(fence.lang)) {
+                blocks.push(
+                    <AcceptanceReportBlock
+                        key={key}
+                        body={fence.body}
+                        pending={streaming && !fence.closed}
                         gap={gap}
                     />,
                 );
