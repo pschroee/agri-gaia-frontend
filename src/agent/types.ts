@@ -457,6 +457,26 @@ export type SubagentRunMeta = {
     updated_at: string;
 };
 
+/**
+ * Short form of a subagent run from `GET /chats/{id}/subagent-runs` (gateway issue #60): enough for the title and the
+ * state of a sub-entry in the chat selector without opening (and waking) the chat.
+ */
+export type SubagentRunSummary = {
+    run_id: string;
+    agent: string;
+    label?: string;
+    /** State according to pi-subagents; missing: estimated from last_kind and last_at. */
+    state?: string;
+    /** First lines of the run's first task (at most 8 lines, 500 bytes), for runTitle. */
+    task_head?: string;
+    started_at?: string;
+    ended_at?: string;
+    /** Newest entry (or the end) and its kind. */
+    last_at?: string;
+    last_kind?: SubagentEntry['kind'];
+    entries: number;
+};
+
 /** Model call recorded at the LLM proxy (subset); main: the main session's answer, otherwise subagent or compaction. */
 export type LLMCall = {
     id: number;
