@@ -7,12 +7,13 @@ import { useLocation } from 'react-router-dom';
 
 import { AgentProvider, useAgentOptional } from '../AgentContext';
 import { agentEnabled } from '../api';
+import { AGENT_ROUTE } from '../expand';
 import { PageSelectionProvider } from '../pageSelection';
 import AgentContextPanel, { AGENT_PANEL_WIDTH } from './AgentContextPanel';
 import AgentFab from './AgentFab';
 import AgentMenuTheme from './AgentMenuTheme';
 
-export const AGENT_ROUTE = '/ai-agent';
+export { AGENT_ROUTE };
 
 /**
  * Wraps the platform layout with the agent state when the build flag VITE_AGENT_ENABLED is set, and with the
