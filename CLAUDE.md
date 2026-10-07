@@ -376,10 +376,18 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `selectSubagent`, valid only for the selected chat; `selectChat`, also of the same chat, and "New chat" leave it; a
   run the loaded chat does not know falls back to the chat). The open `ChatView` publishes its runs
   (`openChatSubagents`), which `useSubagentNav` turns into sub-entries (robot, title, state). **Titles cost nothing:**
-  `runTitle` gives the workflow label, else the first meaningful line of the task (markdown marks, "Task:", tags such
+  `runTitle` gives the workflow label unless it is empty or only the agent's name (`worker`, `scout`, case ignored;
+  issue #52), else the first meaningful line of the task (markdown marks, "Task:", tags such
   as "[Context]", bare headings such as "## Task" and punctuation-only lines skipped, whitespace collapsed, 70
   characters), else the agent; `subagentNav` adds the short run ID only for runs with neither, so "Subagent 1" never
-  shows; the full task is the tooltip (`runTooltip`). **Group:** open while a run is live, closed when all are done;
+  shows. **No task in tooltips (issue #52):** the task is the first message of the subagent's transcript; titles
+  (breadcrumb, sub-entries, step links, task strip) are `EllipsisText`, whose one-line tooltip shows the title only
+  while it is cut; the back arrow says just "Back to chat", and the panel's chat selector shows no tooltip while a
+  subagent is open (at most one tooltip at a time). All of them open on hover only (`disableFocusListener`: the select
+  gets focus back when its menu closes, which used to leave the tooltip open after a click outside), close on leave,
+  press and Escape, and check `:hover` before opening (`isHovered`): React bubbles mouse events out of portals, so
+  hovering the open menu or its backdrop started the select's enter timer and opened its tooltip after the menu
+  closed. **Group:** open while a run is live, closed when all are done;
   the user's toggle holds until that default changes (`groupOpen`, `toggleGroup`), the group of the opened subagent is
   always open, and closing it goes back to the chat. **Panel:** the sub-entries sit indented under the open chat in
   the chat selector (toggle with count on the chat's item, `stopPropagation` so it does not select the chat); a

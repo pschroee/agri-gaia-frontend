@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -29,6 +29,7 @@ import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
 import SignInNotice from './SignInNotice';
+import { isHovered, isTruncated } from './EllipsisText';
 import { GroupToggleButton, SubagentBreadcrumb, SubagentEntryContent } from './SubagentView';
 import { agentColors } from './tokens';
 
@@ -40,7 +41,7 @@ const SUB_PREFIX = 'subagent:';
 
 /**
  * The panel's chat row (issue #38): the chat selector takes the remaining room and ellipsizes the title (full title
- * in its tooltip and in the opened list), then "New chat" as a plus (creates the chat at once) and the open chat's
+ * in its tooltip while cut, and in the opened list), then "New chat" as a plus (creates the chat at once) and the open chat's
  * internet switch (the globe). The row never grows past the panel, whatever the title.
  */
 function ChatSelector() {
@@ -49,6 +50,7 @@ function ChatSelector() {
     const sub = useSubagentNav();
     const [menuOpen, setMenuOpen] = useState(false);
     const [tipOpen, setTipOpen] = useState(false);
+    const selectRef = useRef<HTMLDivElement>(null);
     const chatValue = selectedChatId && chats.some((c) => c.id === selectedChatId) ? selectedChatId : '';
     // a subagent of the open chat is a value of its own (issue #48); its entry is then always listed
     const value = chatValue && sub.selected ? `${SUB_PREFIX}${sub.selected.runId}` : chatValue;
@@ -111,24 +113,30 @@ function ChatSelector() {
         <Box sx={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 1 }}>
             <Box data-testid="agent-chat-picker-row" sx={{ display: 'flex', gap: 1, alignItems: 'center', minWidth: 0 }}>
                 <Tooltip
-                    title={
-                        selected ? (
-                            sub.selected ? (
-                                <Box component="span" sx={{ whiteSpace: 'pre-line' }}>
-                                    {sub.selected.tooltip}
-                                </Box>
-                            ) : (
-                                chatTitle(selected)
-                            )
-                        ) : (
-                            ''
+                    // the chat title in full, only when it is cut; with a subagent open the breadcrumb has its own
+                    // tooltips, and two at once must not show (issue #52). Hover only: focus alone (the select keeps
+                    // it after its menu closes) must not open it, or it stays after a click elsewhere.
+                    title={selected && !sub.selected ? chatTitle(selected) : ''}
+                    open={tipOpen && !menuOpen && !sub.selected}
+                    onOpen={() => {
+                        // only while the pointer is on the select itself: hovering the opened menu or its backdrop
+                        // bubbles here through the portal and would open it after a click outside
+                        const el = selectRef.current;
+                        if (
+                            !menuOpen &&
+                            isHovered(el) &&
+                            isTruncated(el?.querySelector<HTMLElement>('.MuiSelect-select'))
                         )
-                    }
-                    open={tipOpen && !menuOpen}
-                    onOpen={() => setTipOpen(true)}
+                            setTipOpen(true);
+                    }}
                     onClose={() => setTipOpen(false)}
+                    disableFocusListener
+                    disableInteractive
+                    enterDelay={400}
+                    enterNextDelay={400}
                 >
                     <Select
+                        ref={selectRef}
                         size="small"
                         value={value}
                         onChange={(e) => onChange(String(e.target.value))}
@@ -137,7 +145,10 @@ function ChatSelector() {
                             setTipOpen(false);
                             setMenuOpen(true);
                         }}
-                        onClose={() => setMenuOpen(false)}
+                        onClose={() => {
+                            setTipOpen(false);
+                            setMenuOpen(false);
+                        }}
                         displayEmpty
                         // the state of the selected chat shows in the panel header; a subagent shows as breadcrumb
                         // "← chat › subagent" in the same height

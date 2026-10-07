@@ -18,7 +18,6 @@ import {
     runStatus,
     runSubtitle,
     runTitle,
-    runTooltip,
     runTranscript,
     runsByCall,
     shortRunId,
@@ -199,16 +198,24 @@ describe('looking into subagents (issue #48)', () => {
         expect(runTitle({ agent: 'worker', task: 'Zähle die Bilder' })).toBe('Zähle die Bilder');
     });
 
-    it('puts the full task into the tooltip', () => {
-        expect(runTooltip({ agent: 'w', task: 'Task: A\nB' })).toBe('Task: A\nB');
-        expect(runTooltip({ agent: 'w', label: 'L', task: 'A' })).toBe('L\n\nA');
-        expect(runTooltip({ agent: 'w' })).toBe('w');
+    it('ignores a label that is only the agent name and takes the task instead (issue #52)', () => {
+        const task = '## Task\n\nCount the images per class in dataset 42.\nThen write a table.\n\n- step 1\n- step 2';
+        expect(runTitle({ agent: 'worker', label: 'worker', task })).toBe('Count the images per class in dataset 42.');
+        expect(runTitle({ agent: 'scout', label: ' Scout ', task: 'Find the models' })).toBe('Find the models');
+        expect(runTitle({ agent: 'planner', label: '', task: 'Plan the training' })).toBe('Plan the training');
+        // a label of its own still wins
+        expect(runTitle({ agent: 'worker', label: 'count-images', task })).toBe('count-images');
+        // nothing meaningful in the task: the agent name as last fallback
+        expect(runTitle({ agent: 'worker', label: 'worker', task: '---' })).toBe('worker');
+        expect(runTitle({ agent: 'worker', label: 'worker' })).toBe('worker');
+        expect(runTitle({ agent: '', label: 'worker' })).toBe('worker');
+        expect(runTitle({ agent: '' })).toBe('Subagent');
     });
 
-    it('lists the sub-entries with title, tooltip and state; runs without name or task keep apart', () => {
+    it('lists the sub-entries with title and state; runs without name or task keep apart', () => {
         const runs = groupRuns(entries, [
             meta('run-2', { label: 'labels', state: 'complete' }),
-            meta('abcdefgh', { started_at: at(30), state: 'running', agent: 'worker' }),
+            meta('abcdefgh', { started_at: at(30), state: 'running', agent: 'worker', label: 'worker' }),
             meta('zyxwvuts', { started_at: at(31), state: 'failed', agent: '' }),
         ]);
         const nav = subagentNav(runs, { chatRunning: true, now: T0 + 40_000 });
@@ -218,7 +225,7 @@ describe('looking into subagents (issue #48)', () => {
             ['worker · abcdef', 'running'],
             ['Subagent · zyxwvu', 'failed'],
         ]);
-        expect(nav[0].tooltip).toBe('Task: Count the images per class\nmore');
+        expect(nav[0]).not.toHaveProperty('tooltip');
         expect(nav.some((n) => /^Subagent \d/.test(n.title))).toBe(false);
         expect(subagentStateText('stopped')).toBe('ended');
         expect(subagentStateText('running')).toBe('running');
