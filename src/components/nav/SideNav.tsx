@@ -42,7 +42,6 @@ import StoreIcon from '@mui/icons-material/Store';
 import ApiOutlinedIcon from '@mui/icons-material/ApiOutlined';
 import PeopleIcon from '@mui/icons-material/People';
 import SpeedIcon from '@mui/icons-material/Speed';
-import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 import { useNavigate } from 'react-router-dom';
 import { createSubdomainUrl, openInNewTab } from '../../util';
@@ -52,6 +51,7 @@ import { URLS_BASIC_AUTH_PATH } from '../../endpoints';
 import useKeycloak from '../../contexts/KeycloakContext';
 import { agentEnabled } from '../../agent/api';
 import { AGENT_ROUTE } from '../../agent/components/AgentLayer';
+import AgentNavIcon, { useAgentNavBadge } from '../../agent/components/AgentNavIcon';
 
 interface IListItem {
     text: string;
@@ -60,12 +60,14 @@ interface IListItem {
     external?: boolean;
     disabled?: boolean;
     accent?: boolean;
+    ariaLabel?: string;
 }
 
 export default function SideNav() {
     const navigate = useNavigate();
     const isOpen = useContext(SideNavWidthContext).isOpen;
     const keycloak = useKeycloak();
+    const agentBadge = useAgentNavBadge();
 
     const [activeItemLink, setActiveItemLink] = useState<string | undefined>(undefined);
     const [fusekiBasicAuthUrl, setFusekiBasicAuthUrl] = useState<string>(createSubdomainUrl('fuseki'));
@@ -84,9 +86,10 @@ export default function SideNav() {
             .catch((error) => console.error(error));
     };
 
-    // Entry of the AI agent, on top and in the primary colour like in the design prototype.
+    // Entry of the AI agent, on top and in the primary colour like in the design prototype, with the count of open
+    // approvals on its icon.
     const agentLinks: Array<IListItem> = agentEnabled
-        ? [{ text: 'Agent', link: AGENT_ROUTE, icon: <AutoAwesomeIcon />, accent: true }]
+        ? [{ text: 'Agent', link: AGENT_ROUTE, icon: <AgentNavIcon />, accent: true, ariaLabel: agentBadge.label }]
         : [];
 
     const internalLinks: Array<IListItem> = [
@@ -220,7 +223,7 @@ export default function SideNav() {
     }
 
     function renderListItem(item: IListItem) {
-        const { text, disabled, icon, external, accent } = item;
+        const { text, disabled, icon, external, accent, ariaLabel } = item;
         const isActive = item.link === activeItemLink;
         const backgroundColor = isActive ? 'rgba(0,0,0,0.07)' : undefined;
         return (
@@ -228,6 +231,7 @@ export default function SideNav() {
                 disabled={disabled}
                 key={item.link}
                 onClick={() => handleLinkOnClick(item)}
+                aria-label={ariaLabel}
                 style={{ backgroundColor, borderRadius: '10px' }}
             >
                 <ListItemIcon
