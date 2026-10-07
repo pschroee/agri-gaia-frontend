@@ -8,6 +8,7 @@ import { AgentApiError, agentApi, approvalEventsUrl, silentLogin } from './api';
 import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './approvalFeed';
 import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
+import { PanelState, panelReducer, panelShown } from './panelCarry';
 import type { SubagentRun } from './subagents';
 import type { Approval, Chat, Config, Me, Model } from './types';
 import type { Compacting } from './usage';
@@ -58,8 +59,14 @@ type AgentState = {
     /** Compactions the open chat views see running right now, by chat id (for the panel header). */
     compacting: Record<string, Compacting>;
     setCompacting: (chatId: string, c: Compacting | undefined) => void;
+    /** The context panel is open on platform pages (the user's choice, or a chat carried from /ai-agent). */
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
+    /**
+     * Tells the panel rule where the user is (panelCarry.ts): leaving the Chat tab of /ai-agent with a chat open
+     * carries that chat into the panel (issue #50). Called by the router-aware AgentRouteSync.
+     */
+    noteRoute: (pathname: string, search: string) => void;
     /** Open approvals across all the user's chats, oldest first, live from GET /events (approvalFeed.ts). */
     pendingApprovals: Approval[];
     /** Their number (badge of the floating button). */
@@ -74,6 +81,7 @@ export type OpenChatSubagents = { chatId: string; runs: SubagentRun[]; chatRunni
 const AgentContext = createContext<AgentState | undefined>(undefined);
 
 const PANEL_KEY = 'agentPanelOpen';
+const CARRY_KEY = 'agentPanelCarry';
 const CHAT_KEY = 'agentSelectedChat';
 
 function load(key: string): string | null {
@@ -108,7 +116,11 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
     const [subagent, setSubagent] = useState<{ chatId: string; runId: string }>();
     const [openChatSubagents, setOpenChatSubagentsState] = useState<OpenChatSubagents>();
-    const [panelOpen, setPanelOpenState] = useState(() => load(PANEL_KEY) === 'true');
+    const [panel, dispatchPanel] = useReducer(
+        panelReducer,
+        undefined,
+        (): PanelState => ({ open: load(PANEL_KEY) === 'true', carry: load(CARRY_KEY) === 'true' }),
+    );
     const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
     const [creatingChat, setCreatingChat] = useState(false);
     const [newChatError, setNewChatError] = useState<string>();
@@ -293,10 +305,17 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
-    const setPanelOpen = useCallback((open: boolean) => {
-        setPanelOpenState(open);
-        store(PANEL_KEY, String(open));
-    }, []);
+    const setPanelOpen = useCallback((open: boolean) => dispatchPanel({ type: 'set', open }), []);
+    const hasChat = !!selectedChatId;
+    const noteRoute = useCallback(
+        (pathname: string, search: string) => dispatchPanel({ type: 'route', pathname, search, hasChat }),
+        [hasChat],
+    );
+    useEffect(() => {
+        store(PANEL_KEY, String(panel.open));
+        store(CARRY_KEY, String(panel.carry));
+    }, [panel]);
+    const panelOpen = panelShown(panel);
 
     const value = useMemo<AgentState>(
         () => ({
@@ -327,6 +346,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setCompacting,
             panelOpen,
             setPanelOpen,
+            noteRoute,
             pendingApprovals,
             pendingApprovalCount: pendingApprovals.length,
             approvalsLive,
@@ -359,6 +379,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setCompacting,
             panelOpen,
             setPanelOpen,
+            noteRoute,
             pendingApprovals,
             approvalsLive,
         ],
