@@ -132,6 +132,42 @@ export const agentApi = {
         for (const f of files) form.append('file', f, f.name);
         return request<Artifact[]>(`chats/${enc(id)}/files`, { method: 'POST', body: form });
     },
+    /**
+     * Uploads one file and reports the share sent so far (0 to 1) for its tile (issue #54). fetch cannot report
+     * upload progress, so this goes through XMLHttpRequest; errors are the same AgentApiError as `request`'s.
+     */
+    uploadFile: (id: string, file: File, onProgress: (share: number) => void) =>
+        new Promise<Artifact[]>((resolve, reject) => {
+            const form = new FormData();
+            form.append('file', file, file.name);
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API}/chats/${enc(id)}/files`);
+            xhr.withCredentials = true;
+            xhr.setRequestHeader('Accept', 'application/json');
+            xhr.upload.onprogress = (e) => {
+                if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
+            };
+            xhr.onerror = () => reject(new AgentApiError(0, 'Network error'));
+            xhr.onabort = () => reject(new AgentApiError(0, 'Upload aborted'));
+            xhr.onload = () => {
+                let body: unknown;
+                try {
+                    body = JSON.parse(xhr.responseText);
+                } catch {
+                    // response without JSON body
+                }
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    onProgress(1);
+                    resolve(Array.isArray(body) ? (body as Artifact[]) : []);
+                    return;
+                }
+                const b = (body ?? {}) as { error?: string; code?: string; details?: unknown };
+                reject(
+                    new AgentApiError(xhr.status, b.error || `${xhr.status} ${xhr.statusText}`, b.code, b.details),
+                );
+            };
+            xhr.send(form);
+        }),
     /** Slash commands: the gateway's built-in ones and pi's (extensions, prompt templates, skills). */
     commands: (id: string) => request<Command[]>(`chats/${enc(id)}/commands`),
     /**

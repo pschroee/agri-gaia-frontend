@@ -15,7 +15,6 @@ import {
     runStateOf,
     runStateText,
     inputControls,
-    inputStatusText,
 } from './runState';
 import type { StatePlace } from './runState';
 import type { Chat, StoredMessage } from './types';
@@ -54,7 +53,7 @@ describe('runStateOf', () => {
 
     it('never shows the idle state of the gateway (issue #31): a dormant chat counts as idle', () => {
         expect(runStateOf(chat({ state: 'dormant' }))).toBe('idle');
-        const places: StatePlace[] = ['header', 'list', 'input'];
+        const places: StatePlace[] = ['header', 'list'];
         const states = ['working', 'waiting', 'starting', 'resuming', 'idle'] as const;
         const texts = [
             ...places.flatMap((p) => states.map((s) => runStateText(s, p) ?? '')),
@@ -96,13 +95,13 @@ describe('runStateOf', () => {
 
 // issue #35: a state shows only while something happens
 describe('state display', () => {
-    const PLACES: StatePlace[] = ['header', 'list', 'input'];
-    // what header, list and input row show for a chat, with the live options of the open view
+    const PLACES: StatePlace[] = ['header', 'list'];
+    // what header and list show for a chat (the input field shows no state since issue #54), with the live options of the open view
     const shown = (c: RunChat, opts: Parameters<typeof runStateOf>[1] = {}) => {
         const s = runStateOf(c, opts);
         return Object.fromEntries(PLACES.map((p) => [p, runStateText(s, p)]));
     };
-    const nothing = { header: undefined, list: undefined, input: undefined };
+    const nothing = { header: undefined, list: undefined };
 
     it('shows nothing for a ready active chat: no "active", no "Idle"', () => {
         expect(shown(chat())).toEqual(nothing);
@@ -115,7 +114,7 @@ describe('state display', () => {
     });
 
     it('shows "loading" in header and lists while resuming, nothing below the input (steps in the transcript)', () => {
-        const want = { header: 'loading', list: 'loading', input: undefined };
+        const want = { header: 'loading', list: 'loading' };
         expect(shown(chat({ state: 'dormant', resuming: true }))).toEqual(want);
         expect(shown(chat({ state: 'dormant' }), { resumeRunning: true })).toEqual(want);
         expect(isLoading('resuming')).toBe(true);
@@ -126,22 +125,20 @@ describe('state display', () => {
         expect(shown(chat({ starting: true, resuming: true }))).toEqual({
             header: 'loading',
             list: 'loading',
-            input: undefined,
         });
         expect(isLoading('starting')).toBe(true);
         expect(inputControls('starting', true).buttons).toEqual(['send']);
     });
 
-    it('shows working everywhere, with Stop in the input', () => {
-        expect(shown(chat({ running: true }))).toEqual({ header: 'working', list: 'working', input: 'Working' });
+    it('shows working in header and lists, with Stop in the input', () => {
+        expect(shown(chat({ running: true }))).toEqual({ header: 'working', list: 'working' });
         expect(inputControls('working', false).buttons).toEqual(['stop']);
     });
 
-    it('shows a pending approval everywhere, with Stop in the input', () => {
+    it('shows a pending approval in header and lists, with Stop in the input', () => {
         expect(shown(chat({ running: true }), { pendingApprovals: 1 })).toEqual({
             header: 'needs approval',
             list: 'waiting for approval',
-            input: 'Needs approval',
         });
         expect(inputControls('waiting', false).buttons).toEqual(['stop']);
     });
@@ -153,7 +150,6 @@ describe('state display', () => {
 
     it('has no text without a chat', () => {
         expect(runStateText(undefined, 'header')).toBeUndefined();
-        expect(inputStatusText(undefined)).toBeUndefined();
         expect(inputControls(undefined, true).buttons).toEqual(['send']);
     });
 });
@@ -187,17 +183,6 @@ describe('input controls', () => {
         expect(inputControls('waiting', true, false)).toEqual({ buttons: ['stop', 'send'], enter: 'send' });
         // a resuming chat that the gateway still marks running queues
         expect(inputControls('resuming', true, true)).toEqual({ buttons: ['queue'], enter: 'queue' });
-    });
-
-    it('labels the run state below the input, "Stopping …" only while a turn runs', () => {
-        expect(inputStatusText('working')).toBe('Working');
-        expect(inputStatusText('waiting')).toBe('Needs approval');
-        expect(inputStatusText('working', true)).toBe('Stopping …');
-        expect(inputStatusText('waiting', true)).toBe('Stopping …');
-        // the turn has ended: nothing, not "Stopping …"
-        expect(inputStatusText('idle', true)).toBeUndefined();
-        expect(inputStatusText('idle')).toBeUndefined();
-        expect(inputStatusText('resuming')).toBeUndefined();
     });
 
     it('words a failed stop for the line below the input', () => {

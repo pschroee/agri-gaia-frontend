@@ -57,8 +57,11 @@ export type ChatStream = {
     executions: ToolExecution[];
     /** Inputs and outputs of the chat (from the chat, uploads and the SSE event "artifact"). */
     artifacts: Artifact[];
-    /** Uploads files for the agent; returns the stored inputs. Throws AgentApiError. */
-    uploadFiles: (files: File[]) => Promise<Artifact[]>;
+    /**
+     * Uploads files for the agent; returns the stored inputs. Throws AgentApiError. With onProgress, one file at a
+     * time with its share sent so far.
+     */
+    uploadFiles: (files: File[], onProgress?: (share: number) => void) => Promise<Artifact[]>;
     /** Queued messages (gateway entries, then the ones still being sent). */
     queue: QueueRow[];
     /** Last failure of a queue action (removing, sending now); cleared by the next one. */
@@ -460,9 +463,12 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     );
 
     const uploadFiles = useCallback(
-        async (files: File[]) => {
+        async (files: File[], onProgress?: (share: number) => void) => {
             if (!chatId || files.length === 0) return [];
-            const list = await agentApi.uploadFiles(chatId, files);
+            const list =
+                onProgress && files.length === 1 && typeof XMLHttpRequest !== 'undefined'
+                    ? await agentApi.uploadFile(chatId, files[0], onProgress)
+                    : await agentApi.uploadFiles(chatId, files);
             const stored = Array.isArray(list) ? list : [];
             setArtifacts((l) => mergeArtifacts(l, stored));
             return stored;

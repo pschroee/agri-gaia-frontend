@@ -16,7 +16,7 @@ import { freshChatFor } from '../newChat';
 import type { PageContext } from '../pageContext';
 import { useCurrentPageContext } from '../pageSelection';
 import { resumeRunning } from '../resume';
-import { runSince, runStateOf } from '../runState';
+import { runStateOf } from '../runState';
 import { groupRuns, isLiveStatus, runStatus, runsByCall, subagentNav } from '../subagents';
 import type { SubagentNavItem } from '../subagents';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
@@ -54,8 +54,6 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
-    // a new chat waiting for its sandbox counts from its creation
-    const since = runState === 'starting' && chat ? Date.parse(chat.created_at) || undefined : runSince(chat, messages);
     // the open chat's live state goes to the chat list and the panel header
     const agent = useAgentOptional();
     const updateChat = agent?.updateChat;
@@ -260,7 +258,6 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                         chatId={chatId}
                         running={stream.chat?.running}
                         runState={runState}
-                        since={since}
                         onAbort={stream.abort}
                         placeholder={placeholder}
                         commands={commands}

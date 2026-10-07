@@ -15,6 +15,7 @@ import {
     fileTypeTag,
     formatBytes,
     mergeArtifacts,
+    pastedFiles,
     placeOutputs,
     previewKind,
     READABLE_FORMATS,
@@ -22,6 +23,7 @@ import {
     splitFileName,
     stagedReducer,
     truncateMiddle,
+    uploadingText,
     uploadErrorText,
     withAttachments,
 } from './files';
@@ -141,45 +143,63 @@ describe('Office documents (issue #42)', () => {
 });
 
 describe('stagedReducer', () => {
-    it('counts uploads and stages the uploaded files, replacing same names', () => {
-        let s = stagedReducer(emptyStaged, { type: 'upload_start' });
+    const start = (id: string, name = `${id}.csv`) =>
+        ({ type: 'upload_start', upload: { id, name, size: 100 } }) as const;
+
+    it('tracks uploads with their progress and stages the uploaded files, replacing same names', () => {
+        let s = stagedReducer(emptyStaged, start('u1', 'a.csv'));
         expect(canSend('', s)).toBe(false);
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv'), art('b.png')] });
-        s = stagedReducer(s, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv', { size: 5 })] });
-        expect(s.uploading).toBe(0);
+        expect(s.uploads).toEqual([{ id: 'u1', name: 'a.csv', size: 100, progress: 0 }]);
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 0.71 });
+        expect(uploadingText(s.uploads[0].progress)).toBe('Uploading 71%');
+        // a late, smaller value does not move it back; values outside 0..1 are clamped
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 0.5 });
+        expect(s.uploads[0].progress).toBe(0.71);
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 7 });
+        expect(s.uploads[0].progress).toBe(1);
+        // an unknown id changes nothing
+        expect(stagedReducer(s, { type: 'upload_progress', id: 'x', progress: 0.2 })).toBe(s);
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv'), art('b.png')] });
+        s = stagedReducer(s, start('u2', 'a.csv'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u2', files: [art('a.csv', { size: 5 })] });
+        expect(s.uploads.length).toBe(0);
         expect(s.files.map((f) => `${f.name}:${f.size}`)).toEqual(['b.png:100', 'a.csv:5']);
         expect(canSend('', s)).toBe(true);
     });
 
     it('keeps staged files on a failed upload and blocks sending while one is in flight', () => {
-        let s = stagedReducer(emptyStaged, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv')] });
-        s = stagedReducer(s, { type: 'upload_start' });
+        let s = stagedReducer(emptyStaged, start('u1'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv')] });
+        s = stagedReducer(s, start('u2'));
+        s = stagedReducer(s, start('u3'));
+        expect(s.uploads.length).toBe(2);
         expect(canSend('text', s)).toBe(false);
-        s = stagedReducer(s, { type: 'upload_failed', error: 'Upload failed: 413' });
-        expect(s).toMatchObject({ uploading: 0, error: 'Upload failed: 413' });
+        s = stagedReducer(s, { type: 'upload_failed', id: 'u2', error: 'Upload failed: 413' });
+        expect(s).toMatchObject({ error: 'Upload failed: 413' });
+        expect(s.uploads.map((u) => u.id)).toEqual(['u3']);
+        s = stagedReducer(s, { type: 'upload_failed', id: 'u3', error: 'Upload failed: 500' });
+        expect(s.uploads.length).toBe(0);
         expect(s.files).toHaveLength(1);
     });
 
     it('removes, clears after sending and restores after a failed send', () => {
-        let s = stagedReducer(emptyStaged, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('a.csv'), art('b.csv')] });
+        let s = stagedReducer(emptyStaged, start('u1'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv'), art('b.csv')] });
         s = stagedReducer(s, { type: 'remove', name: 'a.csv' });
         expect(s.files.map((f) => f.name)).toEqual(['b.csv']);
         const sent = s.files;
         s = stagedReducer(s, { type: 'clear' });
         expect(s.files).toEqual([]);
         // a new file staged while the send was in flight stays behind the restored ones
-        s = stagedReducer(s, { type: 'upload_start' });
-        s = stagedReducer(s, { type: 'upload_done', files: [art('c.csv')] });
+        s = stagedReducer(s, start('u2'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u2', files: [art('c.csv')] });
         s = stagedReducer(s, { type: 'restore', files: sent });
         expect(s.files.map((f) => f.name)).toEqual(['b.csv', 'c.csv']);
     });
 
     it('notes refused files without touching the staged ones', () => {
         const s = stagedReducer(emptyStaged, { type: 'refused', error: 'Too large' });
-        expect(s).toEqual({ files: [], uploading: 0, error: 'Too large' });
+        expect(s).toEqual({ files: [], uploads: [], error: 'Too large' });
         expect(canSend('  ', s)).toBe(false);
     });
 });
@@ -409,3 +429,18 @@ describe('placeOutputs', () => {
     });
 });
 
+describe('pastedFiles', () => {
+    const file = (name: string) => ({ name }) as File;
+    it('takes the clipboard files, else its file items, nothing for text', () => {
+        const a = file('a.png');
+        expect(pastedFiles({ files: [a] as unknown as FileList, items: [] as unknown as DataTransferItemList })).toEqual([a]);
+        const items = [
+            { kind: 'string', getAsFile: () => null },
+            { kind: 'file', getAsFile: () => a },
+            { kind: 'file', getAsFile: () => null },
+        ] as unknown as DataTransferItemList;
+        expect(pastedFiles({ files: [] as unknown as FileList, items })).toEqual([a]);
+        expect(pastedFiles({ files: [] as unknown as FileList, items: [] as unknown as DataTransferItemList })).toEqual([]);
+        expect(pastedFiles(null)).toEqual([]);
+    });
+});

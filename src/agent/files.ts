@@ -102,16 +102,19 @@ export function checkSizes<F extends { name: string; size: number }>(
 /** A file on its way to the gateway: shown as a tile with its progress until the gateway has stored it. */
 export type UploadInFlight = { id: string; name: string; size: number; content_type?: string; progress: number };
 
-/** Attachments of the message being written: uploaded inputs, an upload in flight and its last failure. */
-export type StagedState = { files: Artifact[]; uploading: number; error?: string };
+/** Attachments of the message being written: uploaded inputs, uploads in flight and the last failure. */
+export type StagedState = { files: Artifact[]; uploads: UploadInFlight[]; error?: string };
 
-export const emptyStaged: StagedState = { files: [], uploading: 0 };
+export const emptyStaged: StagedState = { files: [], uploads: [] };
 
 export type StagedAction =
-    | { type: 'upload_start' }
+    /** A file starts uploading (one request per file, so each tile has its own progress). */
+    | { type: 'upload_start'; upload: Omit<UploadInFlight, 'progress'> }
+    /** Share of the file sent so far, 0 to 1. */
+    | { type: 'upload_progress'; id: string; progress: number }
     /** Uploaded: replaces staged files of the same name (the gateway overwrites the input as well). */
-    | { type: 'upload_done'; files: Artifact[] }
-    | { type: 'upload_failed'; error: string }
+    | { type: 'upload_done'; id: string; files: Artifact[] }
+    | { type: 'upload_failed'; id: string; error: string }
     /** Files refused before uploading (size check); the others go on. */
     | { type: 'refused'; error: string }
     | { type: 'remove'; name: string }
@@ -125,18 +128,27 @@ const mergeByName = (base: Artifact[], add: Artifact[]) => [
     ...add,
 ];
 
+const without = (uploads: UploadInFlight[], id: string) => uploads.filter((u) => u.id !== id);
+
 export function stagedReducer(state: StagedState, action: StagedAction): StagedState {
     switch (action.type) {
         case 'upload_start':
-            return { ...state, uploading: state.uploading + 1, error: undefined };
-        case 'upload_done':
+            return { ...state, uploads: [...state.uploads, { ...action.upload, progress: 0 }], error: undefined };
+        case 'upload_progress': {
+            const progress = Math.min(1, Math.max(0, action.progress));
+            if (!state.uploads.some((u) => u.id === action.id)) return state;
             return {
                 ...state,
-                uploading: Math.max(0, state.uploading - 1),
-                files: mergeByName(state.files, action.files),
+                // progress never runs backwards (a late event of an earlier chunk)
+                uploads: state.uploads.map((u) =>
+                    u.id === action.id ? { ...u, progress: Math.max(u.progress, progress) } : u,
+                ),
             };
+        }
+        case 'upload_done':
+            return { ...state, uploads: without(state.uploads, action.id), files: mergeByName(state.files, action.files) };
         case 'upload_failed':
-            return { ...state, uploading: Math.max(0, state.uploading - 1), error: action.error };
+            return { ...state, uploads: without(state.uploads, action.id), error: action.error };
         case 'refused':
             return { ...state, error: action.error };
         case 'remove':
@@ -150,9 +162,23 @@ export function stagedReducer(state: StagedState, action: StagedAction): StagedS
     }
 }
 
+/**
+ * Files in a paste (a screenshot copied to the clipboard, files copied in the file manager): the clipboard's file list,
+ * else its items of kind "file". Empty for a text paste, which then goes into the field as usual.
+ */
+export function pastedFiles(data: Pick<DataTransfer, 'files' | 'items'> | null | undefined): File[] {
+    if (!data) return [];
+    const files = Array.from(data.files ?? []);
+    if (files.length) return files;
+    return Array.from(data.items ?? [])
+        .filter((i) => i.kind === 'file')
+        .map((i) => i.getAsFile())
+        .filter((f): f is File => !!f);
+}
+
 /** Can the message be sent? Text or at least one attachment, and no upload in flight (it would be left out). */
 export function canSend(text: string, staged: StagedState): boolean {
-    return staged.uploading === 0 && (text.trim() !== '' || staged.files.length > 0);
+    return staged.uploads.length === 0 && (text.trim() !== '' || staged.files.length > 0);
 }
 
 /** "Uploading 71%" on the tile of a file in flight. */

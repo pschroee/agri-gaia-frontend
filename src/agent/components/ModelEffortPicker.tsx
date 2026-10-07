@@ -14,7 +14,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import MemoryOutlinedIcon from '@mui/icons-material/MemoryOutlined';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 
@@ -41,12 +41,15 @@ const triggerSx = {
     fontWeight: 400,
     color: 'text.secondary',
     minWidth: 0,
-    px: 0.75,
-    py: 0.25,
-    borderRadius: 999,
+    height: 28,
+    pl: 1,
+    pr: 0.5,
+    py: 0,
+    borderRadius: '14px',
     '& .MuiButton-startIcon': { mr: 0.5, ml: 0 },
-    '& .MuiButton-endIcon': { ml: 0.25, mr: 0 },
-    '& .MuiButton-startIcon > *:nth-of-type(1), & .MuiButton-endIcon > *:nth-of-type(1)': { fontSize: 15 },
+    '& .MuiButton-endIcon': { ml: 0, mr: 0 },
+    '& .MuiButton-startIcon > *:nth-of-type(1)': { fontSize: 16 },
+    '& .MuiButton-endIcon > *:nth-of-type(1)': { fontSize: 18 },
 } as const;
 
 function Trigger({
@@ -75,7 +78,7 @@ function Trigger({
                     variant="text"
                     color="inherit"
                     startIcon={icon}
-                    endIcon={<ExpandMoreIcon />}
+                    endIcon={<ArrowDropDownIcon />}
                     disabled={disabled}
                     onClick={onClick}
                     aria-label={`${title}: ${label}`}

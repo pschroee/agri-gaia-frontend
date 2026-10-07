@@ -2,17 +2,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { KeyboardEvent, ReactNode, useEffect, useId, useReducer, useRef, useState } from 'react';
+import { ClipboardEvent, KeyboardEvent, ReactNode, useEffect, useId, useReducer, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import TextField from '@mui/material/TextField';
+import InputBase from '@mui/material/InputBase';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import SendIcon from '@mui/icons-material/Send';
-import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import StopRoundedIcon from '@mui/icons-material/StopRounded';
 import CloseIcon from '@mui/icons-material/Close';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
@@ -20,10 +19,18 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { AgentApiError } from '../api';
 import { isSlashCommand } from '../commands';
 import { PageContext, contextKey, hasSelection, inputPlaceholder, visibleContext } from '../pageContext';
-import { attachHint, canSend, checkSizes, emptyStaged, stagedReducer, uploadErrorText } from '../files';
+import {
+    attachHint,
+    canSend,
+    checkSizes,
+    emptyStaged,
+    pastedFiles,
+    stagedReducer,
+    uploadErrorText,
+} from '../files';
 import type { FreshChat } from '../newChat';
 import type { Artifact, Command } from '../types';
-import { RUN_STATE_HINT, abortErrorText, inputControls, inputStatusText, isRunning } from '../runState';
+import { abortErrorText, inputControls, isRunning } from '../runState';
 import type { RunState } from '../runState';
 import { sendTipIdle, sendTipReducer } from '../sendTooltip';
 import { useFileDrop } from '../useFileDrop';
@@ -32,14 +39,16 @@ import { useAgentDropTarget } from './AgentDropZone';
 import SlashCommandMenu, { optionId } from './SlashCommandMenu';
 import { StagedAttachments } from './Attachments';
 import { PageContextChip } from './PageContextChip';
-import { Elapsed, RUN_STATE_COLOR, RunStateIcon } from './RunStateChip';
 import { agentColors } from './tokens';
 
 type Props = {
     /** Sends the text with the names of the uploaded attachments and the page context (unless the user removed it). */
     onSend: (text: string, attachments: string[], context?: PageContext) => Promise<void>;
-    /** Uploads files for the agent (button and drag and drop); without it the field takes no files. */
-    onUpload?: (files: File[]) => Promise<Artifact[]>;
+    /**
+     * Uploads files for the agent (button, drag and drop, paste); without it the field takes no files. Called with one
+     * file at a time and a progress callback (share sent so far, 0 to 1).
+     */
+    onUpload?: (files: File[], onProgress?: (share: number) => void) => Promise<Artifact[]>;
     /** Size limit per file in MB (gateway config), checked before uploading. */
     maxFileMb?: number;
     /** Chat of the field, for thumbnails of staged images. */
@@ -48,8 +57,6 @@ type Props = {
     running?: boolean;
     /** Run state of the chat: while a turn runs (working or waiting), Stop sits in the field and the state below it. */
     runState?: RunState;
-    /** Start of the running turn (ms), for the timer below the field. */
-    since?: number;
     /** Stops the running turn (`POST …/abort`). */
     onAbort?: () => Promise<void>;
     disabled?: boolean;
@@ -92,7 +99,6 @@ export default function ChatInput({
     chatId,
     running,
     runState,
-    since,
     onAbort,
     disabled,
     placeholder,
@@ -120,6 +126,7 @@ export default function ChatInput({
     // controlled tooltip of the send button (sendTooltip.ts: not after a send, not without real pointer movement)
     const [sendTip, sendTipEvent] = useReducer(sendTipReducer, sendTipIdle);
     const fileRef = useRef<HTMLInputElement>(null);
+    const uploadSeq = useRef(0);
     const inputRef = useRef<HTMLTextAreaElement>(null);
     const listId = `agent-slash-${useId().replace(/:/g, '')}`;
     const slash = useSlashCommands(onCommand ? commands ?? NO_COMMANDS : NO_COMMANDS, text, setText);
@@ -138,19 +145,30 @@ export default function ChatInput({
         if (justSlash && onCommand) onCommandsOpen?.();
     }, [justSlash, onCommand, onCommandsOpen]);
 
+    // one request per file, so each tile shows its own progress ("Uploading 71%", issue #54)
     const upload = async (files: File[]) => {
         if (!onUpload || files.length === 0) return;
         const { ok, error: tooBig } = checkSizes(files, maxFileMb);
         if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
-        if (ok.length === 0) return;
-        dispatchStaged({ type: 'upload_start' });
-        try {
-            dispatchStaged({ type: 'upload_done', files: await onUpload(ok) });
-            // the size note stays visible next to the uploaded files
-            if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
-        } catch (e) {
-            dispatchStaged({ type: 'upload_failed', error: uploadErrorText(e, maxFileMb) });
-        }
+        await Promise.all(
+            ok.map(async (file) => {
+                const id = `up-${++uploadSeq.current}`;
+                dispatchStaged({
+                    type: 'upload_start',
+                    upload: { id, name: file.name, size: file.size, content_type: file.type || undefined },
+                });
+                try {
+                    const stored = await onUpload([file], (share) =>
+                        dispatchStaged({ type: 'upload_progress', id, progress: share }),
+                    );
+                    dispatchStaged({ type: 'upload_done', id, files: stored });
+                    // the size note stays visible next to the uploaded files
+                    if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
+                } catch (e) {
+                    dispatchStaged({ type: 'upload_failed', id, error: uploadErrorText(e, maxFileMb) });
+                }
+            }),
+        );
     };
 
     // A chat just created by "New chat": the field is ready at once, files dropped without an open chat are attached.
@@ -201,7 +219,6 @@ export default function ChatInput({
     const ownDrop = useFileDrop(inZone ? undefined : dropTarget);
     const dragging = ownDrop.active;
     const dropHandlers = inZone ? {} : ownDrop.handlers;
-    const uploading = staged.uploading > 0;
     const sendable = onCommand && isSlashCommand(text.trim()) ? true : canSend(text, staged);
 
     const stop = async () => {
@@ -222,8 +239,15 @@ export default function ChatInput({
     const hasContent = text.trim() !== '' || staged.files.length > 0;
     const controls = inputControls(onAbort ? runState : undefined, hasContent, running);
     const queueing = controls.enter === 'queue';
-    const statusText = inputStatusText(runState, stopping);
-    const showStatus = !!runState && !!statusText;
+
+    // pasted files (a screenshot from the clipboard) are attached like dropped ones; text pastes as usual
+    const onPaste = (e: ClipboardEvent) => {
+        if (!onUpload || disabled) return;
+        const files = pastedFiles(e.clipboardData);
+        if (files.length === 0) return;
+        e.preventDefault();
+        void upload(files);
+    };
 
     // Enter sends or queues; Escape is left alone (the slash menu closes with it), it never stops the agent
     const onKeyDown = (e: KeyboardEvent) => {
@@ -234,8 +258,67 @@ export default function ChatInput({
         }
     };
 
+    const placeholderText = queueing
+        ? 'Queue another message …'
+        : `${inputPlaceholder(chip, placeholder)}${onCommand ? ' (/ for commands)' : ''}`;
+    const roundSx = { width: 36, height: 36, flex: 'none' } as const;
+    const sendButton = controls.buttons.some((b) => b !== 'stop') && (
+        <Tooltip
+            title={queueing ? 'Queue message (goes to the agent when the current run ends)' : 'Send (Enter)'}
+            open={sendTip.open}
+            onOpen={(e) => sendTipEvent({ type: 'open', by: e.type.startsWith('mouse') ? 'hover' : 'focus' })}
+            onClose={() => sendTipEvent({ type: 'close' })}
+        >
+            <span
+                onMouseMove={() => sendTipEvent({ type: 'move' })}
+                onMouseLeave={() => sendTipEvent({ type: 'leave' })}
+                style={{ display: 'inline-flex' }}
+            >
+                <IconButton
+                    disabled={disabled || busy || !sendable}
+                    onClick={() => void send()}
+                    aria-label={queueing ? 'Queue message' : 'Send'}
+                    data-testid="agent-send"
+                    sx={{
+                        ...roundSx,
+                        bgcolor: agentColors.green,
+                        color: '#fff',
+                        '&:hover': { bgcolor: '#0b3f25' },
+                        '&.Mui-disabled': { bgcolor: 'rgba(0, 0, 0, 0.12)', color: 'rgba(0, 0, 0, 0.26)' },
+                    }}
+                >
+                    <ArrowUpwardIcon sx={{ fontSize: 20 }} />
+                </IconButton>
+            </span>
+        </Tooltip>
+    );
+    const stopButton = controls.buttons.includes('stop') && (
+        <Tooltip title="Stop">
+            <span style={{ display: 'inline-flex' }}>
+                <IconButton
+                    disabled={stopping}
+                    onClick={() => void stop()}
+                    aria-label="Stop"
+                    data-testid="agent-stop"
+                    sx={{
+                        ...roundSx,
+                        border: 1,
+                        borderColor: agentColors.outline,
+                        color: 'error.main',
+                    }}
+                >
+                    {stopping ? (
+                        <CircularProgress size={16} color="inherit" aria-label="Stopping" />
+                    ) : (
+                        <StopRoundedIcon sx={{ fontSize: 20 }} />
+                    )}
+                </IconButton>
+            </span>
+        </Tooltip>
+    );
+
     return (
-        <Box sx={{ display: 'grid', gap: 0.75, position: 'relative' }} data-testid="agent-chat-input" {...dropHandlers}>
+        <Box sx={{ display: 'grid', gap: 1, position: 'relative' }} data-testid="agent-chat-input" {...dropHandlers}>
             {dragging && (
                 <Box
                     data-testid="agent-drop-zone"
@@ -275,120 +358,82 @@ export default function ChatInput({
                 />
             )}
             {chip && <PageContextChip context={chip} onRemove={() => setDismissedContext(contextKey(chip))} />}
-            <StagedAttachments
-                chatId={chatId}
-                files={staged.files}
-                onRemove={(name) => dispatchStaged({ type: 'remove', name })}
-            />
-            <TextField
-                size="small"
-                fullWidth
-                multiline
-                maxRows={6}
-                value={text}
-                disabled={disabled}
-                placeholder={
-                    queueing
-                        ? 'Queue another message …'
-                        : `${inputPlaceholder(chip, placeholder)}${onCommand ? ' (/ for commands)' : ''}`
-                }
+            {/* the field (design): outlined box with the staged files, the text and a row with paperclip, model,
+                thinking level and the round send button; 2 px in the primary colour while focused */}
+            <Box
                 ref={setAnchor}
-                inputRef={inputRef}
-                onChange={(e) => setText(e.target.value)}
-                onKeyDown={onKeyDown}
-                sx={{ bgcolor: '#fff', '& .MuiInputBase-input': { fontSize: 14 } }}
-                inputProps={{
-                    role: onCommand ? 'combobox' : undefined,
-                    'aria-autocomplete': onCommand ? 'list' : undefined,
-                    'aria-expanded': onCommand ? slash.open : undefined,
-                    'aria-controls': slash.open ? listId : undefined,
-                    'aria-activedescendant': slash.open ? optionId(listId, slash.active) : undefined,
+                data-testid="agent-composer"
+                onClick={(e) => {
+                    // a click on the box's padding focuses the text, as in a text field
+                    if (e.target === e.currentTarget) inputRef.current?.focus();
                 }}
-                InputProps={{
-                    startAdornment: onUpload ? (
-                        <InputAdornment position="start" sx={{ alignSelf: 'flex-end', mb: 1.5, mr: 0.25, ml: -0.75 }}>
-                            <Tooltip title={attachHint(maxFileMb)}>
-                                <span>
-                                    <IconButton
-                                        size="small"
-                                        disabled={disabled || uploading}
-                                        onClick={() => fileRef.current?.click()}
-                                        aria-label="Attach files"
-                                    >
-                                        {uploading ? (
-                                            <CircularProgress size={16} aria-label="Uploading" />
-                                        ) : (
-                                            <AttachFileIcon fontSize="small" />
-                                        )}
-                                    </IconButton>
-                                </span>
-                            </Tooltip>
-                        </InputAdornment>
-                    ) : undefined,
-                    endAdornment: (
-                        <InputAdornment position="end" sx={{ alignSelf: 'flex-end', mb: 1.5, gap: 0.25 }}>
-                            {controls.buttons.includes('stop') && (
-                                <Tooltip title="Stop">
-                                    <span>
-                                        <IconButton
-                                            size="small"
-                                            color="error"
-                                            disabled={stopping}
-                                            onClick={() => void stop()}
-                                            aria-label="Stop"
-                                            data-testid="agent-stop"
-                                        >
-                                            {stopping ? (
-                                                <CircularProgress size={16} color="inherit" aria-label="Stopping" />
-                                            ) : (
-                                                <StopCircleOutlinedIcon fontSize="small" />
-                                            )}
-                                        </IconButton>
-                                    </span>
-                                </Tooltip>
-                            )}
-                            {controls.buttons.some((b) => b !== 'stop') && (
-                                <Tooltip
-                                    title={
-                                        queueing
-                                            ? 'Queue message (goes to the agent when the current run ends)'
-                                            : 'Send (Enter)'
-                                    }
-                                    open={sendTip.open}
-                                    onOpen={(e) =>
-                                        sendTipEvent({
-                                            type: 'open',
-                                            by: e.type.startsWith('mouse') ? 'hover' : 'focus',
-                                        })
-                                    }
-                                    onClose={() => sendTipEvent({ type: 'close' })}
+                sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    minWidth: 0,
+                    borderRadius: '8px',
+                    border: `1px solid ${agentColors.outline}`,
+                    bgcolor: '#fff',
+                    p: '8px 8px 4px',
+                    '&:hover': { borderColor: 'rgba(0, 0, 0, 0.87)' },
+                    '&:focus-within': { border: `2px solid ${agentColors.green}`, p: '7px 7px 3px' },
+                }}
+            >
+                <StagedAttachments
+                    chatId={chatId}
+                    files={staged.files}
+                    uploads={staged.uploads}
+                    onRemove={(name) => dispatchStaged({ type: 'remove', name })}
+                />
+                <InputBase
+                    multiline
+                    minRows={2}
+                    maxRows={6}
+                    fullWidth
+                    value={text}
+                    disabled={disabled}
+                    placeholder={placeholderText}
+                    inputRef={inputRef}
+                    onChange={(e) => setText(e.target.value)}
+                    onKeyDown={onKeyDown}
+                    onPaste={onPaste}
+                    sx={{
+                        p: '6px 6px 4px',
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                        '& textarea::placeholder': { color: 'rgba(0, 0, 0, 0.42)', opacity: 1 },
+                    }}
+                    inputProps={{
+                        'aria-label': 'Message',
+                        role: onCommand ? 'combobox' : undefined,
+                        'aria-autocomplete': onCommand ? 'list' : undefined,
+                        'aria-expanded': onCommand ? slash.open : undefined,
+                        'aria-controls': slash.open ? listId : undefined,
+                        'aria-activedescendant': slash.open ? optionId(listId, slash.active) : undefined,
+                    }}
+                />
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
+                    {onUpload && (
+                        <Tooltip title={attachHint(maxFileMb)}>
+                            <span style={{ display: 'inline-flex', flex: 'none' }}>
+                                <IconButton
+                                    disabled={disabled}
+                                    onClick={() => fileRef.current?.click()}
+                                    aria-label="Attach files"
+                                    sx={{ ...roundSx, color: 'rgba(0, 0, 0, 0.54)' }}
                                 >
-                                    <span
-                                        onMouseMove={() => sendTipEvent({ type: 'move' })}
-                                        onMouseLeave={() => sendTipEvent({ type: 'leave' })}
-                                    >
-                                        <IconButton
-                                            size="small"
-                                            color="primary"
-                                            disabled={disabled || busy || !sendable}
-                                            onClick={() => void send()}
-                                            aria-label={queueing ? 'Queue message' : 'Send'}
-                                        >
-                                            <SendIcon fontSize="small" />
-                                        </IconButton>
-                                    </span>
-                                </Tooltip>
-                            )}
-                        </InputAdornment>
-                    ),
-                }}
-            />
+                                    <AttachFileIcon sx={{ fontSize: 20 }} />
+                                </IconButton>
+                            </span>
+                        </Tooltip>
+                    )}
+                    {toolbar && <Box sx={{ flex: '0 1 auto', minWidth: 0 }}>{toolbar}</Box>}
+                    <Box sx={{ flex: 1 }} />
+                    {stopButton}
+                    {sendButton}
+                </Box>
+            </Box>
             {onCommand && <SlashCommandMenu menu={slash} anchor={anchor} id={listId} />}
-            {uploading && (
-                <Typography sx={{ fontSize: 11.5, color: 'text.secondary' }} role="status">
-                    Uploading …
-                </Typography>
-            )}
             {(error || staged.error) && (
                 <Typography role="alert" sx={{ fontSize: 11.5, color: 'error.main' }}>
                     {error ?? staged.error}
@@ -407,47 +452,6 @@ export default function ChatInput({
                     >
                         <CloseIcon sx={{ fontSize: 14 }} />
                     </IconButton>
-                </Box>
-            )}
-            {(toolbar || showStatus) && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0, mt: toolbar ? -0.5 : 0 }}>
-                    {toolbar && (
-                        // next to the run state the picker keeps its width (a fraction of a pixel less wraps it);
-                        // the state's label gives way instead
-                        <Box sx={{ flex: showStatus ? '1 0 auto' : '1 1 auto', minWidth: 0, ml: -0.75 }}>{toolbar}</Box>
-                    )}
-                    {showStatus && (
-                        <Box
-                            component="span"
-                            role="status"
-                            aria-live="polite"
-                            data-testid="agent-run-status"
-                            title={RUN_STATE_HINT[runState]}
-                            sx={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 0.6,
-                                // gives way before model and thinking level wrap: the label shrinks, dot and timer stay
-                                flex: '0 1000 auto',
-                                minWidth: 0,
-                                overflow: 'hidden',
-                                fontSize: 11,
-                                whiteSpace: 'nowrap',
-                                color: RUN_STATE_COLOR[runState],
-                            }}
-                        >
-                            <RunStateIcon state={runState} size={7} />
-                            <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {statusText}
-                            </Box>
-                            {turnRuns && since !== undefined && (
-                                <Box component="span" sx={{ flex: 'none', display: 'inline-flex', gap: 0.6 }}>
-                                    <span>·</span>
-                                    <Elapsed since={since} />
-                                </Box>
-                            )}
-                        </Box>
-                    )}
                 </Box>
             )}
         </Box>
