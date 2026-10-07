@@ -38,13 +38,13 @@ import {
     runStatus,
     runSubtitle,
     runTitle,
-    runTooltip,
     shortRunId,
 } from '../subagents';
 import type { RunStatus, SubagentRun } from '../subagents';
 import type { BackgroundTask, LLMCall, SubagentEntry, SubagentRunMeta } from '../types';
 import { useNow } from '../useNow';
 import { formatTokens, formatTokensShort } from '../usage';
+import EllipsisText from './EllipsisText';
 import Markdown from './Markdown';
 import StepList from './StepList';
 import { agentColors, blockSx, MONO } from './tokens';
@@ -283,13 +283,7 @@ function SubagentRow({
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
                             {live && <CircularProgress size={11} thickness={5} sx={{ flex: 'none' }} />}
-                            <Typography
-                                noWrap
-                                title={runTooltip(run)}
-                                sx={{ fontSize: 12.5, fontWeight: 500, minWidth: 0 }}
-                            >
-                                {runTitle(run)}
-                            </Typography>
+                            <EllipsisText text={runTitle(run)} sx={{ fontSize: 12.5, fontWeight: 500 }} />
                             {usage && (
                                 <Tooltip
                                     title={`${usage.calls} model call${usage.calls === 1 ? '' : 's'} · ${formatTokens(

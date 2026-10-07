@@ -10,6 +10,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -17,25 +18,20 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { isLiveStatus, runTranscript } from '../subagents';
 import type { RunStatus, SubagentNavItem, SubagentRun } from '../subagents';
 import { AgentBlock, UserBubble } from './Conversation';
+import EllipsisText from './EllipsisText';
 import type { Files, Thinking } from './Conversation';
 import { SubagentIcon, SubagentState } from './SubagentState';
 import { agentColors } from './tokens';
 
-/** Content of a sub-entry: robot, title (ellipsized, full task as tooltip) and state. */
+/**
+ * Content of a sub-entry: robot, title and state. The title ellipsizes; only then a one-line tooltip shows it in full
+ * (issue #52: the task itself is the first message of the subagent's transcript, not a tooltip).
+ */
 export function SubagentEntryContent({ item }: { item: SubagentNavItem }) {
     return (
-        <Box
-            component="span"
-            title={item.tooltip}
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, width: '100%' }}
-        >
+        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, width: '100%' }}>
             <SubagentIcon size={15} />
-            <Box
-                component="span"
-                sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            >
-                {item.title}
-            </Box>
+            <EllipsisText text={item.title} sx={{ flex: 1 }} />
             <SubagentState status={item.status} compact />
         </Box>
     );
@@ -89,6 +85,8 @@ export function GroupToggleButton({ open, count, onToggle }: { open: boolean; co
 /**
  * "← <chat title> › <subagent title>" in one line. Arrow and chat title lead back; the subagent's title ellipsizes
  * first, the chat title gives way down to a short stub. `onMouseDown` stops the click from opening a surrounding select.
+ * Tooltips (issue #52): "Back to chat" on the way back, the subagent's title only when it is cut; hover only, so at
+ * most one shows and none stays behind after a click elsewhere.
  */
 export function SubagentBreadcrumb({
     chatTitle,
@@ -97,7 +95,7 @@ export function SubagentBreadcrumb({
     fontSize = 13,
 }: {
     chatTitle: string;
-    item: Pick<SubagentNavItem, 'title' | 'tooltip'>;
+    item: Pick<SubagentNavItem, 'title'>;
     onBack: () => void;
     fontSize?: number;
 }) {
@@ -112,62 +110,53 @@ export function SubagentBreadcrumb({
             data-testid="agent-subagent-breadcrumb"
             sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, fontSize, lineHeight: 'inherit' }}
         >
-            <ButtonBase
-                component="span"
-                role="button"
-                tabIndex={0}
-                aria-label={`Back to chat ${chatTitle}`}
-                title={`Back to chat: ${chatTitle}`}
-                data-testid="agent-subagent-back"
-                onMouseDown={(e: MouseEvent) => e.stopPropagation()}
-                onClick={back}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.stopPropagation();
-                        e.preventDefault();
-                        onBack();
-                    }
-                }}
-                sx={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    minWidth: 0,
-                    flex: '0 1 auto',
-                    maxWidth: '38%',
-                    borderRadius: 0.5,
-                    color: 'text.secondary',
-                    fontSize: 'inherit',
-                    '&:hover': { color: 'text.primary', textDecoration: 'underline' },
-                }}
-            >
-                <ArrowBackIcon sx={{ fontSize: fontSize + 3, flex: 'none' }} />
-                <Box
+            <Tooltip title="Back to chat" disableFocusListener disableInteractive enterDelay={400}>
+                <ButtonBase
                     component="span"
-                    sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Back to chat ${chatTitle}`}
+                    data-testid="agent-subagent-back"
+                    onMouseDown={(e: MouseEvent) => e.stopPropagation()}
+                    onClick={back}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.stopPropagation();
+                            e.preventDefault();
+                            onBack();
+                        }
+                    }}
+                    sx={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 0.5,
+                        minWidth: 0,
+                        flex: '0 1 auto',
+                        maxWidth: '38%',
+                        borderRadius: 0.5,
+                        color: 'text.secondary',
+                        fontSize: 'inherit',
+                        '&:hover': { color: 'text.primary', textDecoration: 'underline' },
+                    }}
                 >
-                    {chatTitle}
-                </Box>
-            </ButtonBase>
+                    <ArrowBackIcon sx={{ fontSize: fontSize + 3, flex: 'none' }} />
+                    <Box
+                        component="span"
+                        sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                        {chatTitle}
+                    </Box>
+                </ButtonBase>
+            </Tooltip>
             <Box component="span" aria-hidden sx={{ color: 'text.disabled', flex: 'none' }}>
                 ›
             </Box>
             <SubagentIcon size={fontSize + 2} />
-            <Box
-                component="span"
-                title={item.tooltip}
-                sx={{
-                    flex: '1 1 0',
-                    minWidth: 40,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    color: agentColors.subagent,
-                    fontWeight: 500,
-                }}
-            >
-                {item.title}
-            </Box>
+            <EllipsisText
+                text={item.title}
+                testId="agent-subagent-breadcrumb-title"
+                sx={{ flex: '1 1 0', minWidth: 40, color: agentColors.subagent, fontWeight: 500 }}
+            />
         </Box>
     );
 }

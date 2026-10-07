@@ -25,6 +25,7 @@ import type { BackgroundTask } from '../types';
 import { formatMs } from '../format';
 import type { SubagentNavItem } from '../subagents';
 import type { Step, StepStatus } from '../transcript';
+import EllipsisText from './EllipsisText';
 import { SubagentIcon, SubagentState } from './SubagentState';
 import { agentColors, blockSx, MONO } from './tokens';
 
@@ -87,7 +88,6 @@ function SubagentLinks({ items, onOpen }: { items: SubagentNavItem[]; onOpen: (r
                     data-testid="agent-step-subagent"
                     data-run-id={it.runId}
                     onClick={() => onOpen(it.runId)}
-                    title={it.tooltip}
                     aria-label={`Open subagent ${it.title}`}
                     sx={{
                         display: 'flex',
@@ -104,18 +104,7 @@ function SubagentLinks({ items, onOpen }: { items: SubagentNavItem[]; onOpen: (r
                     }}
                 >
                     <SubagentIcon size={14} />
-                    <Box
-                        component="span"
-                        sx={{
-                            minWidth: 0,
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            color: agentColors.subagent,
-                        }}
-                    >
-                        {it.title}
-                    </Box>
+                    <EllipsisText text={it.title} sx={{ color: agentColors.subagent }} />
                     <SubagentState status={it.status} compact />
                     <ChevronRightIcon sx={{ fontSize: 16, color: 'text.secondary', ml: 'auto', flex: 'none' }} />
                 </ButtonBase>
