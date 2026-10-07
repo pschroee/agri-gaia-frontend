@@ -159,7 +159,26 @@ describe('subagent runs', () => {
         const items = runItems(a, false);
         expect(items.map((i) => i.type)).toEqual(['task', 'steps', 'text']);
         const steps = items[1].type === 'steps' ? items[1].steps : [];
-        expect(steps).toEqual([{ id: 'e2', tool: 'bash', summary: 'ls data', status: 'done' }]);
+        expect(steps).toMatchObject([{ id: 'e2', tool: 'bash', summary: 'ls data', status: 'done' }]);
+        // the call keeps its arguments and its result for the step's details (issue #58)
+        expect(steps[0]).toMatchObject({ name: 'bash', args: { command: 'ls data' }, result: { isError: false } });
+        // the gateway's executions of the call (by the call's ID) give exit code and duration
+        const withExec = runItems(a, false, [
+            {
+                id: 9,
+                chat_id: 'c1',
+                session: 'run-abcdef1',
+                tool_call_id: 'x1',
+                tool: 'bash',
+                op: 'bash',
+                args: {},
+                exit_code: 0,
+                output_bytes: 0,
+                started_at: at(2),
+                duration_ms: 340,
+            },
+        ])[1];
+        expect(withExec.type === 'steps' && withExec.steps[0]).toMatchObject({ durationMs: 340, executions: [{ id: 9 }] });
         // an open call runs while the run is live, otherwise it did not finish
         const open = { entries: a.entries.filter((e) => e.kind !== 'tool_result') };
         const live = runItems(open, true)[1];
@@ -258,7 +277,7 @@ describe('looking into subagents (issue #48)', () => {
         expect(items.map((i) => i.kind)).toEqual(['user', 'agent']);
         expect(items[0]).toMatchObject({ kind: 'user', text: 'Task: Count the images per class\nmore' });
         const agent = items[1];
-        expect(agent.kind === 'agent' && agent.parts).toEqual([
+        expect(agent.kind === 'agent' && agent.parts).toMatchObject([
             { type: 'steps', steps: [{ id: 'e2', tool: 'bash', summary: 'ls data', status: 'done' }] },
             { type: 'text', text: 'Two classes, 15 images each.' },
         ]);
