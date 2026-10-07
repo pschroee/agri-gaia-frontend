@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // Subagent runs: entries from the subagents' session files grouped per run, with name and state from pi-subagents
-// (subagent_runs), their own steps and the cost recorded at the LLM proxy. Pure functions, after the gateway's own
+// (subagent_runs), their own steps and the model calls recorded at the LLM proxy. Pure functions, after the gateway's own
 // web/src/lib/subagents.ts and subagent-overview.ts.
 import { displayToolName, summarizeArgs } from './transcript';
 import type { Step } from './transcript';
@@ -191,25 +191,22 @@ export function runDuration(run: Pick<SubagentRun, 'start' | 'end'>, status: Run
     return Math.max(0, (live ? Math.max(now, run.end) : run.end) - run.start);
 }
 
-export type RunCost = { calls: number; tokens: number; cost: number };
+export type RunUsage = { calls: number; tokens: number };
 
 /**
- * Cost of a run from the LLM proxy (tamper-proof), assigned by the response_id of its entries (which come from the
- * sandbox). undefined when no model call matches.
+ * Model calls and tokens of a run from the LLM proxy (tamper-proof), assigned by the response_id of its entries
+ * (which come from the sandbox). undefined when no model call matches.
  */
-export function runCost(run: Pick<SubagentRun, 'entries'>, calls: LLMCall[]): RunCost | undefined {
+export function runUsage(run: Pick<SubagentRun, 'entries'>, calls: LLMCall[]): RunUsage | undefined {
     const ids = new Set(run.entries.map((e) => e.response_id).filter((id): id is string => !!id));
     if (ids.size === 0) return undefined;
-    const out: RunCost = { calls: 0, tokens: 0, cost: 0 };
+    const out: RunUsage = { calls: 0, tokens: 0 };
     for (const c of calls) {
         if (!c.response_id || !ids.has(c.response_id)) continue;
         out.calls++;
         out.tokens += (c.input ?? 0) + (c.output ?? 0);
-        out.cost += c.cost ?? 0;
     }
-    if (out.calls === 0) return undefined;
-    out.cost = Math.round(out.cost * 1e9) / 1e9;
-    return out;
+    return out.calls === 0 ? undefined : out;
 }
 
 /** Adds model calls by id. */

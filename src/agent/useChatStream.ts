@@ -126,7 +126,7 @@ export type ChatStream = {
     subagentEntries: SubagentEntry[];
     /** Name and state of the subagent runs (GET chat, SSE "subagent_run"). */
     subagentRuns: SubagentRunMeta[];
-    /** Model calls at the LLM proxy, for the cost per subagent run (loaded once subagents exist, SSE "llm_call"). */
+    /** Model calls at the LLM proxy, for the tokens per subagent run (loaded once subagents exist, SSE "llm_call"). */
     llmCalls: LLMCall[];
 };
 
@@ -220,7 +220,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     () => undefined,
                 );
             } else dispatchRunning({ type: 'server', ids: [] });
-            // cost per subagent run comes from the LLM proxy; only needed once there are subagents
+            // tokens per subagent run come from the LLM proxy; only needed once there are subagents
             if ((d.subagent_entries?.length ?? 0) > 0 || (d.subagent_runs?.length ?? 0) > 0 || (d.chat?.subagents ?? 0) > 0) {
                 agentApi.llmCalls(chatId).then(
                     (l) => setLLMCalls((old) => mergeLLMCalls(old, l)),
@@ -328,7 +328,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         }
                         setResumes(closeResumes);
                         setCompacting((c) => compactingAfter(c, d, Date.now()));
-                        // the compaction entry, its cost and the new context exist only in the stored chat
+                        // the compaction entry, its sizes and the new context exist only in the stored chat
                         if (d.type === 'compaction_end') scheduleReload();
                         if (d.type === 'message_end') scheduleReload(d.message?.role === 'assistant' ? 'ended' : undefined);
                         if (
