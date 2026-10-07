@@ -140,10 +140,10 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   passes no section placeholder any more. **Wire form** (`wireContext`): one object as `object` (every gateway since
   #13), several as `objects` (gateway PR for #45). A gateway before #45 answers 400 `unknown field "objects"`;
   `sendMessage` then sends the page alone once more (`isOldGatewayRefusal`), never one object of several. Read
-  contexts from the gateway with `contextObjects` (`objects`, else the single `object` of older rows). Sent messages
-  show a muted "Refers to …" above the bubble ("Refers to Datasets", "Refers to 2 datasets"), taken only from the
-  structured `context` of the gateway's `page_context` source (the note itself is `audience: "agent"` and cut out);
-  queued rows show it from `QueueEntry.context`. `sectionOf` uses the same route table. Slash commands carry no
+  contexts from the gateway with `contextObjects` (`objects`, else the single `object` of older rows). **The transcript and the
+  queue show no context** (issue #46): no "Refers to …" at sent or queued messages, in panel and `/ai-agent` alike.
+  The data stays (`context` of a transcript user item from the gateway's `page_context` source, `QueueRow.context`
+  from `QueueEntry.context`), and the gateway keeps storing it for the evaluation. `sectionOf` uses the same route table. Slash commands carry no
   context. The context never grants rights; the delegation decides. Unit tests in `pageContext.test.ts`,
   `transcript.test.ts`, `queue.test.ts`. Render check: check boxes on `/data` with `/agent/api/**` and
   `api.<base>/datasets` mocked; no chip without a selection, the sent `context` per message.
@@ -251,8 +251,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `setCompacting` of the context, so the panel header shows a spinner, and the transcript shows "Compacting the
   context …", later the stored entry (role `compaction`, with sizes). `ChatTokens` shows the chat's `tokens` (summed by the
   gateway over the stored answers and compactions of the main session) with a tooltip: input, output, from cache with
-  its share, and `llm_calls` (LLM proxy, incl. subagents). Each answer gets a muted line "in · out · cache" from the
-  stored assistant messages. Panel: ring and an "Open in agent page" button in the header, no tokens figure (issue #33;
+  its share, and `llm_calls` (LLM proxy, incl. subagents). Answers carry no token line in the transcript (issue #46;
+  `buildTranscript` still sums `usage` per answer, nothing renders it). Panel: ring and an "Open in agent page" button in the header, no tokens figure (issue #33;
   the section chip then gives way; the input's placeholder names the section). The button (`expandToAgentPage` in
   `src/agent/expand.ts`, unit-tested) selects the chat, closes the panel and navigates to `/ai-agent` (Chat tab) with
   react-router; without a selected chat there is no button. `/ai-agent`: a chat header with title, ring and tokens.
