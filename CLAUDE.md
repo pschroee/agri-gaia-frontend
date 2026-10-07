@@ -250,6 +250,17 @@ upstream, `ki-agents` is the default and integration branch, feature branches co
   under an open menu; menus of the panel stay put (fixed panel). Dialogs keep their modal lock (the panel still moves
   15 px behind the backdrop). Render check: launch Chromium with `ignoreDefaultArgs: ['--hide-scrollbars']`, else
   headless has no scrollbar and nothing moves; compare `getBoundingClientRect().left` of page and panel elements.
+- **Fixed tooltips in the agent area:** MUI portals a tooltip into body with `position: absolute`, so it counts towards
+  the document's scroll area. Closing the panel with its "x" left the "Close" tooltip open under the pointer; it
+  followed the sliding button past the window edge, the document grew 11 to 14 px wider than the window and a
+  horizontal scrollbar showed at the bottom for about 12 frames (issue #28; closing with the FAB never did, and
+  opening never did, since the fixed panel itself adds nothing). `AgentMenuTheme` now also sets
+  `MuiTooltip.defaultProps.PopperProps.popperOptions.strategy = 'fixed'` (`withFixedTooltips`, `agentAreaTheme` in
+  `src/agent/menuTheme.ts`, unit-tested). A tooltip that passes its own `PopperProps` replaces the default and must
+  repeat the strategy. Render check: start sampling with `window.__p = sample()` and read it after the click
+  (`page.evaluate` awaits a returned promise, so sampling inside it runs before the click); per animation frame
+  compare `scrollWidth` with `clientWidth` (with a vertical scrollbar `innerWidth` hides a 15 px overflow) and
+  `innerHeight - clientHeight` (a horizontal scrollbar); hover the close button 500 ms before clicking it.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
