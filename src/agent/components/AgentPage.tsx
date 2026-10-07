@@ -17,9 +17,11 @@ import { useAgent } from '../AgentContext';
 import { chatTitle, formatRelativeDay } from '../format';
 import { runSince, runStateOf } from '../runState';
 import { useSubagentNav } from '../useSubagentNav';
+import { useRenameChat } from '../useRenameChat';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
 import ChatView from './ChatView';
+import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename';
 import { ChatTokens, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
@@ -34,6 +36,7 @@ import { FOOTER_HEIGHT } from './AgentContextPanel';
 function History() {
     const { chats, selectedChatId, selectChat } = useAgent();
     const sub = useSubagentNav();
+    const rename = useRenameChat();
     return (
         <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, overflowY: 'auto', minHeight: 0 }}>
             <NewChatButton fullWidth sx={{ mb: 2 }} />
@@ -56,15 +59,22 @@ function History() {
                 const on = c.id === selectedChatId;
                 const state = runStateOf(c);
                 const withSubs = on && c.id === sub.chatId && sub.items.length > 0;
+                const editing = rename.state.chatId === c.id;
+                const failure = rename.state.error?.chatId === c.id ? rename.state.error.text : undefined;
                 return (
                     <Fragment key={c.id}>
                         <Box
                             role="button"
                             tabIndex={0}
                             onClick={() => selectChat(c.id)}
-                            onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && selectChat(c.id)}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') selectChat(c.id);
+                                else if (e.key === 'F2') rename.start(c);
+                            }}
+                            data-testid="agent-history-entry"
+                            data-chat-id={c.id}
                             // two lines at most; the full title on hover
-                            title={chatTitle(c)}
+                            title={editing ? undefined : chatTitle(c)}
                             sx={{
                                 px: 1.25,
                                 py: 1.1,
@@ -76,21 +86,43 @@ function History() {
                                 color: on ? 'text.primary' : 'text.secondary',
                                 bgcolor: on ? agentColors.greenTint : undefined,
                                 '&:hover': { bgcolor: on ? agentColors.greenTint : 'action.hover' },
+                                [`&:hover .${ENTRY_MENU_CLASS}, &:focus-within .${ENTRY_MENU_CLASS}`]: { opacity: 1 },
                             }}
                         >
-                            <Box
-                                sx={{
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    display: '-webkit-box',
-                                    WebkitLineClamp: 2,
-                                    WebkitBoxOrient: 'vertical',
-                                    // a word longer than the line breaks instead of running out of the list
-                                    overflowWrap: 'anywhere',
-                                }}
-                            >
-                                {chatTitle(c)}
-                            </Box>
+                            {editing ? (
+                                <RenameField
+                                    value={rename.state.draft}
+                                    onChange={rename.change}
+                                    onCommit={() => void rename.commit()}
+                                    onCancel={rename.cancel}
+                                />
+                            ) : (
+                                <Box sx={{ display: 'flex', alignItems: 'flex-start', columnGap: 0.5 }}>
+                                    <Box
+                                        data-testid="agent-history-title"
+                                        // double-click renames, like the menu (issue #49)
+                                        onDoubleClick={() => rename.start(c)}
+                                        sx={{
+                                            flex: 1,
+                                            minWidth: 0,
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 2,
+                                            WebkitBoxOrient: 'vertical',
+                                            // a word longer than the line breaks instead of running out of the list
+                                            overflowWrap: 'anywhere',
+                                        }}
+                                    >
+                                        {chatTitle(c)}
+                                    </Box>
+                                    <HistoryEntryMenu
+                                        title={chatTitle(c)}
+                                        visible={on}
+                                        onRename={() => rename.start(c)}
+                                    />
+                                </Box>
+                            )}
                             <Box
                                 sx={{
                                     fontSize: 11,
@@ -117,6 +149,18 @@ function History() {
                                     </Box>
                                 )}
                             </Box>
+                            {failure && (
+                                <Box
+                                    role="alert"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        rename.dismiss();
+                                    }}
+                                    sx={{ fontSize: 11, color: 'error.main', mt: 0.25 }}
+                                >
+                                    {failure}
+                                </Box>
+                            )}
                         </Box>
                         {withSubs && sub.open && (
                             <Box
