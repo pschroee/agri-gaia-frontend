@@ -6,18 +6,18 @@ import { describe, expect, it } from 'vitest';
 
 import {
     artifactApprovalView,
-    artifactsOfCalls,
-    artifactSummary,
     attachHint,
     canSend,
     checkSizes,
     emptyStaged,
+    fileMeta,
     fileTypeOf,
+    fileTypeTag,
     formatBytes,
     mergeArtifacts,
+    placeOutputs,
     previewKind,
     READABLE_FORMATS,
-    splitArtifacts,
     splitAttachments,
     splitFileName,
     stagedReducer,
@@ -201,23 +201,12 @@ describe('artifact list', () => {
         art('new.png', { kind: 'output', created_at: '2026-10-06T11:00:00Z' }),
     ];
 
-    it('splits results and uploads, newest first', () => {
-        const { outputs, inputs } = splitArtifacts(list);
-        expect(outputs.map((a) => a.name)).toEqual(['new.png', 'old.png']);
-        expect(inputs.map((a) => a.name)).toEqual(['in.csv']);
-        expect(splitArtifacts(undefined)).toEqual({ outputs: [], inputs: [] });
-    });
-
     it('merges by kind and name', () => {
         const merged = mergeArtifacts(list, [art('old.png', { kind: 'output', size: 1 }), art('old.png')]);
         expect(merged).toHaveLength(4);
         expect(merged.find((a) => a.kind === 'output' && a.name === 'old.png')?.size).toBe(1);
     });
 
-    it('summarises the counts', () => {
-        expect(artifactSummary(list)).toBe('2 results · 1 upload');
-        expect(artifactSummary([])).toBe('No files yet');
-    });
 });
 
 describe('artifactApprovalView', () => {
@@ -247,12 +236,14 @@ describe('transcript with files', () => {
 
     it('puts the attachments on the user item, text without the block', () => {
         const items = buildTranscript([user(1, withAttachments('Count rows', ['a.csv', 'b.png']))], ctx);
-        expect(items).toEqual([{ kind: 'user', key: 'u1', seq: 1, text: 'Count rows', files: ['a.csv', 'b.png'] }]);
+        expect(items).toEqual([
+            { kind: 'user', key: 'u1', seq: 1, at: '2026-10-06T10:00:00Z', text: 'Count rows', files: ['a.csv', 'b.png'] },
+        ]);
     });
 
     it('keeps a message with attachments only', () => {
         const items = buildTranscript([user(1, withAttachments('', ['a.csv']))], ctx);
-        expect(items).toEqual([{ kind: 'user', key: 'u1', seq: 1, text: '', files: ['a.csv'] }]);
+        expect(items).toEqual([{ kind: 'user', key: 'u1', seq: 1, at: '2026-10-06T10:00:00Z', text: '', files: ['a.csv'] }]);
     });
 
     it('gives the attachments of a mixed message to its last user part', () => {
@@ -356,17 +347,65 @@ describe('fileTypeOf', () => {
     });
 });
 
-describe('artifactsOfCalls', () => {
-    it('picks the outputs of the given tool calls, oldest first', () => {
-        const list = [
-            art('b.png', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:00:02Z' }),
-            art('a.pdf', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:00:01Z' }),
-            art('c.txt', { kind: 'output', tool_call_id: 't2' }),
-            art('in.txt', { kind: 'input', tool_call_id: 't1' }),
-            art('d.txt', { kind: 'output' }),
-        ];
-        expect(artifactsOfCalls(list, ['t1']).map((a) => a.name)).toEqual(['a.pdf', 'b.png']);
-        expect(artifactsOfCalls(list, [])).toEqual([]);
-        expect(artifactsOfCalls(undefined, ['t1'])).toEqual([]);
+describe('file cards', () => {
+    it('show size and a short type', () => {
+        expect(fileMeta({ name: 'fall1 (durchsuchbar).pdf', size: 731 * 1024 })).toBe('731 KB · PDF');
+        expect(fileMeta({ name: 'Bildschirmfoto.png', size: 1.2 * 1024 * 1024 })).toBe('1.2 MB · PNG');
+        expect(fileMeta({ name: 'notes' })).toBe('File');
+        expect(fileMeta({ name: 'upload', content_type: 'image/png', size: 10 })).toBe('10 B · Image');
+        // a long "extension" is no type tag
+        expect(fileTypeTag({ name: 'archive.backup2026' })).toBe('File');
     });
 });
+
+describe('placeOutputs', () => {
+    const answer = (key: string, at: string | undefined, ids: string[]) => ({
+        kind: 'agent',
+        key,
+        at,
+        parts: [{ type: 'steps', steps: ids.map((id) => ({ id })) }],
+    });
+    const items = [
+        { kind: 'user', key: 'u1', at: '2026-10-06T10:00:00Z' },
+        answer('a1', '2026-10-06T10:00:05Z', ['t1']),
+        { kind: 'user', key: 'u2', at: '2026-10-06T10:05:00Z' },
+        answer('a2', '2026-10-06T10:05:05Z', ['t2', 't3']),
+    ];
+
+    it('puts each result under the answer whose tool call handed it over, oldest first', () => {
+        const list = [
+            art('b.png', { kind: 'output', tool_call_id: 't3', created_at: '2026-10-06T10:06:02Z' }),
+            art('a.pdf', { kind: 'output', tool_call_id: 't2', created_at: '2026-10-06T10:06:01Z' }),
+            art('c.txt', { kind: 'output', tool_call_id: 't1', created_at: '2026-10-06T10:01:00Z' }),
+            art('in.txt', { kind: 'input', tool_call_id: 't1' }),
+        ];
+        const { byItem, unplaced } = placeOutputs(items, list);
+        expect(byItem.get('a1')?.map((a) => a.name)).toEqual(['c.txt']);
+        expect(byItem.get('a2')?.map((a) => a.name)).toEqual(['a.pdf', 'b.png']);
+        expect(byItem.has('u1')).toBe(false);
+        expect(unplaced).toEqual([]);
+    });
+
+    it('places results without a known call by time, never under the live answer', () => {
+        const list = [
+            art('late.csv', { kind: 'output', created_at: '2026-10-06T10:07:00Z' }),
+            art('mid.csv', { kind: 'output', tool_call_id: 'gone', created_at: '2026-10-06T10:02:00Z' }),
+            art('early.csv', { kind: 'output', created_at: '2026-10-06T09:00:00Z' }),
+        ];
+        const live = [...items, answer('live', undefined, ['t9'])];
+        const { byItem } = placeOutputs(live, list);
+        expect(byItem.get('a1')?.map((a) => a.name)).toEqual(['early.csv', 'mid.csv']);
+        expect(byItem.get('a2')?.map((a) => a.name)).toEqual(['late.csv']);
+        expect(byItem.has('live')).toBe(false);
+        // the live answer takes the results of its own calls
+        const own = placeOutputs(live, [art('now.png', { kind: 'output', tool_call_id: 't9' })]);
+        expect(own.byItem.get('live')?.map((a) => a.name)).toEqual(['now.png']);
+    });
+
+    it('returns what it cannot place', () => {
+        const list = [art('x.csv', { kind: 'output' })];
+        expect(placeOutputs([{ kind: 'user', key: 'u1' }], list).unplaced.map((a) => a.name)).toEqual(['x.csv']);
+        expect(placeOutputs(items, undefined).byItem.size).toBe(0);
+    });
+});
+

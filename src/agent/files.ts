@@ -5,7 +5,7 @@
 // Files of a chat: attachments the user uploads for the agent (inputs, POST /chats/{id}/files) and results the agent
 // hands over (outputs, after approval). Attachments go with a message by name; the gateway appends them to its text
 // as a fixed block (API.md, "Attachments to messages"), which the transcript splits off again.
-// Pure logic, used by ChatInput, useChatStream, Conversation and ArtifactStrip.
+// Pure logic, used by ChatInput, useChatStream and Conversation.
 
 import type { Approval, Artifact } from './types';
 
@@ -99,6 +99,9 @@ export function checkSizes<F extends { name: string; size: number }>(
     return { ok, tooBig, error };
 }
 
+/** A file on its way to the gateway: shown as a tile with its progress until the gateway has stored it. */
+export type UploadInFlight = { id: string; name: string; size: number; content_type?: string; progress: number };
+
 /** Attachments of the message being written: uploaded inputs, an upload in flight and its last failure. */
 export type StagedState = { files: Artifact[]; uploading: number; error?: string };
 
@@ -152,6 +155,11 @@ export function canSend(text: string, staged: StagedState): boolean {
     return staged.uploading === 0 && (text.trim() !== '' || staged.files.length > 0);
 }
 
+/** "Uploading 71%" on the tile of a file in flight. */
+export function uploadingText(progress: number): string {
+    return `Uploading ${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`;
+}
+
 /** How an artifact is shown: raster image with a thumbnail, otherwise as a file. */
 export type PreviewKind = 'image' | 'file';
 
@@ -172,21 +180,6 @@ export function mergeArtifacts(list: Artifact[], add: Artifact[]): Artifact[] {
     const key = (a: Artifact) => `${a.kind}/${a.name}`;
     const keys = new Set(add.map(key));
     return [...list.filter((a) => !keys.has(key(a))), ...add];
-}
-
-/** Results of the agent and the user's uploads, each newest first. */
-export function splitArtifacts(list: Artifact[] | undefined): { outputs: Artifact[]; inputs: Artifact[] } {
-    const all = (Array.isArray(list) ? list : []).slice().sort((x, y) => y.created_at.localeCompare(x.created_at));
-    return { outputs: all.filter((a) => a.kind !== 'input'), inputs: all.filter((a) => a.kind === 'input') };
-}
-
-/** One line for the collapsed artifact strip: "2 results · 1 upload". */
-export function artifactSummary(list: Artifact[] | undefined): string {
-    const { outputs, inputs } = splitArtifacts(list);
-    const parts = [];
-    if (outputs.length) parts.push(`${outputs.length} ${outputs.length === 1 ? 'result' : 'results'}`);
-    if (inputs.length) parts.push(`${inputs.length} ${inputs.length === 1 ? 'upload' : 'uploads'}`);
-    return parts.join(' · ') || 'No files yet';
 }
 
 /** What the approval card shows for a result file the agent wants to hand over (kind artifact_upload). */
@@ -286,11 +279,70 @@ export function truncateMiddle(name: string, max = 24, keep = 4): string {
     return `${chars.slice(0, Math.max(1, max - 1 - tailPart.length)).join('')}…${tailPart.join('')}`;
 }
 
-/** Results the agent handed over from the given tool calls (the steps of an answer), oldest first. */
-export function artifactsOfCalls(list: Artifact[] | undefined, callIds: string[]): Artifact[] {
-    if (!list || callIds.length === 0) return [];
-    const ids = new Set(callIds);
-    return list
-        .filter((a) => a.kind === 'output' && !!a.tool_call_id && ids.has(a.tool_call_id))
+/**
+ * Short type for a file card: the extension in capitals ("PDF", "PNG", "CSV") when it has a short one, else the name
+ * of its kind ("Image", "File").
+ */
+export function fileTypeTag(a: { name: string; content_type?: string }): string {
+    const ext = /\.([a-z0-9]{1,5})$/i.exec(a.name)?.[1];
+    if (ext) return ext.toUpperCase();
+    return FILE_TYPE_LABEL[fileTypeOf(a)];
+}
+
+/** Second line of a file card: "731 KB · PDF"; only the type while the size is unknown. */
+export function fileMeta(a: { name: string; size?: number; content_type?: string }): string {
+    const tag = fileTypeTag(a);
+    return a.size !== undefined && Number.isFinite(a.size) && a.size >= 0 ? `${formatBytes(a.size)} · ${tag}` : tag;
+}
+
+/** The parts of a transcript item that placeOutputs needs (agent answers with their steps and start). */
+type PlacedItem = {
+    kind: string;
+    key: string;
+    at?: string;
+    parts?: { type: string; steps?: { id: string }[] }[];
+};
+
+/**
+ * Places the results the agent handed over (outputs) under the answer that produced them (issue #54): by the tool
+ * call that handed them over, else by time, under the last answer that started before the file was stored (the first
+ * answer for an older file). Inputs are not placed here; they stand above the user message that names them. What
+ * cannot be placed (no answer at all) comes back as `unplaced`, so no file is lost. Each list oldest first.
+ */
+export function placeOutputs(
+    items: PlacedItem[],
+    artifacts: Artifact[] | undefined,
+): { byItem: Map<string, Artifact[]>; unplaced: Artifact[] } {
+    const byItem = new Map<string, Artifact[]>();
+    const unplaced: Artifact[] = [];
+    const outputs = (artifacts ?? [])
+        .filter((a) => a.kind === 'output')
         .sort((x, y) => x.created_at.localeCompare(y.created_at));
+    if (outputs.length === 0) return { byItem, unplaced };
+    const answers = items.filter((it) => it.kind === 'agent');
+    const byCall = new Map<string, string>();
+    for (const it of answers)
+        for (const p of it.parts ?? []) for (const s of p.steps ?? []) byCall.set(s.id, it.key);
+    const add = (key: string, a: Artifact) => byItem.set(key, [...(byItem.get(key) ?? []), a]);
+    const time = (s: string | undefined) => (s ? Date.parse(s) : NaN);
+    for (const a of outputs) {
+        const call = a.tool_call_id ? byCall.get(a.tool_call_id) : undefined;
+        if (call) {
+            add(call, a);
+            continue;
+        }
+        if (answers.length === 0) {
+            unplaced.push(a);
+            continue;
+        }
+        const at = time(a.created_at);
+        let target: string | undefined;
+        for (const it of answers) {
+            const t = time(it.at);
+            // the live answer has no time yet: it takes files by its tool calls only
+            if (!Number.isNaN(t) && t <= at) target = it.key;
+        }
+        add(target ?? answers[0].key, a);
+    }
+    return { byItem, unplaced };
 }

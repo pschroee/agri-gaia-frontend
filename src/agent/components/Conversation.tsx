@@ -2,20 +2,29 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { alpha } from '@mui/material/styles';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import CheckIcon from '@mui/icons-material/Check';
 import CompressIcon from '@mui/icons-material/Compress';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
+import { answerMarkdown, processSteps, showsWorking, splitAnswer } from '../answer';
 import { backgroundByCall } from '../background';
+import { copyText } from '../clipboard';
 import { noticeAnchor } from '../commands';
-import { artifactsOfCalls } from '../files';
+import { placeOutputs } from '../files';
 import type { CommandNotice } from '../commands';
+import type { SubagentNavItem } from '../subagents';
 import type { Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
@@ -27,14 +36,22 @@ import { MessageAttachments, ResultAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
 import ResumeBlock from './ResumeBlock';
-import StepList from './StepList';
+import { ProcessLine, WorkingIndicator, currentStepPart } from './ProcessLine';
 import type { StepControls } from './StepList';
-import ThinkingBlock from './ThinkingBlock';
+import SubagentCard from './SubagentCard';
+import { agentColors } from './tokens';
 
 export type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
 
 export type Files = { chatId?: string; known: Artifact[] };
 
+/** Width of a message bubble in the panel (design: 85 %) and on the wider agent page. */
+const bubbleWidth = (dense: boolean) => (dense ? '85%' : '74%');
+
+/**
+ * The user's message (issue #54, design): a light green bubble on the right; its attachments as file cards directly
+ * above it.
+ */
 export function UserBubble({
     text,
     dense,
@@ -49,120 +66,166 @@ export function UserBubble({
     attachments?: string[];
     files: Files;
 }) {
-    const width = dense ? '88%' : '74%';
     const withFiles = !!attachments?.length;
-    const bubble = text ? (
+    return (
         <Box
             title={pending}
             data-pending={pending ? 'true' : undefined}
-            data-testid="agent-user-bubble"
             sx={{
-                opacity: pending ? 0.6 : 1,
-                alignSelf: 'flex-end',
-                maxWidth: withFiles ? '100%' : width,
-                bgcolor: 'primary.main',
-                color: '#fff',
-                borderRadius: '14px 14px 3px 14px',
-                px: dense ? 1.5 : 2,
-                py: dense ? 1 : 1.25,
-                fontSize: dense ? 13.5 : 14.5,
-                lineHeight: 1.5,
-                whiteSpace: 'pre-wrap',
-                overflowWrap: 'anywhere',
-            }}
-        >
-            {text}
-        </Box>
-    ) : null;
-    if (!withFiles) return bubble;
-    return (
-        <Box
-            title={bubble ? undefined : pending}
-            data-pending={pending ? 'true' : undefined}
-            sx={{
-                alignSelf: 'flex-end',
-                maxWidth: width,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-end',
-                opacity: pending && !bubble ? 0.6 : 1,
+                gap: '6px',
+                minWidth: 0,
+                opacity: pending ? 0.6 : 1,
             }}
         >
-            {bubble}
             {withFiles && <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />}
+            {text && (
+                <Box
+                    data-testid="agent-user-bubble"
+                    sx={{
+                        maxWidth: bubbleWidth(dense),
+                        bgcolor: agentColors.userBubble,
+                        color: 'text.primary',
+                        borderRadius: '16px 16px 4px 16px',
+                        px: '14px',
+                        py: '10px',
+                        fontSize: dense ? 14 : 14.5,
+                        lineHeight: 1.5,
+                        whiteSpace: 'pre-wrap',
+                        overflowWrap: 'anywhere',
+                    }}
+                >
+                    {text}
+                </Box>
+            )}
         </Box>
     );
 }
 
+/** Copy under an answer: its text as Markdown to the clipboard; the icon turns into a tick for a moment. */
+export function CopyButton({ text }: { text: string }) {
+    const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+    useEffect(() => {
+        if (state === 'idle') return;
+        const t = setTimeout(() => setState('idle'), 1200);
+        return () => clearTimeout(t);
+    }, [state]);
+    return (
+        <Box sx={{ display: 'flex', ml: '-8px' }}>
+            <Tooltip
+                title={state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : 'Copy'}
+                disableInteractive
+            >
+                <IconButton
+                    aria-label="Copy answer"
+                    data-testid="agent-copy"
+                    data-state={state}
+                    onClick={() => void copyText(text).then((ok) => setState(ok ? 'copied' : 'failed'))}
+                    sx={{ width: 32, height: 32, color: 'rgba(0, 0, 0, 0.54)' }}
+                >
+                    {state === 'copied' ? (
+                        <CheckIcon sx={{ fontSize: 18, color: agentColors.green }} />
+                    ) : (
+                        <ContentCopyIcon sx={{ fontSize: 18 }} />
+                    )}
+                </IconButton>
+            </Tooltip>
+        </Box>
+    );
+}
+
+/**
+ * One answer of the agent (issue #54): the process line (thinking and steps behind "Thought 9 s · 3 tool calls"), the
+ * text without a bubble, the subagents it started as a card, the files it handed over as cards and the copy button.
+ * While the answer is worked on, "Thinking …" with a bar and the current step stand at its end.
+ */
 export function AgentBlock({
     item,
     dense,
     thinking,
     chatId,
     live = false,
+    active = false,
+    waitingLabel,
     controls,
-    artifacts,
+    results,
+    processOpen,
+    onProcessOpen,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
-    /** The chat's artifacts: results handed over by a tool call show as tiles below its steps. */
-    artifacts?: Artifact[];
     dense: boolean;
     thinking: Thinking;
-    /** Stop / move running commands, background chips. */
+    /** Stop / move running commands, background chips, the runs of `subagent` calls. */
     controls?: StepControls;
-    /** For the answer's display images. */
+    /** For the answer's display images and file downloads. */
     chatId?: string;
-    /** The answer is still streaming (Mermaid blocks render once closed). */
+    /** The answer is still streaming (Mermaid blocks render once closed, no copy yet). */
     live?: boolean;
+    /** The answer belongs to the turn that runs right now. */
+    active?: boolean;
+    /** Label of the working line while a step waits for approval. */
+    waitingLabel?: string;
+    /** Files the agent handed over in this answer (placeOutputs). */
+    results?: Artifact[];
+    processOpen?: boolean;
+    onProcessOpen?: (open: boolean) => void;
 }) {
+    const { texts, process } = useMemo(() => splitAnswer(item.parts), [item.parts]);
+    const working = showsWorking(item.parts, active);
+    const markdown = useMemo(() => answerMarkdown(item.parts), [item.parts]);
+    const subagents = controls?.subagents;
+    const runs = useMemo(() => {
+        if (!subagents) return [];
+        const seen = new Set<string>();
+        const out: SubagentNavItem[] = [];
+        for (const s of processSteps(process))
+            for (const r of subagents.byCall.get(s.id) ?? [])
+                if (!seen.has(r.runId)) {
+                    seen.add(r.runId);
+                    out.push(r);
+                }
+        return out;
+    }, [process, subagents]);
+    // the step under "Thinking …": only while a step is the newest part (not while the model thinks after it)
+    const last = item.parts[item.parts.length - 1];
+    const step = working && last?.type === 'steps' ? currentStepPart(process) : undefined;
     return (
-        <Box sx={{ display: 'flex', minWidth: 0 }}>
-            <Box sx={{ flex: 1, minWidth: 0, fontSize: dense ? 13.5 : 14.5, lineHeight: 1.6 }}>
-                {item.parts.map((p, i) => {
-                    if (p.type === 'text') {
-                        return (
-                            <Box key={i} sx={{ mb: 1 }}>
-                                <Markdown
-                                    text={p.text}
-                                    dense={dense}
-                                    images={{ chatId, msgId: p.imageKey }}
-                                    streaming={live}
-                                />
-                            </Box>
-                        );
-                    }
-                    if (p.type === 'thinking') {
-                        return (
-                            <ThinkingBlock
-                                key={p.id}
-                                part={p}
-                                open={thinking.open[p.id]}
-                                onOpenChange={thinking.onOpenChange}
-                            />
-                        );
-                    }
-                    return (
-                        <Fragment key={i}>
-                            <StepList steps={p.steps} controls={controls} />
-                            <ResultAttachments
-                                chatId={chatId}
-                                artifacts={artifactsOfCalls(
-                                    artifacts,
-                                    p.steps.map((s) => s.id),
-                                )}
-                            />
-                        </Fragment>
-                    );
-                })}
-                {item.error && (
-                    <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>
-                )}
-                {item.stopped && (
-                    <Typography data-testid="agent-answer-stopped" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                        Stopped by you
-                    </Typography>
-                )}
-            </Box>
+        <Box
+            data-testid="agent-answer"
+            sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, fontSize: dense ? 14 : 14.5, lineHeight: 1.6 }}
+        >
+            {process.length > 0 && (
+                <ProcessLine
+                    process={process}
+                    thinking={thinking}
+                    controls={controls}
+                    open={processOpen}
+                    onOpenChange={onProcessOpen}
+                />
+            )}
+            {texts.map((p, i) => (
+                <Box key={i} data-testid="agent-answer-text" sx={{ minWidth: 0 }}>
+                    <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} streaming={live} />
+                </Box>
+            ))}
+            {working && (
+                <WorkingIndicator
+                    label={step?.steps[0].status === 'waiting' ? waitingLabel ?? 'Waiting for your approval …' : undefined}
+                    step={step}
+                    controls={controls}
+                />
+            )}
+            {item.error && <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>}
+            {item.stopped && (
+                <Typography data-testid="agent-answer-stopped" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    Stopped by you
+                </Typography>
+            )}
+            {runs.length > 0 && subagents && <SubagentCard items={runs} onOpen={subagents.onOpen} />}
+            {results && results.length > 0 && <ResultAttachments chatId={chatId} artifacts={results} />}
+            {!live && !working && markdown && <CopyButton text={markdown} />}
         </Box>
     );
 }
@@ -258,10 +321,35 @@ function Notice({ text, label }: { text: string; label?: string }) {
     );
 }
 
+/** The empty chat (design): the agent's symbol and one line. */
+function EmptyChat() {
+    return (
+        <Box
+            data-testid="agent-empty-chat"
+            sx={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 1.5,
+                py: 4,
+                px: 3,
+                textAlign: 'center',
+                color: 'text.secondary',
+            }}
+        >
+            <AutoAwesomeIcon sx={{ fontSize: 32, color: alpha(agentColors.green, 0.5) }} />
+            <Typography sx={{ fontSize: 14, lineHeight: 1.5 }}>No messages yet. Describe what you want to do.</Typography>
+        </Box>
+    );
+}
+
 /**
- * The conversation of a chat: user messages as green bubbles, agent answers with markdown and tool
- * steps and collapsed thinking, notices of the gateway, the answer that is streaming right now and a working indicator. Scrolling is
- * up to the caller (ChatView, useStickToBottom).
+ * The conversation of a chat (issue #54): user messages as light green bubbles with their files above, answers as
+ * text with one process line each, the files and subagents they produced below them and a copy button; notices of
+ * the gateway, the answer that is streaming right now and "Thinking …" while the agent works. Scrolling is up to the
+ * caller (ChatView, useStickToBottom).
  */
 export default function Conversation({
     stream,
@@ -273,16 +361,17 @@ export default function Conversation({
     /** The transcript, built by the caller (it also counts the entries for scrolling). */
     items: TranscriptItem[];
     dense?: boolean;
-    /** Runs per `subagent` call, opened on click (issue #48). */
+    /** Runs per `subagent` call, listed as a card under the answer and opened on click (issue #48). */
     subagents?: StepControls['subagents'];
 }) {
     const { chat, live, resumes, pending } = stream;
     const liveP = useMemo(() => liveParts(live), [live]);
-    // Open state chosen per thinking block (collapsed until opened); kept here so it survives the switch from live to
-    // stored message.
+    // Open state chosen per thinking block and per answer's process line (collapsed until opened); kept here so it
+    // survives the switch from live to stored message.
     const [open, setOpen] = useState<Record<string, boolean>>({});
     const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);
+    const [processOpen, setProcessOpen] = useState<Record<string, boolean>>({});
     const hasLive = liveP.length > 0;
     const files = useMemo<Files>(() => ({ chatId: chat?.id, known: stream.artifacts }), [chat?.id, stream.artifacts]);
     const { runningTools, stopTool, backgroundTool, background } = stream;
@@ -296,10 +385,33 @@ export default function Conversation({
         }),
         [runningTools, stopTool, backgroundTool, background, subagents],
     );
+    // The streaming message continues the stored answer of the same turn (the last item, no user message after it):
+    // one answer with one process line, not two.
+    const lastItem = items[items.length - 1];
+    const mergeLive = hasLive && !pending && lastItem?.kind === 'agent';
+    const shown = useMemo<TranscriptItem[]>(() => {
+        if (!hasLive) return items;
+        if (mergeLive && lastItem?.kind === 'agent')
+            return [...items.slice(0, -1), { ...lastItem, parts: [...lastItem.parts, ...liveP] }];
+        return items;
+    }, [items, hasLive, mergeLive, lastItem, liveP]);
+    const liveItem = useMemo<Extract<TranscriptItem, { kind: 'agent' }> | undefined>(
+        () => (hasLive && !mergeLive ? { kind: 'agent', key: 'live', parts: liveP } : undefined),
+        [hasLive, mergeLive, liveP],
+    );
+    // files the agent handed over, under the answer that produced them (by tool call, else by time)
+    const placed = useMemo(
+        () => placeOutputs(liveItem ? [...shown, liveItem] : shown, stream.artifacts),
+        [shown, liveItem, stream.artifacts],
+    );
+    const running = !!chat?.running;
+    const waitingApproval = stream.approvals.some((a) => a.state === 'pending');
+    // the answer of the running turn: the live one, else the last stored answer while the chat runs
+    const activeKey = running && !pending ? (liveItem ? 'live' : shown[shown.length - 1]?.kind === 'agent' ? shown[shown.length - 1].key : undefined) : undefined;
     // resume blocks sit after the user message that triggered them; not stored yet: at the end. A resume on opening
     // the chat sits where it started, before anything stored later and before a message still on its way. The start of
     // a new chat's first sandbox comes before everything.
-    const placed = useMemo(() => {
+    const resumesPlaced = useMemo(() => {
         const after = new Map<number, ResumeView[]>();
         const before = new Map<number, ResumeView[]>();
         const end: ResumeView[] = [];
@@ -346,9 +458,33 @@ export default function Conversation({
         );
     }
 
+    const answer = (it: Extract<TranscriptItem, { kind: 'agent' }>, isLive: boolean) => (
+        <AgentBlock
+            item={it}
+            dense={dense}
+            thinking={thinking}
+            chatId={chat?.id}
+            live={isLive}
+            active={it.key === activeKey}
+            controls={controls}
+            results={placed.byItem.get(it.key)}
+            processOpen={processOpen[it.key]}
+            onProcessOpen={(o) => setProcessOpen((c) => ({ ...c, [it.key]: o }))}
+        />
+    );
+    const empty =
+        items.length === 0 &&
+        !hasLive &&
+        !pending &&
+        resumes.length === 0 &&
+        notes.end.length === 0 &&
+        !chat?.starting &&
+        !running;
+
     return (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: dense ? 1.5 : 1.75 }}>
-            {placed.top.map((r) => (
+        // only the empty chat fills the height (its line sits in the middle); otherwise approvals follow right after
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, flex: empty ? 1 : 'none', minWidth: 0 }}>
+            {resumesPlaced.top.map((r) => (
                 <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
             ))}
             {/* a new chat waiting for its sandbox, before the first step arrives over SSE */}
@@ -362,31 +498,17 @@ export default function Conversation({
                     Starting a sandbox for this chat … You can type already.
                 </Box>
             )}
-            {items.length === 0 &&
-                !hasLive &&
-                !pending &&
-                resumes.length === 0 &&
-                notes.end.length === 0 &&
-                !chat?.starting && (
-                    <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-                        No messages yet. Describe what you want to do.
-                    </Typography>
-                )}
-            {items.map((it, i) => (
+            {empty && <EmptyChat />}
+            {shown.map((it, i) => (
                 <Fragment key={it.key}>
                     {notes.before.get(i)?.map((n) => (
                         <CommandLine key={n.key} notice={n} />
                     ))}
-                    {placed.before.get(i)?.map((r) => (
+                    {resumesPlaced.before.get(i)?.map((r) => (
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
                     ))}
                     {it.kind === 'user' ? (
-                        <UserBubble
-                            text={it.text}
-                            dense={dense}
-                            attachments={it.files}
-                            files={files}
-                        />
+                        <UserBubble text={it.text} dense={dense} attachments={it.files} files={files} />
                     ) : it.kind === 'notice' ? (
                         it.note ? (
                             <BackgroundNoteLine note={it.note} text={it.text} />
@@ -396,21 +518,14 @@ export default function Conversation({
                     ) : it.kind === 'compaction' ? (
                         <CompactionLine item={it} />
                     ) : (
-                        <AgentBlock
-                            item={it}
-                            dense={dense}
-                            thinking={thinking}
-                            chatId={chat?.id}
-                            controls={controls}
-                            artifacts={stream.artifacts}
-                        />
+                        answer(it, mergeLive && i === shown.length - 1)
                     )}
-                    {placed.after.get(i)?.map((r) => (
+                    {resumesPlaced.after.get(i)?.map((r) => (
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
                     ))}
                 </Fragment>
             ))}
-            {placed.beforePending.map((r) => (
+            {resumesPlaced.beforePending.map((r) => (
                 <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
             ))}
             {pending && (
@@ -428,33 +543,26 @@ export default function Conversation({
                     }
                 />
             )}
-            {placed.end.map((r) => (
+            {resumesPlaced.end.map((r) => (
                 <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
             ))}
             {notes.end.map((n) => (
                 <CommandLine key={n.key} notice={n} />
             ))}
-            {hasLive && (
-                <AgentBlock
-                    item={{ kind: 'agent', key: 'live', parts: liveP }}
-                    dense={dense}
-                    thinking={thinking}
-                    chatId={chat?.id}
-                    live
-                    controls={controls}
-                    artifacts={stream.artifacts}
-                />
-            )}
+            {liveItem && answer(liveItem, true)}
+            {placed.unplaced.length > 0 && <ResultAttachments chatId={chat?.id} artifacts={placed.unplaced} />}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
-            {(chat?.running || pending) && !hasLive && !resuming && !chat?.starting && !stream.compacting && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}>
-                    <CircularProgress size={14} />
-                    {chat?.resuming
-                        ? 'Resuming the chat …'
-                        : stream.approvals.some((a) => a.state === 'pending')
-                        ? 'Waiting for your approval …'
-                        : 'The agent is working …'}
-                </Box>
+            {/* the agent works, but no answer of this turn shows yet: "Thinking …" as in the design */}
+            {(running || pending) && !activeKey && !resuming && !chat?.starting && !stream.compacting && (
+                <WorkingIndicator
+                    label={
+                        chat?.resuming
+                            ? 'Resuming the chat …'
+                            : waitingApproval
+                            ? 'Waiting for your approval …'
+                            : undefined
+                    }
+                />
             )}
         </Box>
     );

@@ -132,9 +132,6 @@ export const agentApi = {
         for (const f of files) form.append('file', f, f.name);
         return request<Artifact[]>(`chats/${enc(id)}/files`, { method: 'POST', body: form });
     },
-    /** Inputs and outputs of the chat. */
-    artifacts: (id: string) =>
-        request<Artifact[]>(`chats/${enc(id)}/artifacts`).then((l) => (Array.isArray(l) ? l : [])),
     /** Slash commands: the gateway's built-in ones and pi's (extensions, prompt templates, skills). */
     commands: (id: string) => request<Command[]>(`chats/${enc(id)}/commands`),
     /**

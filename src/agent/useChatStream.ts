@@ -55,10 +55,8 @@ export type ChatStream = {
     approvals: Approval[];
     socketCalls: SocketCall[];
     executions: ToolExecution[];
-    /** Inputs and outputs of the chat (from the chat, GET …/artifacts, uploads and the SSE event "artifact"). */
+    /** Inputs and outputs of the chat (from the chat, uploads and the SSE event "artifact"). */
     artifacts: Artifact[];
-    /** Loads the artifact list again (GET …/artifacts). */
-    refreshArtifacts: () => Promise<void>;
     /** Uploads files for the agent; returns the stored inputs. Throws AgentApiError. */
     uploadFiles: (files: File[]) => Promise<Artifact[]>;
     /** Queued messages (gateway entries, then the ones still being sent). */
@@ -461,15 +459,6 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         [deliver],
     );
 
-    const refreshArtifacts = useCallback(async () => {
-        if (!chatId) return;
-        try {
-            setArtifacts(await agentApi.artifacts(chatId));
-        } catch {
-            // the list from the chat stays
-        }
-    }, [chatId]);
-
     const uploadFiles = useCallback(
         async (files: File[]) => {
             if (!chatId || files.length === 0) return [];
@@ -687,7 +676,6 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         socketCalls,
         executions,
         artifacts,
-        refreshArtifacts,
         uploadFiles,
         queue,
         queueError,

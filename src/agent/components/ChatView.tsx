@@ -25,7 +25,6 @@ import { useNow } from '../useNow';
 import { useChatDraft, useSharedChatStream } from '../sharedChatStream';
 import { useStickToBottom } from '../useStickToBottom';
 import ApprovalCard from './ApprovalCard';
-import ArtifactStrip from './ArtifactStrip';
 import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
@@ -43,7 +42,8 @@ type Props = {
 };
 
 /**
- * One chat: files and background tasks on top, the conversation and pending approvals in the middle (scrolls), queued messages and the input field at the bottom. The middle follows the end of the
+ * One chat: background tasks on top, the conversation and pending approvals in the middle (scrolls; files stand at
+ * the message or answer they belong to, issue #54), queued messages and the input field at the bottom. The middle follows the end of the
  * transcript while the user is there; after scrolling up, a "Jump to latest" button counts the new entries.
  * While a turn runs, Stop sits in the input field and the run state in the row below it (issue #39).
  */
@@ -158,14 +158,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     display: 'grid',
                     gridTemplateColumns: 'minmax(0, 1fr)',
                     gap: 1.25,
-                    px: dense ? 1.75 : 0,
-                    pt: dense ? 1.5 : 0,
-                    pr: dense ? 1.75 : 1,
-                    pb: 1.25,
+                    px: dense ? 2 : 0,
+                    pt: dense ? 2 : 0,
+                    pr: dense ? 2 : 1,
+                    pb: dense ? 0.5 : 1.25,
                 }}
             >
                 {header}
-                <ArtifactStrip chatId={chatId} artifacts={stream.artifacts} onOpen={stream.refreshArtifacts} />
                 <TaskStrip
                     chatId={chatId}
                     chatRunning={!!chat?.running}
@@ -186,13 +185,19 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                         flex: 1,
                         minHeight: 0,
                         overflowY: 'auto',
-                        px: dense ? 1.75 : 0,
-                        pr: dense ? 1.75 : 1,
-                        pt: 0.5,
-                        pb: 1.5,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        px: dense ? 2 : 0,
+                        pr: dense ? 2 : 1,
+                        pt: 1.5,
+                        pb: 1,
                     }}
                 >
-                    <Box ref={contentRef} sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                    <Box
+                        ref={contentRef}
+                        // grows to the box's height, so the empty chat sits in the middle (design)
+                        sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, flex: '1 0 auto', minWidth: 0 }}
+                    >
                         {stream.error && (
                             <Alert severity="warning" sx={{ fontSize: 12.5 }}>
                                 {stream.error}
@@ -231,12 +236,10 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
             <Box
                 sx={{
                     flex: 'none',
-                    borderTop: 1,
-                    borderColor: 'divider',
                     bgcolor: '#fff',
-                    px: dense ? 1.75 : 0,
-                    pt: dense ? 1.25 : 1.75,
-                    pb: dense ? 1.25 : 0,
+                    ...(subRun && subStatus
+                        ? { borderTop: 1, borderColor: 'divider', px: dense ? 2 : 0, py: 1.5 }
+                        : { px: dense ? 1.5 : 0, pt: 1, pb: dense ? 1.5 : 0 }),
                 }}
             >
                 {/* read-only: no input and no stop per subagent; the chat's input stays mounted (hidden), so a draft
@@ -268,7 +271,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                         onStartTaken={onStartTaken}
                         initialText={draft.initial}
                         onTextChange={draft.save}
-                        toolbar={
+                                                toolbar={
                             <ModelEffortPicker
                                 chat={stream.chat}
                                 models={agent?.models ?? []}

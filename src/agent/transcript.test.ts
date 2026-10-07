@@ -236,7 +236,15 @@ describe('page context', () => {
             ctx,
         );
         expect(items).toEqual([
-            { kind: 'user', key: 'u1-0', seq: 1, text: 'Check the class balance.', files: undefined, context },
+            {
+                kind: 'user',
+                key: 'u1-0',
+                seq: 1,
+                at: '2026-10-06T10:00:00Z',
+                text: 'Check the class balance.',
+                files: undefined,
+                context,
+            },
         ]);
     });
 
