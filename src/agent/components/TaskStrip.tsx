@@ -322,7 +322,7 @@ function SubagentRow({
 }
 
 /**
- * Background tasks and subagent runs of the chat as a strip below the delegation, like the files: collapsed one line
+ * Background tasks and subagent runs of the chat as a strip on top of the chat, like the files: collapsed one line
  * with the counts (and a spinner while something runs), opened the background tasks with state, runtime, last
  * lines and Stop, and the subagent runs with state, duration and cost, each opening its own steps.
  */

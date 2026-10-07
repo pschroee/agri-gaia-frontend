@@ -82,18 +82,6 @@ export type Usage = {
     cost?: { total?: number };
 };
 
-/** Rule of a delegation: action on resource; without ids only for calls without an object. */
-export type DelegationRule = { action: string; resource: string; ids?: string[] };
-
-/** Rights handed to the agent for one chat. */
-export type Delegation = {
-    rules: DelegationRule[];
-    expires_at?: string;
-    /** false: violations are only logged. */
-    enforce?: boolean;
-    confirm?: 'writes' | 'none';
-};
-
 export type Chat = {
     id: string;
     title: string;
@@ -109,7 +97,6 @@ export type Chat = {
     thinking_levels?: string[];
     /** Model the chat switches to after the running compaction. */
     pending_model?: string;
-    delegation?: Delegation;
     owner?: string;
     /** Preferred language of the browser given at creation (BCP 47); absent without one. */
     language?: string;
@@ -299,7 +286,7 @@ export type ActivityCall = SocketCall & {
 };
 
 /** What the activity view gets of a chat. */
-export type ActivityChat = { id: string; title: string; model: string; variant: string; delegation?: Delegation };
+export type ActivityChat = { id: string; title: string; model: string; variant: string };
 
 /** Summary of all calls of the period (not limited by outcome or page). */
 export type ActivitySummary = {
@@ -465,7 +452,6 @@ export type CreateChatRequest = {
     model?: string;
     title?: string;
     message?: string;
-    delegation?: Delegation;
     /** Preferred language of the browser (BCP 47, navigator.language); the agent uses it only when a message shows no clear language. */
     language?: string;
     /**
