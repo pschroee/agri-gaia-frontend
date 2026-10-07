@@ -82,7 +82,7 @@ function Group({ title, chatId, list }: { title: string; chatId: string; list: A
 }
 
 /**
- * Files of the chat as a strip below the delegation: collapsed one line with the counts, opened the agent's results
+ * Files of the chat as a strip on top of the chat: collapsed one line with the counts, opened the agent's results
  * and the user's uploads, each with download (images as thumbnails that enlarge). Opening loads the list again.
  */
 export default function ArtifactStrip({

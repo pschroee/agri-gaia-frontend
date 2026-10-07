@@ -87,6 +87,20 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   resume on opening is marked `opened` and sits before anything stored later, so a message typed meanwhile follows it;
   the message is sent at once and the gateway holds it until the sandbox is ready (`expectQueued` is only true while the
   agent runs). An older gateway without the route answers 404, which is ignored (the next message resumes as before).
+- **No delegation in the UI (issue #32):** every chat runs as "no delegation": reading without asking, every change to
+  the platform needs the user's approval (`ApprovalCard`). There is no `DelegationStrip`, no template list and no
+  delegation row in the activity details; new chats send none. Chats that already carry a delegation keep it in the
+  gateway (still enforced there, as are blocked paths and redaction), the UI just does not show it. Blocked calls still
+  show on their step in the transcript.
+- **Approvals badge (issue #32):** the floating button carries a red badge (white text) with the number of open
+  approvals across all the user's chats while the panel is closed (no button on `/ai-agent`). The number comes from the
+  gateway's stream across chats, `GET /agent/api/events` (gateway PR for #32: an `approvals` snapshot first, also after
+  every reconnect, then `approval` events), kept in `AgentContext` (`pendingApprovals`, `pendingApprovalCount`,
+  `approvalsLive`). `src/agent/approvalFeed.ts` holds the pure reducer and `startApprovalFeed` (EventSource with own
+  reconnect when it gives up, backoff 2 s to 60 s; poll of `GET /approvals?state=pending` every 60 s while the stream is
+  open and every 15 s while it is down; a poll answer is dropped when a stream event came in after it was sent), all
+  unit-tested with a fake EventSource. An older gateway without the route answers 404 and the poll carries the count.
+  Render check: a fake `EventSource` in an init script that exposes the `/agent/api/events` instance and emits events.
 - **Gateway notes:** user messages are split along the gateway's `sources` (`splitMessage` in `src/agent/transcript.ts`);
   a part with `audience: "agent"` (today the preferred browser language of the first message) is context for the model
   only and is cut out (`isAgentOnly`), never shown as user text. Decide by that mark, not by `type` or the text; the
@@ -211,7 +225,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   names the files); a failed send puts text and chips back; a slash command leaves the chips for the next message.
   The gateway appends the block `[Attachments in /workspace/inputs/]` to the stored user message; `buildTranscript`
   splits it off (`splitAttachments`) and the user bubble shows the files below it (images as tiles that enlarge, others as
-  chips downloading `…/artifacts/{name}?kind=input`). **Artifacts:** `ArtifactStrip` below the delegation strip (only with
+  chips downloading `…/artifacts/{name}?kind=input`). **Artifacts:** `ArtifactStrip` on top of the chat (only with
   files), collapsed "Files 2 results · 1 upload", opened results and uploads with download; opening reloads
   `GET …/artifacts`, the SSE event `artifact` adds new ones. A pending approval of kind `artifact_upload` shows in
   `ApprovalCard` with name, size, type and the text preview (none for images), "Allow" / "Reject". **Display images:**

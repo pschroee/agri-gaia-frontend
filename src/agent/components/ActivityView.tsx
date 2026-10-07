@@ -187,7 +187,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
                 />
                 <Kpi value={dash(f?.runs)} label={`agent runs ${when}`} />
                 <Kpi value={pending.length} label="waiting for approval" highlight={pending.length > 0} />
-                <Kpi value={dash(f?.blocked)} label={`blocked by the delegation ${when}`} />
+                <Kpi value={dash(f?.blocked)} label={`blocked by the gateway ${when}`} />
                 <Kpi value={dash(f?.rejected)} label={`rejected by you ${when}`} />
                 <Kpi
                     value={f ? formatDuration(f.avg) : '–'}

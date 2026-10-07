@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import type { DelegationRule, SocketCall, Variant } from './types';
+import type { SocketCall, Variant } from './types';
 import { pageOf } from './pageContext';
 
 /** Effect class of a platform call, as in the prototype (read, write, compute, irreversible). */
@@ -130,46 +130,6 @@ export function formatRelativeDay(iso: string, now = new Date()): string {
     y.setDate(now.getDate() - 1);
     if (d.toDateString() === y.toDateString()) return 'yesterday';
     return dayFmt.format(d);
-}
-
-/** Remaining validity of a delegation, e.g. "expires in 7 h 12 min" or "expired". */
-export function formatExpiry(iso: string | undefined, now = Date.now()): string {
-    if (!iso) return 'no expiry';
-    const t = Date.parse(iso);
-    if (Number.isNaN(t)) return 'no expiry';
-    const mins = Math.round((t - now) / 60000);
-    if (mins <= 0) return 'expired';
-    if (mins < 60) return `expires in ${mins} min`;
-    return `expires in ${Math.floor(mins / 60)} h ${mins % 60} min`;
-}
-
-const ACTION_LABEL: Record<string, string> = {
-    read: 'read',
-    create: 'create',
-    update: 'update',
-    delete: 'delete',
-    run: 'run',
-};
-
-/** "read dataset (all)", "update dataset (own)", "create training". */
-export function formatRule(r: DelegationRule): string {
-    const resource = r.resource.replace(/_/g, ' ');
-    const ids = r.ids?.length ? ` (${r.ids.map((i) => (i === '*' ? 'all' : i)).join(', ')})` : '';
-    return `${ACTION_LABEL[r.action] ?? r.action} ${resource}${ids}`;
-}
-
-/** Groups rules with the same action and ids: "read: dataset, model, … (all)". */
-export function summarizeRules(rules: DelegationRule[]): string[] {
-    const groups = new Map<string, string[]>();
-    for (const r of rules) {
-        const ids = r.ids?.length ? ` (${r.ids.map((i) => (i === '*' ? 'all' : i)).join(', ')})` : '';
-        const key = `${ACTION_LABEL[r.action] ?? r.action}|${ids}`;
-        groups.set(key, [...(groups.get(key) ?? []), r.resource.replace(/_/g, ' ')]);
-    }
-    return Array.from(groups.entries()).map(([key, resources]) => {
-        const [action, ids] = key.split('|');
-        return `${action} ${resources.join(', ')}${ids}`;
-    });
 }
 
 /** Header text: "Thinking · 4.2 s", live "Thinking … 3 s", without a measured duration just "Thinking". */

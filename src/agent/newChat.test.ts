@@ -20,7 +20,7 @@ describe('newChatRequest', () => {
         expect(req.model).toBeUndefined();
         expect(req.title).toBeUndefined();
         expect(req.message).toBeUndefined();
-        expect(req.delegation).toBeUndefined();
+        expect('delegation' in req).toBe(false);
     });
 });
 

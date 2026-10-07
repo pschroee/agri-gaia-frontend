@@ -181,6 +181,9 @@ export const imageUrl = (chatId: string, path: string, msg: string) =>
 
 export const eventsUrl = (chatId: string) => `${API}/chats/${enc(chatId)}/events`;
 
+/** Stream of the approvals across all the user's chats (gateway issue #32; approvalFeed.ts). */
+export const approvalEventsUrl = `${API}/events`;
+
 /**
  * Silent login: the gateway runs the authorization code flow against the platform's Keycloak with
  * prompt=none, which reuses the platform session. A hidden same-origin iframe carries the redirects;

@@ -26,7 +26,6 @@ import ArtifactStrip from './ArtifactStrip';
 import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
-import DelegationStrip from './DelegationStrip';
 import QueueList from './QueueList';
 import RunStatus from './RunStatus';
 import TaskStrip from './TaskStrip';
@@ -36,13 +35,12 @@ type Props = {
     /** Narrow layout of the context panel. */
     dense?: boolean;
     placeholder?: string;
-    /** Rendered above the delegation strip, outside the scrolling area (e.g. the chat selector). */
+    /** Rendered above the strips, outside the scrolling area (e.g. the chat selector). */
     header?: ReactNode;
 };
 
 /**
- * One chat: delegation strip with blocked calls on top, the conversation and pending approvals in the
- * middle (scrolls), queued messages and the input field at the bottom. The middle follows the end of the
+ * One chat: files and background tasks on top, the conversation and pending approvals in the middle (scrolls), queued messages and the input field at the bottom. The middle follows the end of the
  * transcript while the user is there; after scrolling up, a "Jump to latest" button counts the new entries.
  * Above the input, the run status shows what the agent does and offers "Stop".
  */
@@ -124,7 +122,6 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                 }}
             >
                 {header}
-                {chat && <DelegationStrip chat={chat} socketCalls={stream.socketCalls} />}
                 <ArtifactStrip chatId={chatId} artifacts={stream.artifacts} onOpen={stream.refreshArtifacts} />
                 <TaskStrip
                     chatId={chatId}

@@ -29,7 +29,6 @@ import {
     OUTCOME_LABEL,
     outcomeOf,
     splitCall,
-    summarizeRules,
 } from '../format';
 import type { ActivityCall } from '../types';
 import EffectChip from './EffectChip';
@@ -81,7 +80,6 @@ function CallLog({ row }: { row: ActivityRow }) {
         }
     }
     lines.sort((a, b) => a.at.localeCompare(b.at));
-    const d = chat.delegation;
 
     return (
         <Box sx={{ py: 2, pl: 4.5, pr: 2, bgcolor: '#f4f7f5' }}>
@@ -145,8 +143,6 @@ function CallLog({ row }: { row: ActivityRow }) {
                         ? `${formatDuration(call.duration_ms)} round trip to the platform`
                         : 'not measured (the call did not go out, or it predates the measurement)'}
                 </dd>
-                <dt>Delegation</dt>
-                <dd>{d ? summarizeRules(d.rules).join('; ') : 'none (writes need approval)'}</dd>
                 {call.tool_call_id && (
                     <>
                         <dt>Tool call</dt>
