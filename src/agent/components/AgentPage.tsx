@@ -14,7 +14,7 @@ import Typography from '@mui/material/Typography';
 import SyncIcon from '@mui/icons-material/Sync';
 
 import { useAgent } from '../AgentContext';
-import { formatRelativeDay } from '../format';
+import { chatTitle, formatRelativeDay } from '../format';
 import { runSince, runStateOf } from '../runState';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
@@ -59,6 +59,8 @@ function History() {
                         tabIndex={0}
                         onClick={() => selectChat(c.id)}
                         onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && selectChat(c.id)}
+                        // two lines at most; the full title on hover
+                        title={chatTitle(c)}
                         sx={{
                             px: 1.25,
                             py: 1.1,
@@ -79,9 +81,11 @@ function History() {
                                 display: '-webkit-box',
                                 WebkitLineClamp: 2,
                                 WebkitBoxOrient: 'vertical',
+                                // a word longer than the line breaks instead of running out of the list
+                                overflowWrap: 'anywhere',
                             }}
                         >
-                            {c.title || 'Untitled chat'}
+                            {chatTitle(c)}
                         </Box>
                         <Box
                             sx={{
@@ -116,26 +120,50 @@ function ChatHeader() {
     return (
         <Box
             data-testid="agent-chat-header"
-            sx={{ display: 'flex', alignItems: 'center', gap: 2, borderBottom: 1, borderColor: 'divider', pb: 1.25 }}
+            // the controls wrap onto a second line before the title gets narrower than about 200 px (issue #38)
+            sx={{
+                display: 'flex',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                columnGap: 2,
+                rowGap: 0.75,
+                borderBottom: 1,
+                borderColor: 'divider',
+                pb: 1.25,
+            }}
         >
             <Typography
+                data-testid="agent-chat-title"
+                title={chatTitle(chat)}
                 sx={{
                     fontSize: 15,
                     fontWeight: 500,
                     minWidth: 0,
-                    flex: 1,
+                    flex: '1 1 200px',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                 }}
             >
-                {chat.title || 'Untitled chat'}
+                {chatTitle(chat)}
             </Typography>
-            {/* the same chip as in the panel header, only while something happens (issue #35) */}
-            <RunStateChip state={state} since={runSince(chat)} framed />
-            <InternetToggle chat={chat} />
-            <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
-            <ChatCost chat={chat} tokens />
+            {/* the controls move together and wrap among themselves only when the column is narrower still */}
+            <Box
+                sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    columnGap: 2,
+                    rowGap: 0.75,
+                    minWidth: 0,
+                }}
+            >
+                {/* the same chip as in the panel header, only while something happens (issue #35) */}
+                <RunStateChip state={state} since={runSince(chat)} framed />
+                <InternetToggle chat={chat} />
+                <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
+                <ChatCost chat={chat} tokens />
+            </Box>
         </Box>
     );
 }
