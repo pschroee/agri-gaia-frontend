@@ -393,6 +393,23 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (measured 573 px with and without; the strip took 46 px before); with background tasks the strip shows and lists
   the runs too. Render check: mock `subagent_entries`, `subagent_runs` and an SSE `subagent` event; compare the
   transcript height of a chat with and without subagents and the select's height with and without breadcrumb.
+- **Renaming in the history (issue #49):** each chat entry on `/ai-agent` has a "⋯" button (`HistoryEntryMenu` in
+  `HistoryRename.tsx`; visible on hover and focus, always on the selected entry, its 24 px reserved so titles do not
+  reflow) with "Rename"; double-click on the title and F2 on the entry do the same. Subagent sub-entries get no menu.
+  The title becomes an inline field (`RenameField`), prefilled and selected: Enter or blur saves, Escape cancels; an
+  empty or unchanged title (after collapsing whitespace) does nothing; at most 120 characters, the gateway's
+  `maxTitle` (`MAX_TITLE`, `normalizeTitle`, `renameDecision`, `renameReducer` in `src/agent/rename.ts`,
+  unit-tested; `useRenameChat` holds the state). Saving goes through `/rename` (`POST …/commands`): in the gateway it
+  only stores the title (`title_source: user`, no automatic naming afterwards) and publishes the chat event; it neither
+  resumes a dormant chat nor takes a slot, so no extra route was needed. The title shows at once through `updateChat`
+  (history, chat header, panel's chat selector); a failure puts the old title back and shows "Rename failed: …" under
+  the entry. **The menu opens the field only after it has closed** (`TransitionProps.onExited`, `disableRestoreFocus`):
+  opened while the menu still traps the focus, the field lost it at once and the blur saved. The menu is portalled but
+  React events bubble to the entry, so it stops click, keydown and double-click, else it selects the chat. Opening via
+  the menu never selects the chat (no resume); a double-click on an unselected entry selects it with its first click,
+  which resumes a dormant chat as any opening does (#31). The gateway moves a renamed chat to the top of the list on the
+  next refresh (`updated_at`). Render check: mock `POST …/commands`, hover for the button's opacity, wait about 400 ms
+  for the menu's transition before a screenshot, check focus and selection of the field and that no `…/resume` follows.
 - **Menus without scroll lock:** MUI's Popover (and Menu and Select) locks the page while open: `overflow: hidden`
   on body removes the document scrollbar and `padding-right` on body and `.mui-fixed` makes up for it. In-flow content
   and the app bar stay, but the context panel (fixed drawer at `right: 0`, no `.mui-fixed`) jumped right by the
