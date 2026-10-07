@@ -173,3 +173,95 @@ export function artifactApprovalView(a: Pick<Approval, 'name' | 'size' | 'conten
     const preview = a.preview?.trim() ? a.preview : undefined;
     return { name: a.name, size: formatBytes(a.size), type, preview: image ? undefined : preview, image };
 }
+
+/** Kind of file for the type icon of an attachment tile (only the icon; whether an image previews is previewKind). */
+export type FileType = 'image' | 'pdf' | 'word' | 'spreadsheet' | 'presentation' | 'text' | 'archive' | 'file';
+
+const EXT_GROUPS: [FileType, string][] = [
+    ['image', 'png jpg jpeg gif webp svg bmp tif tiff heic'],
+    ['pdf', 'pdf'],
+    ['word', 'doc docx odt rtf'],
+    ['spreadsheet', 'xls xlsx xlsm ods'],
+    ['presentation', 'ppt pptx odp'],
+    ['text', 'txt md csv tsv json jsonl xml yaml yml log html py ipynb ts js sh'],
+    ['archive', 'zip tar gz tgz bz2 xz 7z rar'],
+];
+const TYPE_BY_EXT = new Map(EXT_GROUPS.flatMap(([t, exts]) => exts.split(' ').map((e) => [e, t] as const)));
+
+/** Content types that name the kind where the extension does not (no or unknown extension). */
+function typeOfContentType(ct: string): FileType {
+    if (ct.startsWith('image/')) return 'image';
+    if (ct === 'application/pdf') return 'pdf';
+    if (ct === 'application/msword' || ct.includes('wordprocessingml') || ct.includes('opendocument.text')) {
+        return 'word';
+    }
+    if (ct === 'application/vnd.ms-excel' || ct.includes('spreadsheetml') || ct.includes('opendocument.spreadsheet')) {
+        return 'spreadsheet';
+    }
+    if (
+        ct === 'application/vnd.ms-powerpoint' ||
+        ct.includes('presentationml') ||
+        ct.includes('opendocument.presentation')
+    ) {
+        return 'presentation';
+    }
+    if (/^application\/(zip|gzip|x-gzip|x-tar|x-7z-compressed|x-rar-compressed|vnd\.rar|x-bzip2|x-xz)$/.test(ct)) {
+        return 'archive';
+    }
+    if (ct.startsWith('text/') || /^application\/(json|xml|x-yaml|yaml)$/.test(ct)) return 'text';
+    return 'file';
+}
+
+/** Type icon of a file: by extension, else by content type, else a generic file. */
+export function fileTypeOf(a: { name: string; content_type?: string }): FileType {
+    const ext = /\.([a-z0-9]{1,8})$/i.exec(a.name)?.[1]?.toLowerCase();
+    const byExt = ext ? TYPE_BY_EXT.get(ext) : undefined;
+    if (byExt) return byExt;
+    return typeOfContentType((a.content_type ?? '').split(';')[0].trim().toLowerCase());
+}
+
+/** Label of a file type for tooltips and screen readers. */
+export const FILE_TYPE_LABEL: Record<FileType, string> = {
+    image: 'Image',
+    pdf: 'PDF',
+    word: 'Word document',
+    spreadsheet: 'Spreadsheet',
+    presentation: 'Presentation',
+    text: 'Text file',
+    archive: 'Archive',
+    file: 'File',
+};
+
+/**
+ * A file name split for truncation in the middle: head shrinks with an ellipsis, tail (the last characters of the
+ * stem and the extension) stays visible, so "8252768…9992.jpg" keeps the type readable. An extension longer than
+ * eight characters counts as part of the stem. Head and tail joined give the name again.
+ */
+export function splitFileName(name: string, keep = 4): { head: string; tail: string } {
+    const dot = name.lastIndexOf('.');
+    const hasExt = dot > 0 && name.length - dot - 1 >= 1 && name.length - dot - 1 <= 8;
+    const stemEnd = hasExt ? dot : name.length;
+    const cut = Math.max(0, stemEnd - keep);
+    // a short name stays whole in the head (no point in a tail of the full name)
+    if (cut === 0) return { head: name, tail: '' };
+    return { head: name.slice(0, cut), tail: name.slice(cut) };
+}
+
+/** Text form of the middle truncation (for places that cannot measure): at most max characters, extension kept. */
+export function truncateMiddle(name: string, max = 24, keep = 4): string {
+    const chars = Array.from(name);
+    if (chars.length <= max) return name;
+    const { tail } = splitFileName(name, keep);
+    const t = Array.from(tail);
+    const tailPart = t.length + 2 > max ? t.slice(t.length - (max - 2)) : t;
+    return `${chars.slice(0, Math.max(1, max - 1 - tailPart.length)).join('')}…${tailPart.join('')}`;
+}
+
+/** Results the agent handed over from the given tool calls (the steps of an answer), oldest first. */
+export function artifactsOfCalls(list: Artifact[] | undefined, callIds: string[]): Artifact[] {
+    if (!list || callIds.length === 0) return [];
+    const ids = new Set(callIds);
+    return list
+        .filter((a) => a.kind === 'output' && !!a.tool_call_id && ids.has(a.tool_call_id))
+        .sort((x, y) => x.created_at.localeCompare(y.created_at));
+}
