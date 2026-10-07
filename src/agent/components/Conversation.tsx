@@ -7,13 +7,11 @@ import { Fragment, useCallback, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
-import Tooltip from '@mui/material/Tooltip';
 import CompressIcon from '@mui/icons-material/Compress';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
-import type { PageContext } from '../pageContext';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
 import { artifactsOfCalls } from '../files';
@@ -24,9 +22,7 @@ import type { ResumeView } from '../resume';
 import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
-import { compactionReason, formatAnswerUsage, formatTokens } from '../usage';
-import type { AnswerUsage } from '../usage';
-import { RefersTo } from './PageContextChip';
+import { compactionReason, formatTokens } from '../usage';
 import { MessageAttachments, ResultAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
@@ -45,7 +41,6 @@ function UserBubble({
     pending,
     attachments,
     files,
-    context,
 }: {
     text: string;
     dense: boolean;
@@ -53,8 +48,6 @@ function UserBubble({
     /** Names of the attachments that went with the message. */
     attachments?: string[];
     files: Files;
-    /** Page context the message was sent with, shown as "Refers to …" above it. */
-    context?: PageContext;
 }) {
     const width = dense ? '88%' : '74%';
     const withFiles = !!attachments?.length;
@@ -81,22 +74,20 @@ function UserBubble({
             {text}
         </Box>
     ) : null;
-    if (!withFiles && !context) return bubble;
+    if (!withFiles) return bubble;
     return (
         <Box
             title={bubble ? undefined : pending}
             data-pending={pending ? 'true' : undefined}
             sx={{
                 alignSelf: 'flex-end',
-                maxWidth: withFiles ? width : '100%',
+                maxWidth: width,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-end',
-                gap: context ? 0.4 : 0,
                 opacity: pending && !bubble ? 0.6 : 1,
             }}
         >
-            {context && <RefersTo context={context} />}
             {bubble}
             {withFiles && <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />}
         </Box>
@@ -171,36 +162,8 @@ function AgentBlock({
                         Stopped by you
                     </Typography>
                 )}
-                {item.usage && <UsageLine usage={item.usage} />}
             </Box>
         </Box>
-    );
-}
-
-/** Muted line under an answer: input, output and cache tokens. */
-function UsageLine({ usage }: { usage: AnswerUsage }) {
-    const hint = [
-        'Tokens of this answer: input, output and read from the cache.',
-        usage.calls > 1 ? `${usage.calls} model calls in this answer.` : undefined,
-        'Subagents and compactions count only in the chat total.',
-    ]
-        .filter(Boolean)
-        .join(' ');
-    return (
-        <Tooltip title={hint} placement="bottom-start">
-            <Typography
-                data-testid="agent-answer-usage"
-                sx={{
-                    fontSize: 11.5,
-                    color: 'text.disabled',
-                    fontVariantNumeric: 'tabular-nums',
-                    mt: 0.25,
-                    width: 'fit-content',
-                }}
-            >
-                {formatAnswerUsage(usage)}
-            </Typography>
-        </Tooltip>
     );
 }
 
@@ -419,7 +382,6 @@ export default function Conversation({
                             dense={dense}
                             attachments={it.files}
                             files={files}
-                            context={it.context}
                         />
                     ) : it.kind === 'notice' ? (
                         it.note ? (
@@ -452,7 +414,6 @@ export default function Conversation({
                     text={pending.text}
                     attachments={pending.files}
                     files={files}
-                    context={pending.context}
                     dense={dense}
                     pending={
                         chat?.starting || resumes.some((r) => r.start && r.state === 'running')

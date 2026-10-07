@@ -234,7 +234,7 @@ export type MessageSource = {
     marker?: string;
     /** "agent": context for the model only (e.g. the preferred browser language); the chat does not show it. */
     audience?: 'agent';
-    /** Type "page_context": the page context as structured data (shown as "Refers to …"); queue_id: its user entry. */
+    /** Type "page_context": the page context as structured data (not shown in the transcript); queue_id: its user entry. */
     context?: PageContext;
 };
 

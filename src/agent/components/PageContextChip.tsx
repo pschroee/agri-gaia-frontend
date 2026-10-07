@@ -66,35 +66,3 @@ export function PageContextChip({ context, onRemove }: { context: PageContext; o
         </Tooltip>
     );
 }
-
-/** Compact marker on a sent or queued message: "Refers to smarttail-bucht-3-kw31", "Refers to 2 datasets". */
-export function RefersTo({ context, align = 'end' }: { context: PageContext; align?: 'start' | 'end' }) {
-    const single = contextObjects(context).length === 1;
-    return (
-        <Box
-            data-testid="agent-refers-to"
-            title={contextTitle(context)}
-            sx={{
-                alignSelf: align === 'end' ? 'flex-end' : 'flex-start',
-                maxWidth: '100%',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 0.5,
-                fontSize: 11.5,
-                color: 'text.secondary',
-                minWidth: 0,
-            }}
-        >
-            <PlaceOutlinedIcon sx={{ fontSize: 13, flex: 'none' }} />
-            <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
-                Refers to{' '}
-                <Box
-                    component="b"
-                    sx={{ color: 'text.primary', fontWeight: 500, fontFamily: single ? MONO : undefined }}
-                >
-                    {contextLabel(context)}
-                </Box>
-            </Box>
-        </Box>
-    );
-}
