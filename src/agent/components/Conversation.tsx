@@ -32,7 +32,7 @@ import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import { compactionReason, formatTokens } from '../usage';
-import { MessageAttachments, ResultAttachments } from './Attachments';
+import { AgentFileMessage, MessageAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
 import ResumeBlock from './ResumeBlock';
@@ -142,8 +142,9 @@ export function CopyButton({ text }: { text: string }) {
 /**
  * One answer of the agent: its parts in the order they happened, live as they arrive (issue #57, as before #54): text
  * as Markdown, each thinking block as one collapsed "Thinking · 3 s", each run of tool calls as a step list with its
- * controls and the files those calls handed over below it. Under the answer the subagents it started as a card
- * (#54), files placed by time and, once finished, the copy button.
+ * controls, and right after it the file message with the files those calls sent (issue #62; nothing of them inside the
+ * step list). Under the answer the subagents it started as a card (#54), a file message for files placed by time and,
+ * once finished, the copy button.
  */
 export function AgentBlock({
     item,
@@ -154,6 +155,7 @@ export function AgentBlock({
     active = false,
     controls,
     results,
+    filesChatId,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
@@ -166,9 +168,12 @@ export function AgentBlock({
     live?: boolean;
     /** The answer belongs to the turn that runs right now (no copy yet). */
     active?: boolean;
-    /** Files the agent handed over in this answer (placeOutputs). */
+    /** Files the agent sent in this answer (placeOutputs, outputsByCall). */
     results?: Artifact[];
+    /** Chat whose files the file messages download (defaults to chatId; the subagent view has no chatId). */
+    filesChatId?: string;
 }) {
+    const fileChatId = filesChatId ?? chatId;
     const markdown = useMemo(() => answerMarkdown(item.parts), [item.parts]);
     const placed = useMemo(() => outputsByStepPart(item.parts, results), [item.parts, results]);
     const subagents = controls?.subagents;
@@ -209,7 +214,7 @@ export function AgentBlock({
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
-                        {files && <ResultAttachments chatId={chatId} artifacts={files} />}
+                        {files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
                     </Fragment>
                 );
             })}
@@ -220,7 +225,7 @@ export function AgentBlock({
                 </Typography>
             )}
             {runs.length > 0 && subagents && <SubagentCard items={runs} onOpen={subagents.onOpen} />}
-            {placed.rest.length > 0 && <ResultAttachments chatId={chatId} artifacts={placed.rest} />}
+            {placed.rest.length > 0 && <AgentFileMessage chatId={fileChatId} artifacts={placed.rest} />}
             {!live && !active && markdown && <CopyButton text={markdown} />}
         </Box>
     );
@@ -543,7 +548,7 @@ export default function Conversation({
                 <CommandLine key={n.key} notice={n} />
             ))}
             {liveItem && answer(liveItem, true)}
-            {placed.unplaced.length > 0 && <ResultAttachments chatId={chat?.id} artifacts={placed.unplaced} />}
+            {placed.unplaced.length > 0 && <AgentFileMessage chatId={chat?.id} artifacts={placed.unplaced} />}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
             {/* the agent works, but nothing of this turn's answer shows yet: a subtle hint, never in place of the steps */}
             {(running || pending) && !activeKey && !resuming && !chat?.starting && !stream.compacting && (

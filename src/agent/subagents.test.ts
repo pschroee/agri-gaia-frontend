@@ -299,6 +299,11 @@ describe('looking into subagents (issue #48)', () => {
         expect(new Set(two.map((i) => i.key)).size).toBe(4);
         const last = two[3];
         expect(last.kind === 'agent' && last.parts[0].type === 'steps' && last.parts[0].steps[0].status).toBe('error');
+        // the step keeps its tool call ID, by which files the subagent sent find it (issue #62)
+        expect(last.kind === 'agent' && last.parts[0].type === 'steps' && last.parts[0].steps[0]).toMatchObject({
+            id: 'c',
+            callId: 'k',
+        });
         expect(runTranscript({ runId: 'e', entries: [] }, true)).toEqual([]);
     });
 

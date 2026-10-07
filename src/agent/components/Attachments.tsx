@@ -5,7 +5,8 @@
 // Files as cards (issue #54, design "Agent Chat Panel v2"): a 40 px square with the thumbnail of an image or a type
 // icon (PDF red, image grey, others by kind), the name truncated in the middle so the extension stays visible, "size ·
 // type" and a download button. Used inside the input field (staged, removable, with upload progress), above a user
-// message (its attachments) and below the answer that handed results over. Cards never grow past their row.
+// message (its attachments) and as the agent's file message for files it sent (issue #62). Cards never grow past their
+// row.
 
 import type { ReactNode } from 'react';
 
@@ -24,7 +25,7 @@ import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
 import TableChartOutlinedIcon from '@mui/icons-material/TableChartOutlined';
 
 import { artifactUrl } from '../api';
-import { FILE_TYPE_LABEL, fileMeta, fileTypeOf, previewKind, splitFileName, uploadingText } from '../files';
+import { FILE_TYPE_LABEL, fileMessageLabel, fileMeta, fileTypeOf, previewKind, splitFileName, uploadingText } from '../files';
 import type { FileType, UploadInFlight } from '../files';
 import type { Artifact, ArtifactKind } from '../types';
 import ImagePreview from './ImagePreview';
@@ -384,15 +385,21 @@ export function MessageAttachments({ chatId, files, known }: { chatId?: string; 
     );
 }
 
-/** Results the agent handed over, below the answer that produced them: the same cards, left-aligned. */
-export function ResultAttachments({ chatId, artifacts }: { chatId?: string; artifacts: Artifact[] }) {
+/**
+ * Files the agent sent to the user (issue #62): a message of their own on the agent's side, after the step that sent
+ * them. The same cards as the attachments above a user message (type icon or image thumbnail, name, "size · type",
+ * download), only left-aligned. The gateway stores them without approval and announces each with the SSE event
+ * "artifact", so the message appears while the answer is still running.
+ */
+export function AgentFileMessage({ chatId, artifacts }: { chatId?: string; artifacts: Artifact[] }) {
     if (artifacts.length === 0 || !chatId) return null;
     return (
         <Box
             component="ul"
-            aria-label="Results of the agent"
-            data-testid="agent-result-attachments"
-            sx={{ ...listSx, flexDirection: 'column', alignItems: 'flex-start', alignSelf: 'stretch' }}
+            aria-label={fileMessageLabel(artifacts.length)}
+            data-testid="agent-file-message"
+            data-count={artifacts.length}
+            sx={{ ...listSx, flexDirection: 'column', alignItems: 'flex-start', alignSelf: 'stretch', my: '4px' }}
         >
             {artifacts.map((a) => (
                 <ArtifactCard
@@ -401,7 +408,7 @@ export function ResultAttachments({ chatId, artifacts }: { chatId?: string; arti
                     file={a}
                     kind={a.kind}
                     download
-                    where="result of the agent"
+                    where="sent by the agent"
                     width={CARD_WIDTH}
                     maxWidth="85%"
                 />

@@ -68,6 +68,8 @@ export type StepResult = { text: string; isError: boolean };
 
 export type Step = {
     id: string;
+    /** Tool call ID when `id` is something else (a subagent's steps are keyed by their log entry); else `id` is it. */
+    callId?: string;
     tool: string;
     summary?: string;
     status: StepStatus;
