@@ -239,9 +239,137 @@ export function mermaidConfig(): MermaidConfig {
     };
 }
 
+/** A line break written as HTML: `<br>`, `<br/>`, `<br />` (any case). */
+const HTML_BREAK = /<br\s*\/?>/gi;
+/** Any other HTML tag (opening, closing or self-closing); `a < b` and `<=` are not tags. */
+const HTML_TAG = /<\/?[A-Za-z][^<>]*>/g;
+const HAS_HTML_TAG = /<\/?[A-Za-z][^<>]*>/;
+
+/**
+ * The text of one label without HTML: `<br>` becomes a real line break, other tags go. Returns the label in its
+ * new form, or undefined when it has no tag (then nothing changes). A plain label ends up as a quoted string with
+ * real line breaks, which mermaid draws as separate lines in strict mode without HTML labels; the quotes also keep
+ * brackets in the text from breaking the parse. A double quote in the text would end the string and becomes `'`
+ * (mermaid 12 shows `#quot;` literally without HTML labels). A Markdown string stays one; a backtick inside one
+ * cannot be written, so its breaks become spaces there.
+ */
+function relabel(raw: string): string | undefined {
+    const t = raw.trim();
+    const markdown = t.length >= 4 && t.startsWith('"`') && t.endsWith('`"');
+    const quoted = !markdown && t.length >= 2 && t.startsWith('"') && t.endsWith('"');
+    const text = markdown ? t.slice(2, -2) : quoted ? t.slice(1, -1) : t;
+    if (!HAS_HTML_TAG.test(text)) return undefined;
+    const parts = text
+        .split(HTML_BREAK)
+        .map((p) => p.replace(HTML_TAG, '').replace(/\s+/g, ' ').trim())
+        .filter((p) => p !== '');
+    if (markdown) {
+        const inner = parts.join('\n');
+        return inner.includes('`') ? `"\`${parts.join(' ')}\`"` : `"\`${inner}\`"`;
+    }
+    return `"${parts.join('\n').replace(/"/g, "'")}"`;
+}
+
+/** Node shapes of a flowchart: opener and its possible closers, longer openers first. */
+const SHAPES: [string, string[]][] = [
+    ['(((', [')))']],
+    ['([', ['])']],
+    ['[[', [']]']],
+    ['[(', [')]']],
+    ['((', ['))']],
+    ['{{', ['}}']],
+    ['[/', ['/]', '\\]']],
+    ['[\\', ['\\]', '/]']],
+    ['[', [']']],
+    ['(', [')']],
+    ['{', ['}']],
+    ['>', [']']],
+];
+const ID_CHAR = /[\p{L}\p{N}_]/u;
+
+/** End of a shape's text that starts at `from`: after the closing quote when it is quoted, else the first closer. */
+function labelEnd(line: string, from: number, closers: string[]): { end: number; closer: string } | undefined {
+    let i = from;
+    while (line[i] === ' ') i++;
+    if (line[i] === '"') {
+        const q = line.indexOf('"', i + 1);
+        if (q < 0) return undefined;
+        let j = q + 1;
+        while (line[j] === ' ') j++;
+        const closer = closers.find((c) => line.startsWith(c, j));
+        return closer ? { end: j, closer } : undefined;
+    }
+    let best: { end: number; closer: string } | undefined;
+    for (const c of closers) {
+        const j = line.indexOf(c, from);
+        if (j >= 0 && (!best || j < best.end)) best = { end: j, closer: c };
+    }
+    return best;
+}
+
+/** One line of a flowchart with the labels of its nodes and its `|…|` edge labels freed from HTML. */
+function relabelLine(line: string): string {
+    let out = '';
+    let i = 0;
+    while (i < line.length) {
+        const ch = line[i];
+        if (ch === '"') {
+            // a string outside a label (e.g. after `click`): copied as it is
+            const q = line.indexOf('"', i + 1);
+            const end = q < 0 ? line.length : q + 1;
+            out += line.slice(i, end);
+            i = end;
+        } else if (ch === '|') {
+            const q = line.indexOf('|', i + 1);
+            if (q < 0) break;
+            const label = line.slice(i + 1, q);
+            out += `|${relabel(label) ?? label}|`;
+            i = q + 1;
+        } else {
+            const shape = i > 0 && ID_CHAR.test(line[i - 1]) ? SHAPES.find(([o]) => line.startsWith(o, i)) : undefined;
+            const found = shape && labelEnd(line, i + shape[0].length, shape[1]);
+            if (shape && !found) break;
+            if (shape && found) {
+                const label = line.slice(i + shape[0].length, found.end);
+                out += shape[0] + (relabel(label) ?? label) + found.closer;
+                i = found.end + found.closer.length;
+            } else {
+                out += ch;
+                i++;
+            }
+        }
+    }
+    return out + line.slice(i);
+}
+
+/**
+ * Tolerates the most common slip in diagrams written by the agent (issue #59): HTML in the labels of a flowchart.
+ * `<br>`, `<br/>` and `<br />` inside node labels and `|…|` edge labels become a real line break of a quoted label,
+ * other tags are removed. Nothing outside labels changes; other diagram types stay as they are (in a sequence
+ * diagram `<br/>` is mermaid's own line break), and so do comments and front matter. Strict mode and the absence of
+ * HTML labels are unaffected: the result carries no HTML at all.
+ */
+export function tolerateHtmlLabels(code: string): string {
+    const lines = code.split('\n');
+    const skip = (l: string) => l.trim() === '' || l.trim().startsWith('%%');
+    let i = 0;
+    while (i < lines.length && skip(lines[i])) i++;
+    if (lines[i]?.trim() === '---') {
+        i++;
+        while (i < lines.length && lines[i].trim() !== '---') i++;
+        i++;
+        while (i < lines.length && skip(lines[i])) i++;
+    }
+    if (i >= lines.length || !/^(flowchart|graph)(-elk)?\b/i.test(lines[i].trim())) return code;
+    const out = lines.map((l, n) => (n <= i || skip(l) || !l.includes('<') ? l : relabelLine(l)));
+    return out.join('\n');
+}
+
 /**
  * Renderer with a cache per source. `load` fetches the library on the first call; drawing happens one after another
- * because mermaid has global state (initialize, temporary nodes in the document).
+ * because mermaid has global state (initialize, temporary nodes in the document). HTML in flowchart labels is
+ * tolerated (`tolerateHtmlLabels`); if the adjusted source still fails, the original is drawn instead, so that an
+ * error names the line of the source the user sees.
  */
 export function createMermaidRenderer(load: () => Promise<MermaidModule>) {
     let mod: Promise<MermaidModule> | undefined;
@@ -258,7 +386,14 @@ export function createMermaidRenderer(load: () => Promise<MermaidModule>) {
                 api.initialize(mermaidConfig());
                 initialized = true;
             }
-            const { svg } = await api.render(`agent-mermaid-${++seq}`, code);
+            const tolerant = tolerateHtmlLabels(code);
+            let svg: string;
+            try {
+                ({ svg } = await api.render(`agent-mermaid-${++seq}`, tolerant));
+            } catch (e) {
+                if (tolerant === code) throw e;
+                ({ svg } = await api.render(`agent-mermaid-${++seq}`, code));
+            }
             return { ok: true, svg: sanitize(svg) };
         } catch (e) {
             // retry a failed load at the next diagram
