@@ -12,8 +12,6 @@ import {
     bindingsText,
     approvalSubject,
     formatAgo,
-    formatPeakWindows,
-    formatPrice,
     gatewayCheck,
     modelRows,
     platformChecks,
@@ -165,58 +163,24 @@ describe('modelRows', () => {
         { id: 'local/x', provider: 'ollama', model: 'x', name: '', default: false, context_window: 0 },
     ];
 
-    it('applies the off-peak factor to the prices now', () => {
-        const [a, b] = modelRows(
-            models,
-            [chat('c', { model: 'deepseek/flash', thinking_levels: ['off', 'high'] })],
-            'UTC',
-        );
-        expect(a).toMatchObject({ name: 'DeepSeek Flash', isDefault: true, window: 128000, tariff: 'off-peak' });
-        expect([a.input, a.output, a.cacheRead]).toEqual([0.14, 0.21, 0.014]);
-        expect(a.levels).toEqual(['off', 'high']);
-        expect(a.peakHours).toBe('daily 00:30–16:30');
-        expect(b).toMatchObject({
+    it('lists name, provider, window and thinking levels, without prices or tariff', () => {
+        const [a, b] = modelRows(models, [chat('c', { model: 'deepseek/flash', thinking_levels: ['off', 'high'] })]);
+        expect(a).toEqual({
+            id: 'deepseek/flash',
+            name: 'DeepSeek Flash',
+            provider: 'deepseek',
+            isDefault: true,
+            window: 128000,
+            levels: ['off', 'high'],
+        });
+        expect(b).toEqual({
+            id: 'local/x',
             name: 'local/x',
+            provider: 'ollama',
+            isDefault: false,
             window: undefined,
-            input: undefined,
-            tariff: undefined,
             levels: [],
         });
-    });
-
-    it('keeps the peak price during peak hours', () => {
-        const [a] = modelRows([{ ...models[0], peak_now: true }], [], 'UTC');
-        expect([a.tariff, a.input]).toEqual(['peak', 0.28]);
-    });
-
-    it('formats prices', () => {
-        expect(formatPrice(undefined)).toBe('–');
-        expect(formatPrice(0.014)).toBe('$0.014');
-        expect(formatPrice(2.5)).toBe('$2.50');
-        expect(formatPrice(1.095)).toBe('$1.095');
-        expect(formatPrice(0.1400001)).toBe('$0.14');
-    });
-});
-
-describe('formatPeakWindows', () => {
-    it('shows UTC windows in local time, shifting weekdays across midnight', () => {
-        const summer = new Date('2026-07-01T12:00:00Z');
-        expect(formatPeakWindows([{ days: 'mon-fri', from: '01:00', to: '04:00' }], 'Europe/Berlin', summer)).toBe(
-            'Mon–Fri 03:00–06:00',
-        );
-        expect(formatPeakWindows([{ days: 'mon-fri', from: '23:00', to: '23:30' }], 'Europe/Berlin', summer)).toBe(
-            'Tue–Sat 01:00–01:30',
-        );
-        expect(
-            formatPeakWindows(
-                [
-                    { days: 'daily', from: '01:00', to: '02:00' },
-                    { days: 'daily', from: '06:00', to: '07:00' },
-                ],
-                'UTC',
-                summer,
-            ),
-        ).toBe('daily 01:00–02:00 and 06:00–07:00');
     });
 });
 
