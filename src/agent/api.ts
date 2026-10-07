@@ -25,7 +25,7 @@ import type {
 } from './types';
 
 import { AGENT_BASE } from './login';
-import type { PageContext } from './pageContext';
+import { type PageContext, pageOnly, wireContext } from './pageContext';
 
 export { AGENT_BASE, interactiveLoginUrl } from './login';
 
@@ -80,6 +80,19 @@ const post = <T>(path: string, body?: unknown) =>
 
 const enc = encodeURIComponent;
 
+/**
+ * Did a gateway before issue #45 refuse the list form of a page context? It decodes the context strictly and answers
+ * 400 naming the unknown field `objects`.
+ */
+export function isOldGatewayRefusal(e: unknown, sent: PageContext): boolean {
+    return (
+        !!sent.objects?.length &&
+        e instanceof AgentApiError &&
+        e.status === 400 &&
+        e.message.includes('unknown field "objects"')
+    );
+}
+
 export const agentApi = {
     me: () => request<Me>('me'),
     /** Defaults and limits (max_subagents …). */
@@ -97,12 +110,22 @@ export const agentApi = {
      * Sends a message; attachments: names of inputs uploaded before (400 for unknown names); context: the page the
      * user is on (pageContext.ts; the gateway refuses anything outside its lists with 400).
      */
-    sendMessage: (id: string, text: string, attachments: string[] = [], context?: PageContext) =>
-        post<SendResult>(`chats/${enc(id)}/messages`, {
-            text,
-            ...(attachments.length > 0 ? { attachments } : {}),
-            ...(context ? { context } : {}),
-        }),
+    sendMessage: async (id: string, text: string, attachments: string[] = [], context?: PageContext) => {
+        const send = (ctx?: PageContext) =>
+            post<SendResult>(`chats/${enc(id)}/messages`, {
+                text,
+                ...(attachments.length > 0 ? { attachments } : {}),
+                ...(ctx ? { context: ctx } : {}),
+            });
+        const wire = context && wireContext(context);
+        try {
+            return await send(wire);
+        } catch (e) {
+            // a gateway before issue #45 knows only one object: send the page alone rather than one of the selection
+            if (wire && isOldGatewayRefusal(e, wire)) return send(pageOnly(wire));
+            throw e;
+        }
+    },
     /** Uploads files for the agent (inputs, mirrored to /workspace/inputs/); limit artifact_max_mb per file. */
     uploadFiles: (id: string, files: File[]) => {
         const form = new FormData();

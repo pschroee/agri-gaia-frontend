@@ -20,7 +20,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 
 import { AgentApiError } from '../api';
 import { isSlashCommand } from '../commands';
-import { PageContext, contextKey, visibleContext } from '../pageContext';
+import { PageContext, contextKey, hasSelection, inputPlaceholder, visibleContext } from '../pageContext';
 import { attachHint, canSend, checkSizes, emptyStaged, stagedReducer, uploadErrorText } from '../files';
 import type { FreshChat } from '../newChat';
 import type { Artifact, Command } from '../types';
@@ -66,7 +66,10 @@ type Props = {
     onCommand?: (text: string) => Promise<boolean>;
     /** The command list just opened (to load it again). */
     onCommandsOpen?: () => void;
-    /** Context of the current platform page; shown as a removable chip and sent with the next message. */
+    /**
+     * Context of the current platform page, sent with every message; a selection in it shows as a removable chip
+     * (the page alone shows none).
+     */
     pageContext?: PageContext;
     /** The chat was just created by "New chat": take the focus and upload its files, then call onStartTaken. */
     start?: FreshChat;
@@ -108,9 +111,11 @@ export default function ChatInput({
     const [error, setError] = useState<string>();
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
     const [staged, dispatchStaged] = useReducer(stagedReducer, emptyStaged);
-    // key of the context the user removed with the chip's cross; a new page or object shows the chip again
+    // key of the selection the user removed with the chip's cross, for the next message only; a new selection
+    // shows the chip again
     const [dismissedContext, setDismissedContext] = useState<string>();
     const context = visibleContext(pageContext, dismissedContext);
+    const chip = hasSelection(context) ? context : undefined;
     // controlled tooltip of the send button (sendTooltip.ts: not after a send, not without real pointer movement)
     const [sendTip, sendTipEvent] = useReducer(sendTipReducer, sendTipIdle);
     const fileRef = useRef<HTMLInputElement>(null);
@@ -175,7 +180,10 @@ export default function ChatInput({
         try {
             if (command && onCommand) {
                 if (!(await onCommand(t))) setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
-            } else await onSend(t, attachments.map((a) => a.name), context);
+            } else {
+                await onSend(t, attachments.map((a) => a.name), context);
+                setDismissedContext(undefined);
+            }
         } catch (e) {
             if (t) setText((cur) => (cur.trim() ? `${t}\n\n${cur}` : t));
             if (attachments.length) dispatchStaged({ type: 'restore', files: attachments });
@@ -265,9 +273,7 @@ export default function ChatInput({
                     }}
                 />
             )}
-            {context && (
-                <PageContextChip context={context} onRemove={() => setDismissedContext(contextKey(context))} />
-            )}
+            {chip && <PageContextChip context={chip} onRemove={() => setDismissedContext(contextKey(chip))} />}
             <StagedAttachments
                 chatId={chatId}
                 files={staged.files}
@@ -283,7 +289,7 @@ export default function ChatInput({
                 placeholder={
                     queueing
                         ? 'Queue another message …'
-                        : `${placeholder ?? 'Ask the agent …'}${onCommand ? ' (/ for commands)' : ''}`
+                        : `${inputPlaceholder(chip, placeholder)}${onCommand ? ' (/ for commands)' : ''}`
                 }
                 ref={setAnchor}
                 inputRef={inputRef}

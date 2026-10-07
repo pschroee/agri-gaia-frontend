@@ -47,10 +47,9 @@ export default function DataManagement() {
     const [selected, setSelected] = React.useState<readonly number[]>([]);
     const [connectorAvailable, setConnectorAvailable] = useState<boolean>(false);
 
-    // exactly one selected dataset is the agent's page context
-    const selectedDataset = selected.length === 1 ? datasets.find((d) => d.id === selected[0]) : undefined;
+    // the checked datasets are the agent's page context
     usePublishPageSelection(
-        selectedDataset ? { kind: 'dataset', id: selectedDataset.id, name: selectedDataset.name } : undefined,
+        datasets.filter((d) => selected.includes(d.id)).map((d) => ({ kind: 'dataset', id: d.id, name: d.name })),
     );
 
     useEffect(() => {
