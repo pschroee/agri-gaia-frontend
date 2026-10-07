@@ -254,7 +254,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   its share, and `llm_calls` (LLM proxy, incl. subagents). Answers carry no token line in the transcript (issue #46;
   `buildTranscript` still sums `usage` per answer, nothing renders it). Panel: ring and an "Open in agent page" button in the header, no tokens figure (issue #33;
   the section chip then gives way; the input's placeholder names the section). The button (`expandToAgentPage` in
-  `src/agent/expand.ts`, unit-tested) selects the chat, closes the panel and navigates to `/ai-agent` (Chat tab) with
+  `src/agent/expand.ts`, unit-tested) selects the chat, closes the panel (leaving the Chat tab carries it back, issue
+  #50) and navigates to `/ai-agent` (Chat tab) with
   react-router; without a selected chat there is no button. `/ai-agent`: a chat header with title, ring and tokens.
 - **Slash commands:** typing `/` at the start of the input opens `SlashCommandMenu` (MUI Popper right above the field,
   as wide as it; focus stays in the field, which is an ARIA combobox). The list comes from `GET /chats/{id}/commands`
@@ -393,6 +394,28 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (measured 573 px with and without; the strip took 46 px before); with background tasks the strip shows and lists
   the runs too. Render check: mock `subagent_entries`, `subagent_runs` and an SSE `subagent` event; compare the
   transcript height of a chat with and without subagents and the select's height with and without breadcrumb.
+- **One current chat for page and panel (issue #50):** the selected chat lives once in `AgentContext`
+  (`selectedChatId`, with the subagent opened in it), so `/ai-agent` and the panel always show the same chat; "Open in
+  agent page" and the nav entry "Agent" land on the panel's chat. **The stream is shared too:** `SharedChatStreamProvider`
+  (`src/agent/sharedChatStream.tsx`, inside `AgentProviderIfEnabled`) runs `useChatStream` for the selected chat in a
+  host keyed by chat id, and `ChatView` takes it with `useSharedChatStream` (its own stream only outside the provider).
+  Moving from page to panel therefore swaps the view, not the stream: no new `GET /chats/{id}`, no second
+  `EventSource`, no second `…/resume` (the resume decision lives with the stream), and a streaming answer, its thinking
+  times and resume steps keep going. The host runs where the chat is on screen (`chatShownAt`: every platform page,
+  since the persistent drawer keeps the panel's `ChatView` mounted while closed, and the Chat tab of `/ai-agent`; not
+  Activity or Status) and publishes each state in a layout effect, so a view mounted in the same commit has it before
+  paint (`streamFor` hands a view only the stream of its own chat; until then it renders the idle stream). The unsent
+  text goes along per chat (`DraftStore`, memory only; `ChatInput` `initialText`/`onTextChange`); staged files do not.
+  **Panel rule** (`panelReducer` in `src/agent/panelCarry.ts`, unit-tested): `open` (the user's choice) plus `carry`.
+  On `/ai-agent` the carry follows the page (`noteRoute` from the provider on every location and selection change):
+  set on the Chat tab with a chat, cleared on Activity, Status or without a chat; on platform pages it stays. The panel
+  shows when either is set, so after leaving the Chat tab it is open on the next page from the first frame (the drawer
+  mounts open, no slide-in) and stays open between platform pages; × or the floating button set `open` and clear the
+  carry, so a closed panel stays closed until the user comes from the Chat tab again. Both are kept in `localStorage`
+  (`agentPanelOpen`, `agentPanelCarry`). Render check: a fake `EventSource` in an init script, emit `message_start`
+  and `text_delta` on `/ai-agent`, type a draft, click "Datasets" in the side nav and sample the drawer's left edge per
+  animation frame; count `GET /chats/{id}`, `…/resume` and `EventSource` instances before and after. The platform's
+  "Model Training" page throws on mocked empty data (RJSF "Invalid schema"), use another page there.
 - **Renaming in the history (issue #49):** each chat entry on `/ai-agent` has a "⋯" button (`HistoryEntryMenu` in
   `HistoryRename.tsx`; visible on hover and focus, always on the selected entry, its 24 px reserved so titles do not
   reflow) with "Rename"; double-click on the title and F2 on the entry do the same. Subagent sub-entries get no menu.
