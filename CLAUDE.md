@@ -346,6 +346,20 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   imports `mermaid/dist/mermaid.core.mjs` by path (the package's own ESM entry), typed by `src/agent/mermaid-module.d.ts`;
   importing `'mermaid'` breaks `tsc`. Render check: in the dev server the mermaid chunk only loads when a diagram
   appears; the first visit after the lockfile changed re-optimizes dependencies.
+- **Acceptance reports (issue #53):** pi-subagents asks subagents with acceptance criteria to end with a fenced JSON
+  block tagged `acceptance-report` (gateway `third_party/pi-subagents/src/runs/shared/acceptance.js`). `Markdown`
+  renders fences tagged `acceptance-report`, `acceptance`, `acceptance_report` or `acceptanceReport` (case ignored) as
+  `AcceptanceReportBlock`, wherever they appear (subagent view, main transcript, task strip); every other fence, `json`
+  included, stays a code block. Collapsed it is one muted line "Acceptance report · 2/3 criteria satisfied · 4 files
+  changed · 2 commands passed · 1 failed" (criteria in the error colour when one is not satisfied, failed commands as
+  their own red piece; pieces wrap only at the separators, so in the panel a long line takes two rows). Opened: criteria
+  with status and evidence, changed files, tests, commands with result and summary, validation, diff summary, review
+  findings, residual risks ("none" dropped), notes, all wrapping (`overflow-wrap: anywhere`), plus "Show raw JSON"
+  (pretty-printed, `pre-wrap`). A body that is not JSON, not an object or has no known field shows "not valid JSON,
+  shown as code" and opens to the raw code, also wrapping; while an answer streams an unclosed block shows "being
+  written …". Parsing follows pi-subagents (camelCase and snake_case fields, wrapper keys, status synonyms such as
+  "met" or "ok") in the pure `src/agent/acceptance.ts`, unit-tested; it does not repeat pi-subagents' validation.
+  Render check: a subagent entry of kind `text` with such a block; per element `scrollWidth` against `clientWidth`.
 - **Subagents and background tasks:** as in the gateway's own UI (API.md, *Background tasks*). **Running
   commands:** a running `bash` step in `StepList` gets "Move to background" and "Stop" (`POST …/tools/{call}/background`,
   `…/stop`). Which calls are controllable is the pure `runningReducer` in `src/agent/background.ts`: bash executions
