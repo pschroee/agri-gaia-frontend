@@ -9,12 +9,14 @@ import {
     formatElapsed,
     isRunning,
     pendingSettled,
+    isLoading,
     RUN_STATE_HINT,
-    RUN_STATE_LABEL,
     runSince,
-    RUN_STATE_SHORT,
     runStateOf,
+    runStateText,
+    showRunStatus,
 } from './runState';
+import type { StatePlace } from './runState';
 import type { Chat, StoredMessage } from './types';
 
 type RunChat = Pick<Chat, 'state' | 'running' | 'resuming' | 'starting' | 'pending_approvals' | 'running_since'>;
@@ -41,7 +43,6 @@ describe('runStateOf', () => {
         expect(runStateOf(chat({ starting: true, resuming: true }))).toBe('starting');
         expect(runStateOf(chat({ starting: true }), { resumeRunning: true })).toBe('starting');
         expect(runStateOf(chat({ resuming: true }))).toBe('resuming');
-        expect(RUN_STATE_LABEL.starting).toBe('Starting');
         expect(RUN_STATE_HINT.starting).toMatch(/type already/);
     });
 
@@ -52,9 +53,10 @@ describe('runStateOf', () => {
 
     it('never shows the idle state of the gateway (issue #31): a dormant chat counts as idle', () => {
         expect(runStateOf(chat({ state: 'dormant' }))).toBe('idle');
+        const places: StatePlace[] = ['header', 'list', 'bar'];
+        const states = ['working', 'waiting', 'starting', 'resuming', 'idle'] as const;
         const texts = [
-            ...Object.values(RUN_STATE_LABEL),
-            ...Object.values(RUN_STATE_SHORT),
+            ...places.flatMap((p) => states.map((s) => runStateText(s, p) ?? '')),
             ...Object.values(RUN_STATE_HINT),
         ].join(' ');
         expect(texts).not.toMatch(/rest|dormant|sleep/i);
@@ -88,6 +90,73 @@ describe('runStateOf', () => {
         expect(isRunning('resuming')).toBe(false);
         expect(isRunning('idle')).toBe(false);
         expect(isRunning(undefined)).toBe(false);
+    });
+});
+
+// issue #35: a state shows only while something happens
+describe('state display', () => {
+    const PLACES: StatePlace[] = ['header', 'list', 'bar'];
+    // what header, list and bar show for a chat, with the live options of the open view
+    const shown = (c: RunChat, opts: Parameters<typeof runStateOf>[1] = {}) => {
+        const s = runStateOf(c, opts);
+        return Object.fromEntries(PLACES.map((p) => [p, runStateText(s, p)]));
+    };
+    const nothing = { header: undefined, list: undefined, bar: undefined };
+
+    it('shows nothing for a ready active chat: no "active", no "Idle"', () => {
+        expect(shown(chat())).toEqual(nothing);
+        expect(showRunStatus(runStateOf(chat()))).toBe(false);
+    });
+
+    it('shows nothing for a ready dormant chat', () => {
+        expect(shown(chat({ state: 'dormant' }))).toEqual(nothing);
+        expect(showRunStatus(runStateOf(chat({ state: 'dormant' })))).toBe(false);
+    });
+
+    it('shows "loading" in header and lists while resuming, no status bar (steps are in the transcript)', () => {
+        const want = { header: 'loading', list: 'loading', bar: undefined };
+        expect(shown(chat({ state: 'dormant', resuming: true }))).toEqual(want);
+        expect(shown(chat({ state: 'dormant' }), { resumeRunning: true })).toEqual(want);
+        expect(isLoading('resuming')).toBe(true);
+        expect(showRunStatus('resuming')).toBe(false);
+    });
+
+    it('shows a new chat without a warm slot as loading too', () => {
+        expect(shown(chat({ starting: true, resuming: true }))).toEqual({
+            header: 'loading',
+            list: 'loading',
+            bar: undefined,
+        });
+        expect(isLoading('starting')).toBe(true);
+        expect(showRunStatus('starting')).toBe(false);
+    });
+
+    it('shows working everywhere, with the status bar', () => {
+        expect(shown(chat({ running: true }))).toEqual({ header: 'working', list: 'working', bar: 'Working' });
+        expect(showRunStatus('working')).toBe(true);
+    });
+
+    it('shows a pending approval everywhere, with the status bar', () => {
+        expect(shown(chat({ running: true }), { pendingApprovals: 1 })).toEqual({
+            header: 'needs approval',
+            list: 'waiting for approval',
+            bar: 'Waiting for approval',
+        });
+        expect(showRunStatus('waiting')).toBe(true);
+    });
+
+    it('keeps the status bar open for a failed stop, and shows no state after a failed resume', () => {
+        // a failed stop: the bar stays open as long as its message is there
+        expect(showRunStatus('working', 'Stopping failed: boom')).toBe(true);
+        expect(showRunStatus('idle', 'The agent had already stopped.')).toBe(true);
+        expect(showRunStatus('idle', '')).toBe(false);
+        // a failed resume: the chat is dormant again, the error stays in its ResumeBlock with "Try again"
+        expect(shown(chat({ state: 'dormant' }), { resumeRunning: false })).toEqual(nothing);
+    });
+
+    it('has no text without a chat', () => {
+        expect(runStateText(undefined, 'header')).toBeUndefined();
+        expect(showRunStatus(undefined)).toBe(false);
     });
 });
 
