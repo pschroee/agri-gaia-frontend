@@ -15,6 +15,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 
 import { useAgent } from '../AgentContext';
 import { chatTitle, formatRelativeDay } from '../format';
+import { AgentTab, agentTabOf } from '../panelCarry';
 import { runSince, runStateOf } from '../runState';
 import { useSubagentNav } from '../useSubagentNav';
 import { useRenameChat } from '../useRenameChat';
@@ -291,9 +292,6 @@ function ChatHeader() {
     );
 }
 
-type PageTab = 'chat' | 'activity' | 'status';
-
-const tabOf = (v: string | null): PageTab => (v === 'activity' || v === 'status' ? v : 'chat');
 
 /** Page "Agent" (/ai-agent) with the tabs Chat, Activity and Status; its menus leave the page scroll alone. */
 export default function AgentPage() {
@@ -307,7 +305,7 @@ export default function AgentPage() {
 function AgentPageContent() {
     const { status, selectedChatId, selectChat, refreshChats } = useAgent();
     const [params, setParams] = useSearchParams();
-    const tab = tabOf(params.get('tab'));
+    const tab = agentTabOf(params.get('tab'));
     const openChat = (id: string) => {
         selectChat(id);
         setParams({});
@@ -342,7 +340,7 @@ function AgentPageContent() {
             </Box>
             <Tabs
                 value={tab}
-                onChange={(_, v: PageTab) => setParams(v === 'chat' ? {} : { tab: v })}
+                onChange={(_, v: AgentTab) => setParams(v === 'chat' ? {} : { tab: v })}
                 sx={{ borderBottom: 1, borderColor: 'divider', mt: 1.5 }}
             >
                 <Tab value="chat" label="Chat" />

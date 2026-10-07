@@ -16,8 +16,8 @@ export type ExpandDeps = {
 
 /**
  * Opens `chatId` on the agent page: selects it in the shared state first (the page shows the selected chat), closes
- * the panel (so it is closed again when the user returns to a platform page) and navigates without a reload.
- * Without a chat it does nothing; the panel shows no expand button then.
+ * the panel and navigates without a reload. Leaving the page's Chat tab again carries the chat back into the panel,
+ * open (panelCarry.ts, issue #50). Without a chat it does nothing; the panel shows no expand button then.
  */
 export function expandToAgentPage(chatId: string | undefined, deps: ExpandDeps): boolean {
     if (!chatId) return false;

@@ -9,6 +9,8 @@ import { AgentProvider, useAgentOptional } from '../AgentContext';
 import { agentEnabled } from '../api';
 import { AGENT_ROUTE } from '../expand';
 import { PageSelectionProvider } from '../pageSelection';
+import { onAgentPage } from '../panelCarry';
+import { SharedChatStreamProvider } from '../sharedChatStream';
 import AgentContextPanel, { AGENT_PANEL_WIDTH } from './AgentContextPanel';
 import AgentFab from './AgentFab';
 import AgentMenuTheme from './AgentMenuTheme';
@@ -16,20 +18,21 @@ import AgentMenuTheme from './AgentMenuTheme';
 export { AGENT_ROUTE };
 
 /**
- * Wraps the platform layout with the agent state when the build flag VITE_AGENT_ENABLED is set, and with the
- * selection platform pages publish for the page context (pageSelection.tsx).
+ * Wraps the platform layout with the agent state when the build flag VITE_AGENT_ENABLED is set, with the selection
+ * platform pages publish for the page context (pageSelection.tsx) and with the stream of the current chat, shared by
+ * the agent page and the context panel (sharedChatStream.tsx, issue #50).
  */
 export function AgentProviderIfEnabled({ children }: { children: ReactNode }) {
     return agentEnabled ? (
         <AgentProvider>
-            <PageSelectionProvider>{children}</PageSelectionProvider>
+            <SharedChatStreamProvider>
+                <PageSelectionProvider>{children}</PageSelectionProvider>
+            </SharedChatStreamProvider>
         </AgentProvider>
     ) : (
         <>{children}</>
     );
 }
-
-const onAgentPage = (pathname: string) => pathname === AGENT_ROUTE || pathname.startsWith(`${AGENT_ROUTE}/`);
 
 /** Right margin the main content keeps free for the open context panel. */
 export function useAgentPanelMargin(): number {
