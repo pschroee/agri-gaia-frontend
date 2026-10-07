@@ -178,8 +178,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `inputControls` and `inputStatusText` in `src/agent/runState.ts` decide (unit-tested). The run state shows small in
   the row below the field next to model and thinking level ("Working · 12 s", "Needs approval · 12 s", "Stopping …"
   from the click until the turn has ended); there it gives way first (label ellipsized, dot and timer stay, the picker
-  keeps its width because a fraction of a pixel less wraps it), and in the panel the lock icon of the approval hint
-  steps aside meanwhile. A failed stop shows as one amber line above that row with a dismiss cross, until the state
+  keeps its width because a fraction of a pixel less wraps it). A failed stop shows as one amber line above that row with a dismiss cross, until the state
   changes. The state comes from the pure `runStateOf`: `working`, `waiting` (running with an open approval; the live
   approval list beats the chat's counter), `starting`, `resuming` and `idle` (nothing running; the gateway's `dormant`
   counts as idle). The timer uses `running_since`, otherwise the last user message. After an abort the queue is held
@@ -201,7 +200,8 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   message is stored. A lost `ready` is closed on the next pi event (`closeResumes`). The steps exist only live: after a
   page reload the block is gone. On `failed` the request fails and `ChatInput` puts the text back.
 - **Model and thinking level:** `ModelEffortPicker` sits in the row below the input (small text buttons with menus,
-  so they fit the 400 px panel; the approval hint shrinks to its lock icon there). Models come from `GET /models`
+  so they fit the 400 px panel). There is no approval hint in that row, neither the lock icon in the panel nor
+  "Write actions need your approval." on `/ai-agent` (issue #47); approval cards and counters say it. Models come from `GET /models`
   (loaded once in `AgentContext`; each entry names the provider, no prices, issue #43). **The model list carries no
   thinking levels:** the
   gateway reports them per chat (`thinking_levels` for the chat's current model, empty until pi has been asked), so

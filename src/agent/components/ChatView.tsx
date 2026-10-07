@@ -206,7 +206,6 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                     since={since}
                     onAbort={stream.abort}
                     placeholder={placeholder}
-                    dense={dense}
                     commands={commands}
                     onCommand={onCommand}
                     onCommandsOpen={stream.refreshCommands}
