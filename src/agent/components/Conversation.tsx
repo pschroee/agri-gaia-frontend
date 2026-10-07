@@ -21,7 +21,6 @@ import type { CommandNotice } from '../commands';
 import type { Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
-import { useAlwaysShowThinking } from '../thinkingPref';
 import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
@@ -35,8 +34,6 @@ import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
 import type { StepControls } from './StepList';
 import ThinkingBlock from './ThinkingBlock';
-
-const NO_CHOICES: Record<string, boolean> = {};
 
 type Thinking = { open: Record<string, boolean>; onOpenChange: (id: string, open: boolean) => void };
 
@@ -315,19 +312,10 @@ export default function Conversation({
 }) {
     const { chat, live, resumes, pending } = stream;
     const liveP = useMemo(() => liveParts(live), [live]);
-    // Open state chosen per thinking block; kept here so it survives the switch from live to stored message.
-    // The choices belong to one value of "Always show thinking": switching it applies to every block again.
-    const [alwaysShow] = useAlwaysShowThinking();
-    const [choices, setChoices] = useState<{ pref: boolean; open: Record<string, boolean> }>({
-        pref: alwaysShow,
-        open: {},
-    });
-    const onOpenChange = useCallback(
-        (id: string, o: boolean) =>
-            setChoices((c) => ({ pref: alwaysShow, open: { ...(c.pref === alwaysShow ? c.open : {}), [id]: o } })),
-        [alwaysShow],
-    );
-    const open = choices.pref === alwaysShow ? choices.open : NO_CHOICES;
+    // Open state chosen per thinking block (collapsed until opened); kept here so it survives the switch from live to
+    // stored message.
+    const [open, setOpen] = useState<Record<string, boolean>>({});
+    const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo(() => ({ open, onOpenChange }), [open, onOpenChange]);
     const hasLive = liveP.length > 0;
     const files = useMemo<Files>(() => ({ chatId: chat?.id, known: stream.artifacts }), [chat?.id, stream.artifacts]);

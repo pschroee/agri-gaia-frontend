@@ -2,13 +2,12 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { thinkingLabel } from './format';
 import { emptyLive, hasThinkingText, liveReducer, liveTextOf, thinkingKey } from './live';
 import type { LiveAction, LiveState } from './live';
 import { buildTranscript, liveParts } from './transcript';
-import { readAlwaysShow, thinkingPrefKey, writeAlwaysShow } from './thinkingPref';
 import type { PiEvent, StoredMessage } from './types';
 
 const TS = 1_759_700_000_000;
@@ -179,6 +178,7 @@ describe('buildTranscript with thinking', () => {
 describe('thinking helpers', () => {
     it('labels the header', () => {
         expect(thinkingLabel({ durationMs: 4200 }, 0)).toBe('Thinking · 4.2 s');
+        expect(thinkingLabel({ durationMs: 451 }, 0)).toBe('Thinking · 451 ms');
         expect(thinkingLabel({}, 0)).toBe('Thinking');
         expect(thinkingLabel({ liveSince: 1000 }, 1400)).toBe('Thinking …');
         expect(thinkingLabel({ liveSince: 1000 }, 4100)).toBe('Thinking … 3 s');
@@ -188,43 +188,5 @@ describe('thinking helpers', () => {
         expect(hasThinkingText('a')).toBe(true);
         expect(hasThinkingText(' \n\u200b\ufeff')).toBe(false);
         expect(hasThinkingText(undefined)).toBe(false);
-    });
-});
-
-describe('always show thinking', () => {
-    afterEach(() => vi.unstubAllGlobals());
-
-    it('is remembered per user in localStorage', () => {
-        const store = new Map<string, string>();
-        vi.stubGlobal('localStorage', {
-            getItem: (k: string) => store.get(k) ?? null,
-            setItem: (k: string, v: string) => store.set(k, v),
-            removeItem: (k: string) => store.delete(k),
-        });
-        const alice = thinkingPrefKey('alice');
-        expect(readAlwaysShow(alice)).toBe(false);
-        writeAlwaysShow(alice, true);
-        expect(readAlwaysShow(alice)).toBe(true);
-        expect(readAlwaysShow(thinkingPrefKey('bob'))).toBe(false);
-        writeAlwaysShow(alice, false);
-        expect(store.has(alice)).toBe(false);
-    });
-
-    it('falls back to memory when storage throws', () => {
-        vi.stubGlobal('localStorage', {
-            getItem: () => {
-                throw new Error('blocked');
-            },
-            setItem: () => {
-                throw new Error('blocked');
-            },
-            removeItem: () => {
-                throw new Error('blocked');
-            },
-        });
-        const key = thinkingPrefKey(undefined);
-        expect(key).toBe('agentAlwaysShowThinking:anonymous');
-        writeAlwaysShow(key, true);
-        expect(readAlwaysShow(key)).toBe(true);
     });
 });

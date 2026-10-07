@@ -6,32 +6,28 @@ import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
-import FormControlLabel from '@mui/material/FormControlLabel';
-import Switch from '@mui/material/Switch';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
 
 import { thinkingLabel } from '../format';
 import type { ThinkingPart } from '../transcript';
-import { useAlwaysShowThinking } from '../thinkingPref';
 import { useNow } from '../useNow';
 
 type Props = {
     part: ThinkingPart;
-    /** Open state chosen by the user for this block, kept by the caller across live and stored message. */
+    /** Open state chosen by the user for this block, kept by the caller across live and stored message; collapsed
+     * until the user opens it. */
     open?: boolean;
     onOpenChange: (id: string, open: boolean) => void;
 };
 
 /**
- * The model's thinking, collapsed to one muted line with chevron, label and duration; a click shows the text.
- * With "Always show thinking" (per user) blocks start expanded.
+ * The model's thinking, collapsed to one muted line with chevron, label and duration; a click shows the text. A block
+ * that is still streaming is collapsed as well and counts its time in the header; opened, its text grows live.
  */
-export default function ThinkingBlock({ part, open: chosen, onOpenChange }: Props) {
-    const [alwaysShow, setAlwaysShow] = useAlwaysShowThinking();
+export default function ThinkingBlock({ part, open = false, onOpenChange }: Props) {
     const live = part.liveSince !== undefined;
     const now = useNow(live);
-    const open = chosen ?? alwaysShow;
     const hasText = part.text.trim() !== '';
 
     return (
@@ -78,19 +74,6 @@ export default function ThinkingBlock({ part, open: chosen, onOpenChange }: Prop
                     }}
                 >
                     {hasText ? part.text : '…'}
-                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.25 }}>
-                        <FormControlLabel
-                            control={
-                                <Switch
-                                    size="small"
-                                    checked={alwaysShow}
-                                    onChange={(e) => setAlwaysShow(e.target.checked)}
-                                />
-                            }
-                            label="Always show thinking"
-                            sx={{ mr: 0, '& .MuiFormControlLabel-label': { fontSize: 11.5, color: 'text.secondary' } }}
-                        />
-                    </Box>
                 </Box>
             </Collapse>
         </Box>
