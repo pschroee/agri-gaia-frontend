@@ -12,12 +12,15 @@ import IconButton from '@mui/material/IconButton';
 import Link from '@mui/material/Link';
 import Typography from '@mui/material/Typography';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import CodeIcon from '@mui/icons-material/Code';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import DownloadIcon from '@mui/icons-material/Download';
 import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
+import { copyText } from '../clipboard';
 import { autoRender, diagramView, isLargeDiagram, mermaidErrorNote, mermaidRenderer, svgDataUrl } from '../mermaid';
 import type { MermaidOutcome } from '../mermaid';
 import { agentColors, codeBlockSx } from './tokens';
@@ -50,14 +53,41 @@ const actionSx = {
     '&:focus-visible': { outline: 2, outlineColor: 'primary.main' },
 } as const;
 
+/** Copies the diagram's source; the icon shows a tick for a moment. */
+function CopySourceButton({ code }: { code: string }) {
+    const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
+    useEffect(() => {
+        if (state === 'idle') return undefined;
+        const t = setTimeout(() => setState('idle'), 1200);
+        return () => clearTimeout(t);
+    }, [state]);
+    return (
+        <ButtonBase
+            data-testid="agent-mermaid-copy"
+            data-state={state}
+            onClick={() => void copyText(code).then((ok) => setState(ok ? 'copied' : 'failed'))}
+            sx={actionSx}
+        >
+            {state === 'copied' ? (
+                <CheckIcon sx={{ fontSize: 14, color: agentColors.green }} />
+            ) : (
+                <ContentCopyIcon sx={{ fontSize: 13 }} />
+            )}
+            {state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : 'Copy'}
+        </ButtonBase>
+    );
+}
+
 /**
  * A Mermaid code block of an answer as a diagram. The library loads only with the first diagram (mermaid.ts); the
  * sanitized SVG is shown as an <img>, so without scripts and without fetching. In the narrow panel it fits the width;
- * a click opens it larger in a dialog, and a toggle shows the code.
+ * a click opens it larger in a dialog, and a toggle shows the code. If it cannot be rendered, a note says so and the
+ * source stays collapsed under "Show source", with "Copy" next to it (issue #59).
  */
 export default function MermaidDiagram({ code, ready, index = 0, gap = 1 }: Props) {
     const [result, setResult] = useState<{ code: string; outcome: MermaidOutcome }>();
     const [showSource, setShowSource] = useState(false);
+    const [errorSource, setErrorSource] = useState(false);
     const [clicked, setClicked] = useState(false);
     const [open, setOpen] = useState(false);
     const large = useMemo(() => isLargeDiagram(code), [code]);
@@ -108,11 +138,11 @@ export default function MermaidDiagram({ code, ready, index = 0, gap = 1 }: Prop
                         sx={{ display: 'block', maxWidth: '100%', maxHeight: 520, objectFit: 'contain' }}
                     />
                 </ButtonBase>
-            ) : (
+            ) : view !== 'error' || errorSource ? (
                 <Box component="pre" data-testid="agent-mermaid-source" sx={{ ...codeBlockSx, maxHeight: 384 }}>
                     {code}
                 </Box>
-            )}
+            ) : null}
             <Box
                 sx={{
                     display: 'flex',
@@ -164,6 +194,20 @@ export default function MermaidDiagram({ code, ready, index = 0, gap = 1 }: Prop
                             {mermaidErrorNote(outcome.error)}
                         </Box>
                     </Box>
+                )}
+                {view === 'error' && (
+                    <>
+                        <ButtonBase
+                            data-testid="agent-mermaid-show-source"
+                            onClick={() => setErrorSource((v) => !v)}
+                            aria-expanded={errorSource}
+                            sx={actionSx}
+                        >
+                            <CodeIcon sx={{ fontSize: 14 }} />
+                            {errorSource ? 'Hide source' : 'Show source'}
+                        </ButtonBase>
+                        <CopySourceButton code={code} />
+                    </>
                 )}
                 {outcome?.ok && (
                     <ButtonBase

@@ -19,6 +19,7 @@ import {
     mermaidSize,
     readFence,
     svgDataUrl,
+    tolerateHtmlLabels,
 } from './mermaid';
 import type { MermaidApi } from './mermaid';
 
@@ -165,6 +166,20 @@ describe('createMermaidRenderer (library mocked)', () => {
         expect(diagramView({ ready: true, outcome: out })).toBe('error');
     });
 
+    it('draws the tolerant source, and the original when that fails, so the error names the user\'s line', async () => {
+        const { api, load } = fake(async (_id, code) => {
+            if (code.includes('<br/>') || code.includes('\n  A["a\nb"]')) throw new Error(`Parse error on line ${code.split('\n').length}`);
+            return { svg: '<svg/>' };
+        });
+        const r = createMermaidRenderer(load);
+        expect(await r.render(ISSUE_59)).toEqual({ ok: true, svg: 'clean:<svg/>' });
+        expect(vi.mocked(api.render).mock.calls[0][1]).toBe(tolerateHtmlLabels(ISSUE_59));
+        vi.mocked(api.render).mockClear();
+        const out = await r.render('graph TD\n  A[a<br/>b]');
+        expect(vi.mocked(api.render).mock.calls.map((c) => c[1])).toEqual(['graph TD\n  A["a\nb"]', 'graph TD\n  A[a<br/>b]']);
+        expect(out).toEqual({ ok: false, error: 'Parse error on line 2' });
+    });
+
     it('reports a failed load and loads again at the next diagram', async () => {
         let fail = true;
         const { api } = fake(async () => ({ svg: '<svg/>' }));
@@ -192,6 +207,76 @@ describe('createMermaidRenderer (library mocked)', () => {
         const r = createMermaidRenderer(load);
         await Promise.all([r.render('a'), r.render('b'), r.render('c')]);
         expect(max).toBe(1);
+    });
+});
+
+// The diagram of issue #59: a flowchart with <br/> in its node labels, as the agent wrote it.
+const ISSUE_59 = [
+    'flowchart LR',
+    '  A[Vorlage wählen<br/>Provider + Architektur + Kategorie] --> B[Datensatz wählen]',
+    '  B --> C["Training starten<br />POST /train"]',
+    '  C -->|ok<br>weiter| D{Erfolg?<BR>Metriken prüfen}',
+].join('\n');
+
+describe('tolerateHtmlLabels', () => {
+    it('turns <br>, <br/> and <br /> in node and edge labels into line breaks of quoted labels (issue #59)', () => {
+        expect(tolerateHtmlLabels(ISSUE_59)).toBe(
+            [
+                'flowchart LR',
+                '  A["Vorlage wählen\nProvider + Architektur + Kategorie"] --> B[Datensatz wählen]',
+                '  B --> C["Training starten\nPOST /train"]',
+                '  C -->|"ok\nweiter"| D{"Erfolg?\nMetriken prüfen"}',
+            ].join('\n'),
+        );
+    });
+    it('leaves no HTML in the source mermaid receives', () => {
+        expect(tolerateHtmlLabels(ISSUE_59)).not.toMatch(/<[a-z/]/i);
+    });
+    it('removes other tags and keeps their text', () => {
+        expect(tolerateHtmlLabels('graph TD\n  A[<b>bold</b> and <i>it</i>] --> B')).toBe(
+            'graph TD\n  A["bold and it"] --> B',
+        );
+    });
+    it('handles the other node shapes and subgraph titles', () => {
+        const src = [
+            'flowchart TD',
+            '  subgraph S[Phase 1<br/>Setup]',
+            '  A([a<br/>b]) --> B[[c<br/>d]] --> C[(e<br/>f)] --> D((g<br/>h))',
+            '  E{{i<br/>j}} --> F[/k<br/>l/] --> G>m<br/>n] --> H(o<br/>p)',
+            '  end',
+        ].join('\n');
+        expect(tolerateHtmlLabels(src)).toBe(
+            [
+                'flowchart TD',
+                '  subgraph S["Phase 1\nSetup"]',
+                '  A(["a\nb"]) --> B[["c\nd"]] --> C[("e\nf")] --> D(("g\nh"))',
+                '  E{{"i\nj"}} --> F[/"k\nl"/] --> G>"m\nn"] --> H("o\np")',
+                '  end',
+            ].join('\n'),
+        );
+    });
+    it("quotes the label, so brackets next to a break parse; a double quote in the text becomes '", () => {
+        expect(tolerateHtmlLabels('graph LR\n  A[Training (CPU)<br/>Docker]')).toBe(
+            'graph LR\n  A["Training (CPU)\nDocker"]',
+        );
+        expect(tolerateHtmlLabels('graph LR\n  A[Modell<br/>"best.pt"]')).toBe("graph LR\n  A[\"Modell\n'best.pt'\"]");
+    });
+    it('keeps a Markdown string one, with a space where a backtick forbids a line break', () => {
+        expect(tolerateHtmlLabels('graph LR\n  A["`**a**<br/>b`"]')).toBe('graph LR\n  A["`**a**\nb`"]');
+        expect(tolerateHtmlLabels('graph LR\n  A["`a`b<br/>c`"]')).toBe('graph LR\n  A["`a`b c`"]');
+    });
+    it('changes nothing outside labels, nothing without tags and nothing in other diagram types', () => {
+        const plain = 'flowchart LR\n  A[a <= b] --> B["x < y"]\n  %% a <br/> comment\n  A -- text --> B';
+        expect(tolerateHtmlLabels(plain)).toBe(plain);
+        const seq = 'sequenceDiagram\n  A->>B: one<br/>two';
+        expect(tolerateHtmlLabels(seq)).toBe(seq);
+        const front = '---\ntitle: T<br/>x\n---\nflowchart LR\n  A[a<br/>b]';
+        expect(tolerateHtmlLabels(front)).toBe('---\ntitle: T<br/>x\n---\nflowchart LR\n  A["a\nb"]');
+        const click = 'flowchart LR\n  A[a<br/>b]\n  click A "https://x.test/<b>" "tip"';
+        expect(tolerateHtmlLabels(click)).toBe('flowchart LR\n  A["a\nb"]\n  click A "https://x.test/<b>" "tip"');
+    });
+    it('leaves a line it cannot read to the end as it is', () => {
+        expect(tolerateHtmlLabels('graph LR\n  A[a<br/>b')).toBe('graph LR\n  A[a<br/>b');
     });
 });
 
