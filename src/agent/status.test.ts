@@ -5,8 +5,11 @@
 import { describe, expect, it } from 'vitest';
 
 import { AgentApiError } from './api';
+import { variantLabel } from './format';
 import {
+    activeConnection,
     activityText,
+    bindingsText,
     approvalSubject,
     formatAgo,
     formatPeakWindows,
@@ -86,6 +89,49 @@ describe('poolByVariant', () => {
         });
         expect(poolByVariant(undefined, variants, [])).toEqual([]);
         expect(poolByVariant({ targets: {}, slots: null as unknown as Slot[] }, variants, [])).toEqual([]);
+    });
+});
+
+describe('connection fixed by the gateway (AGW_TOOLSETS)', () => {
+    const cliApi: Variant = {
+        id: 'cli,api',
+        label: 'Command line + REST API',
+        bindings: ['cli', 'api'],
+        tools: ['bash', 'platform_http'],
+        active: true,
+    };
+
+    it('takes the connection from the config, else from the active variant', () => {
+        expect(activeConnection({ toolsets: cliApi }, variants)).toBe(cliApi);
+        expect(activeConnection({}, [...variants, cliApi])?.id).toBe('cli,api');
+        expect(activeConnection(undefined, variants)).toBeUndefined(); // older gateway: no fixed connection
+    });
+
+    it('names the bindings of a key', () => {
+        expect(bindingsText('cli')).toBe('CLI');
+        expect(bindingsText('cli,api')).toBe('CLI + REST API');
+        expect(bindingsText('cli,mcp,api')).toBe('CLI + MCP + REST API');
+        expect(bindingsText('both')).toBe('CLI + MCP');
+    });
+
+    it('labels combinations, keeping the gateway text for new ones', () => {
+        expect(variantLabel({ id: 'cli,mcp', label: 'x' })).toBe('MCP and command line');
+        expect(variantLabel({ id: 'both', label: 'x' })).toBe('MCP and command line');
+        expect(variantLabel(cliApi)).toBe('Command line + REST API');
+    });
+
+    it('marks the pool of the configured connection; older ones only hold older chats', () => {
+        const pool: Pool = {
+            targets: { 'cli,api': 4 },
+            toolsets: 'cli,api',
+            slots: [slot('s1', 'cli,api', 'idle'), slot('s2', 'both', 'assigned', { chat_id: 'c1' })],
+        };
+        const list = poolByVariant(pool, [...variants, { ...cliApi }], [chat('c1', { variant: 'both' })]);
+        expect(list.map((p) => [p.variant, p.active, p.target])).toEqual([
+            ['cli,api', true, 4],
+            ['both', false, 0],
+        ]);
+        expect(list[1].mine.map((m) => m.chatId)).toEqual(['c1']);
     });
 });
 

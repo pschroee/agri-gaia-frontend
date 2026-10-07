@@ -37,7 +37,28 @@ export type VariantPool = {
     /** Images of the variant's slots (pi container), without duplicates. */
     images: string[];
     mine: PoolChat[];
+    /** The combination new chats get (AGW_TOOLSETS); the others only hold older chats. */
+    active: boolean;
 };
+
+/**
+ * The connection every new chat gets, fixed by the gateway (AGW_TOOLSETS, gateway issue #29): from GET /config,
+ * else the active entry of GET /variants; undefined for a gateway that still lets the user choose.
+ */
+export function activeConnection(cfg: Config | undefined, variants: Variant[]): Variant | undefined {
+    return cfg?.toolsets ?? variants.find((v) => v.active);
+}
+
+/** The bindings of a connection key for display: 'cli,api' → 'CLI + REST API'; 'both' is cli,mcp. */
+export function bindingsText(id: string): string {
+    const names: Record<string, string> = { cli: 'CLI', mcp: 'MCP', api: 'REST API' };
+    return (id === 'both' ? 'cli,mcp' : id)
+        .split(',')
+        .map((b) => b.trim())
+        .filter(Boolean)
+        .map((b) => names[b] ?? b)
+        .join(' + ');
+}
 
 /**
  * Groups the pool's slots by variant, in the order of the gateway's variant list, then variants that only the pool
@@ -57,6 +78,7 @@ export function poolByVariant(pool: Pool | undefined, variants: Variant[], chats
             const busy = own.filter((s) => s.state === 'assigned');
             const v = variants.find((x) => x.id === id);
             return {
+                active: pool.toolsets === id || (!pool.toolsets && !!v?.active),
                 variant: id,
                 label: v ? variantLabel(v) : variantLabel({ id: id as Variant['id'], label: id }),
                 target: (targets as Record<string, number | undefined>)[id] ?? 0,
