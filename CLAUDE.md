@@ -250,7 +250,11 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
 - **Files:** attachments, the chat's artifacts and display images, as in the gateway's own UI (API.md, *Attachments to
   messages*, *Display images*). **Attachments:** the paperclip in the field (`ChatInput`) and dropping files anywhere on the
   agent area upload them at once (`POST …/files`, multipart, field `file`); files above `artifact_max_mb` from
-  `GET /config` are refused before uploading and named. Uploaded files sit as tiles above the field until sent; sending
+  `GET /config` are refused before uploading and named with their size; a 413 of the gateway (or a proxy) becomes a size
+  message too (`uploadErrorText`). There is deliberately no `accept` filter: any type can be attached, the paperclip
+  tooltip and the drop overlay name the formats the agent reads (`READABLE_FORMATS`: Office, PDF, CSV, text, HTML, EPUB,
+  images; gateway skill `documents`, issue #42). Only the command-line binding converts Office files and PDF; with MCP
+  or REST alone the agent says it cannot read them (gateway API.md, *Attachments to messages*). Uploaded files sit as tiles above the field until sent; sending
   posts their names as `attachments` with the text (text may be empty), also when the message is queued (the queue row
   names the files); a failed send puts text and chips back; a slash command leaves the chips for the next message.
   The gateway appends the block `[Attachments in /workspace/inputs/]` to the stored user message; `buildTranscript`
