@@ -23,7 +23,7 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** Tooltip of the internet switch: what on and off mean, and when a change takes effect. */
 export function internetHint(chat: Pick<Chat, 'internet' | 'state'>): string {
     const base = chat.internet
-        ? 'Internet access on: the sandbox can reach the web. The language model and the gateway are always reachable.'
+        ? 'Internet access on: the sandbox can reach the web. The agent can switch it off again itself, without approval. The language model and the gateway are always reachable.'
         : 'Internet access off: the sandbox reaches only the language model and the gateway. The agent can ask for internet; you approve it in the chat.';
     const when = chat.state === 'dormant' ? ' The change takes effect once the chat has loaded.' : '';
     return `${base}${when}`;
@@ -70,7 +70,7 @@ export const approvalWho = (a: Pick<Approval, 'session'>): string =>
     a.session && a.session !== 'main' ? 'A subagent' : 'The agent';
 
 /**
- * Texts of the approval card for an internet request (agw-internet, MCP request_internet): who asks, the reason the
+ * Texts of the approval card for an internet request (agw-internet, MCP request_internet, REST request_internet): who asks, the reason the
  * agent gave (the approval's name; the gateway writes "(no reason given)" without one), and what approving does.
  */
 export function internetApprovalText(a: Pick<Approval, 'session' | 'name' | 'via'>): {
@@ -83,6 +83,6 @@ export function internetApprovalText(a: Pick<Approval, 'session' | 'name' | 'via
         title: `${approvalWho(a)} asks for internet access`,
         reason: reason && reason !== '(no reason given)' ? reason : undefined,
         explain:
-            'Allowing switches on internet access for the sandbox of this chat; it stays on until you switch it off with the globe in the chat header. Rejecting keeps the sandbox offline.',
+            'Allowing switches on internet access for the sandbox of this chat; it stays on until the agent switches it off again or you do with the globe in the chat header. Rejecting keeps the sandbox offline.',
     };
 }

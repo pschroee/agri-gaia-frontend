@@ -18,6 +18,7 @@ import {
 describe('internetHint', () => {
     it('explains on and off', () => {
         expect(internetHint({ internet: true, state: 'active' })).toMatch(/^Internet access on/);
+        expect(internetHint({ internet: true, state: 'active' })).toMatch(/agent can switch it off again itself/);
         expect(internetHint({ internet: false, state: 'active' })).toMatch(/^Internet access off.*ask for internet/);
     });
     it('says when a change reaches a dormant chat', () => {
@@ -92,6 +93,8 @@ describe('internet approvals', () => {
         expect(t.title).toBe('The agent asks for internet access');
         expect(t.reason).toBe('pip install pandas');
         expect(t.explain).toMatch(/globe in the chat header/);
+        // Gateway issue #34: the agent switches internet off itself, without approval.
+        expect(t.explain).toMatch(/until the agent switches it off again or you do/);
     });
     it("drops the gateway's placeholder for a missing reason", () => {
         expect(internetApprovalText({ name: '(no reason given)', via: 'mcp' }).reason).toBeUndefined();
