@@ -87,6 +87,11 @@ describe('needsTrashConfirm', () => {
         expect(needsTrashConfirm({ ...idle, subagents_running: 2 })).toBe(true);
     });
 
+    it('asks while a background task runs', () => {
+        expect(needsTrashConfirm({ ...idle, background_running: 1 })).toBe(true);
+        expect(needsTrashConfirm({ ...idle, background_running: 0 })).toBe(false);
+    });
+
     it('asks while the chat starts or resumes', () => {
         expect(needsTrashConfirm({ ...idle, starting: true })).toBe(true);
         expect(needsTrashConfirm({ ...idle, resuming: true })).toBe(true);

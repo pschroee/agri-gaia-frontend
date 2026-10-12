@@ -125,7 +125,7 @@ export function activityRows(page: ActivityPage, kind: KindFilter = 'all'): Acti
  * otherwise its title, or "Untitled chat".
  */
 export function activityChatName(chat: Pick<ActivityChat, 'title' | 'deleted'>): string {
-    return chat.deleted ? 'Deleted chat' : chat.title || 'Untitled chat';
+    return chat.deleted ? 'Deleted chat' : chat.title?.trim() || 'Untitled chat';
 }
 
 /** "–" (not measured), "0.4 ms", "12 ms", "1.2 s". */

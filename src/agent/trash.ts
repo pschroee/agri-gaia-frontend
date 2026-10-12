@@ -28,7 +28,9 @@ export function nextChatAfterRemoval(list: { id: string }[], id: string): string
 export function purgeLabel(purgeAt: string, now: Date = new Date()): string | undefined {
     const t = Date.parse(purgeAt);
     if (Number.isNaN(t)) return undefined;
-    const days = Math.ceil((t - now.getTime()) / DAY_MS);
+    // calendar days from today (local), so "later today" reads "today" and tomorrow reads "in 1 day"
+    const day = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const days = Math.round((day(new Date(t)) - day(now)) / DAY_MS);
     if (days < 1) return 'Deleted permanently today';
     return `Deleted permanently in ${days} ${days === 1 ? 'day' : 'days'}`;
 }
@@ -41,14 +43,18 @@ export function retentionHint(days: number | undefined): string | undefined {
 
 /**
  * Does moving the chat to the trash need a question first? Only while the agent works in it: a running turn, an open
- * approval, or a subagent that runs.
+ * approval, a subagent or a background task that runs.
  */
 export function needsTrashConfirm(
-    chat: Pick<Chat, 'state' | 'running' | 'starting' | 'resuming' | 'pending_approvals' | 'subagents_running'>,
+    chat: Pick<
+        Chat,
+        'state' | 'running' | 'starting' | 'resuming' | 'pending_approvals' | 'subagents_running' | 'background_running'
+    >,
 ): boolean {
     return (
         runStateOf(chat) !== 'idle' ||
         (chat.pending_approvals ?? 0) > 0 ||
-        (chat.subagents_running ?? 0) > 0
+        (chat.subagents_running ?? 0) > 0 ||
+        (chat.background_running ?? 0) > 0
     );
 }
