@@ -5,13 +5,21 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    FOREGROUND_NOTE,
+    deliveryText,
+    foldContinuations,
     groupOpen,
     groupOpenByDefault,
     groupRuns,
+    latestRunId,
     mergeLLMCalls,
     mergeRunMeta,
     mergeSubagentEntries,
+    mergeSubagentMessages,
     runUsage,
+    subagentInputState,
+    subagentSendErrorText,
+    threadIds,
     runDuration,
     runItems,
     runsSummary,
@@ -26,7 +34,7 @@ import {
     toggleGroup,
     toolAgents,
 } from './subagents';
-import type { LLMCall, StoredMessage, SubagentEntry, SubagentRunMeta } from './types';
+import type { LLMCall, StoredMessage, SubagentEntry, SubagentMessage, SubagentRunMeta } from './types';
 
 const T0 = Date.parse('2026-10-06T10:00:00Z');
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -295,7 +303,8 @@ describe('looking into subagents (issue #48)', () => {
             },
             true,
         );
-        expect(two.map((i) => i.kind)).toEqual(['user', 'agent', 'user', 'agent']);
+        // a later task is the main agent's message to the subagent: a note, never a user message (issue #81)
+        expect(two.map((i) => i.kind)).toEqual(['user', 'agent', 'note', 'agent']);
         expect(new Set(two.map((i) => i.key)).size).toBe(4);
         const last = two[3];
         expect(last.kind === 'agent' && last.parts[0].type === 'steps' && last.parts[0].steps[0].status).toBe('error');
@@ -337,5 +346,163 @@ describe('looking into subagents (issue #48)', () => {
         ];
         expect(runsByCall(messages, runs)).toEqual({ 'call-b': ['r1'], 'call-a': ['r2'], 'call-c': ['r3'] });
         expect(runsByCall([], runs)).toEqual({});
+    });
+});
+
+const msg = (id: number, run: string, s: number, extra: Partial<SubagentMessage> = {}): SubagentMessage => ({
+    id,
+    run_id: run,
+    ref: `agw-${id}`,
+    mode: 'steer',
+    text: `text ${id}`,
+    status: 'delivered',
+    created_at: at(s),
+    ...extra,
+});
+
+describe('messages to subagents (issue #81)', () => {
+    it('folds a continuation into its origin: one entry, its state from the newest run, entries once', () => {
+        const runs = groupRuns(
+            [
+                entry('r1', 't', 'task', 1, { text: 'Count' }),
+                entry('r1', 'a', 'text', 2, { text: 'first answer' }),
+                // the continuation repeats the earlier entries and carries the relay echo of the user
+                entry('r2', 'a', 'text', 2, { text: 'first answer' }),
+                entry('r2', 'u', 'user_echo', 3, { relay_ref: 'agw-1', text: 'Shorter please' }),
+                entry('r2', 'b', 'text', 4, { text: 'short answer' }),
+            ],
+            [
+                meta('r1', { state: 'complete', pi_run_id: 'p1', started_at: at(0), ended_at: at(2) }),
+                meta('r2', {
+                    state: 'running',
+                    pi_run_id: 'p2',
+                    continues_run_id: 'r1',
+                    started_at: at(3),
+                    ended_at: at(4),
+                }),
+            ],
+        );
+        expect(runs.map((r) => r.runId)).toEqual(['r1']);
+        expect(threadIds(runs[0])).toEqual(['r1', 'r2']);
+        expect(latestRunId(runs[0])).toBe('r2');
+        expect(runs[0].piRunId).toBe('p2');
+        expect(runs[0].state).toBe('running');
+        expect(runs[0].entries.map((e) => e.entry_id)).toEqual(['t', 'a', 'b']);
+        expect(runs[0].task).toBe('Count');
+    });
+
+    it('keeps a continuation whose origin is unknown as a thread of its own', () => {
+        const runs = groupRuns(
+            [entry('r2', 'b', 'text', 4, { text: 'short answer' })],
+            [meta('r2', { continues_run_id: 'gone', started_at: at(3) })],
+        );
+        expect(runs.map((r) => r.runId)).toEqual(['r2']);
+        expect(runs[0].members).toBeUndefined();
+        expect(threadIds(runs[0])).toEqual(['r2']);
+    });
+
+    it('lists a thread once in the sub-entries and never a continuation of its own', () => {
+        const runs = groupRuns(
+            [entry('r1', 't', 'task', 1, { text: 'Count' }), entry('r2', 'b', 'text', 4, { text: 'again' })],
+            [meta('r1', { state: 'complete', started_at: at(0) }), meta('r2', { continues_run_id: 'r1', started_at: at(3) })],
+        );
+        expect(subagentNav(runs, { chatRunning: false, now: Date.parse(at(10)) })).toHaveLength(1);
+        expect(foldContinuations(runs)).toHaveLength(1);
+    });
+
+    it('places the user\'s messages by time, marks the new run after a resume or restart, and skips other runs', () => {
+        const [run] = groupRuns([
+            entry('r1', 't', 'task', 1, { text: 'Count' }),
+            entry('r1', 'a', 'text', 2, { text: 'first' }),
+            entry('r1', 'b', 'text', 6, { text: 'later' }),
+        ]);
+        const items = runTranscript(run, false, [], [
+            msg(1, 'r1', 3, { text: 'Only ten' }),
+            msg(2, 'r9', 3, { text: 'of another run' }),
+            msg(3, 'r1', 5, { mode: 'restart', target_run_id: 'r2', text: 'Again' }),
+        ]);
+        expect(items.map((i) => i.kind)).toEqual(['user', 'agent', 'you', 'you', 'continued', 'agent']);
+        expect(items[2]).toMatchObject({ kind: 'you', message: { id: 1, text: 'Only ten' } });
+        expect(items[4]).toMatchObject({ kind: 'continued', mode: 'restart' });
+    });
+
+    it('never shows a later task as a user message, and hides relay echoes', () => {
+        const run = {
+            runId: 'r',
+            entries: [
+                entry('r', 't1', 'task', 1, { text: 'First' }),
+                entry('r', 't2', 'task', 2, { text: 'Lenkung durch den Hauptagenten' }),
+                entry('r', 'e', 'user_echo', 3, { relay_ref: 'agw-1', text: 'Echo' }),
+            ],
+        };
+        const items = runTranscript(run, false);
+        expect(items.map((i) => i.kind)).toEqual(['user', 'note']);
+        expect(runItems(run, false).map((i) => i.type)).toEqual(['task', 'note']);
+    });
+
+    it('states what the user may write to a subagent now', () => {
+        expect(subagentInputState({ status: 'running', piRunId: 'p1' })).toEqual({
+            mode: 'open',
+            placeholder: 'Message the subagent – it reads it after its current step',
+            blocked: false,
+        });
+        expect(subagentInputState({ status: 'idle', piRunId: 'p1' }).mode).toBe('open');
+        expect(subagentInputState({ status: 'done' })).toEqual({
+            mode: 'open',
+            placeholder: 'Ask a follow-up – continues with its history',
+            blocked: false,
+        });
+        // a run inside a step of the main agent cannot be addressed while it runs
+        expect(subagentInputState({ status: 'running' })).toMatchObject({
+            mode: 'locked',
+            note: FOREGROUND_NOTE,
+            blocked: true,
+        });
+        // the last message has not arrived: the field stays, sending waits
+        expect(subagentInputState({ status: 'done', pending: true })).toMatchObject({
+            mode: 'open',
+            note: 'Waiting for your last message to arrive',
+            blocked: true,
+        });
+        expect(subagentInputState({ status: 'done', trashed: true }).mode).toBe('hidden');
+    });
+
+    it('names a send error in plain words, from the gateway codes', () => {
+        expect(subagentSendErrorText({ code: 'subagent_limit' }, 2)).toBe(
+            '2 subagents are already running – try again when one has finished.',
+        );
+        expect(subagentSendErrorText({ code: 'subagent_limit' }, 1)).toBe(
+            '1 subagent is already running – try again when it has finished.',
+        );
+        expect(subagentSendErrorText({ code: 'foreground_run' })).toBe(FOREGROUND_NOTE);
+        expect(subagentSendErrorText({ code: 'message_pending' })).toBe('Waiting for your last message to arrive');
+        expect(subagentSendErrorText({ code: 'chat_in_trash' })).toMatch(/trash/);
+        expect(subagentSendErrorText({ status: 429 })).toMatch(/within an hour/);
+        expect(subagentSendErrorText({ status: 404 })).toBe('This subagent is no longer available.');
+        expect(subagentSendErrorText(new Error('boom'))).toBe('boom');
+        expect(subagentSendErrorText({})).toBe('The message could not be sent.');
+    });
+
+    it('writes the delivery state under a bubble, the gateway reasons in plain words', () => {
+        expect(deliveryText({ status: 'sending' })).toBe('Sending …');
+        expect(deliveryText({ status: 'sent' })).toBe('Sent');
+        expect(deliveryText({ status: 'delivered' })).toBe('Delivered');
+        expect(deliveryText({ status: 'failed', error: 'relay timed out' })).toBe(
+            'Not delivered: the subagent did not answer in time',
+        );
+        expect(deliveryText({ status: 'failed', error: 'run ended before the message arrived' })).toBe(
+            'Not delivered: the subagent ended before it read the message',
+        );
+    });
+
+    it('replaces a message by id when its status changes', () => {
+        const l = mergeSubagentMessages([msg(1, 'r1', 1, { status: 'sending' })], [
+            msg(1, 'r1', 1, { status: 'delivered' }),
+            msg(2, 'r1', 2),
+        ]);
+        expect(l.map((m) => [m.id, m.status])).toEqual([
+            [1, 'delivered'],
+            [2, 'delivered'],
+        ]);
     });
 });

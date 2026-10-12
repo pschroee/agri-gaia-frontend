@@ -413,6 +413,30 @@ export type ChatDetail = {
     subagent_entries?: SubagentEntry[];
     /** Name and state of the subagent runs (status files of pi-subagents). */
     subagent_runs?: SubagentRunMeta[];
+    /** Messages the user wrote to subagents of this chat (gateway issue #81), oldest first. */
+    subagent_messages?: SubagentMessage[];
+};
+
+/**
+ * Message the user wrote to a subagent (gateway issue #81, table subagent_messages): recorded by the gateway before it
+ * is sent, so this is the only source of the "You" bubbles in a subagent's view. `steer`: to a running run, read after
+ * its current step; `resume` or `restart`: a new run continues the earlier one (`target_run_id`).
+ */
+export type SubagentMessageMode = 'steer' | 'resume' | 'restart';
+export type SubagentMessageStatus = 'sending' | 'sent' | 'delivered' | 'failed';
+export type SubagentMessage = {
+    id: number;
+    /** The run the message was addressed to (the root of its thread or a continuation). */
+    run_id: string;
+    /** The new run of a resume or restart. */
+    target_run_id?: string;
+    ref: string;
+    mode: SubagentMessageMode;
+    text: string;
+    status: SubagentMessageStatus;
+    error?: string;
+    created_at: string;
+    delivered_at?: string;
 };
 
 /** State of a background task (gateway API.md, *Background tasks*). */
@@ -448,7 +472,11 @@ export type BackgroundTask = {
 /** SSE event "background": output at most every 2 s per task. */
 export type BackgroundEvent = { change: 'started' | 'output' | 'ended'; task: BackgroundTask };
 
-export type SubagentEntryKind = 'task' | 'tool_call' | 'tool_result' | 'text';
+/**
+ * `user_echo`: a user message of the subagent's session that carries a relay reference (issue #81); the view hides it and
+ * shows the gateway's SubagentMessage instead.
+ */
+export type SubagentEntryKind = 'task' | 'tool_call' | 'tool_result' | 'text' | 'user_echo';
 
 /**
  * Entry from a subagent's session file (sandbox, not tamper-proof); confirmed: its response is recorded at the
@@ -467,6 +495,8 @@ export type SubagentEntry = {
         is_error?: boolean;
         id?: string;
         tool_call_id?: string;
+        /** Relay reference of a user_echo (issue #81). */
+        relay_ref?: string;
     };
     response_id?: string;
     confirmed: boolean;
@@ -483,6 +513,8 @@ export type SubagentRunMeta = {
     state?: string;
     pi_run_id?: string;
     parent_run_id?: string;
+    /** The run this one continues (a resume or restart after a message, issue #81); set by the gateway only. */
+    continues_run_id?: string;
     started_at?: string;
     ended_at?: string;
     updated_at: string;
@@ -506,6 +538,8 @@ export type SubagentRunSummary = {
     last_at?: string;
     last_kind?: SubagentEntry['kind'];
     entries: number;
+    /** The run this one continues (issue #81); such a run is shown as part of its thread, not as a sub-entry. */
+    continues_run_id?: string;
 };
 
 /** Model call recorded at the LLM proxy (subset); main: the main session's answer, otherwise subagent or compaction. */
@@ -668,6 +702,7 @@ export type ServerEvent =
     | { kind: 'background'; data: BackgroundEvent }
     | { kind: 'subagent'; data: SubagentEntry }
     | { kind: 'subagent_run'; data: SubagentRunMeta }
+    | { kind: 'subagent_message'; data: SubagentMessage }
     | { kind: 'llm_call'; data: LLMCall }
     | { kind: 'resume'; data: ResumeStep }
     | { kind: 'auto_held'; data: { reason: 'wake_limit' | 'auto_turns'; limit: number; count: number } }

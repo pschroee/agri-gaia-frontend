@@ -11,17 +11,19 @@ import { alpha } from '@mui/material/styles';
 import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 
-import { isLiveStatus, runTranscript, subagentStateText } from '../subagents';
-import type { RunStatus, SubagentNavItem, SubagentRun } from '../subagents';
+import { deliveryText, isLiveStatus, runTranscript, subagentStateText } from '../subagents';
+import type { RunStatus, SubagentItem, SubagentNavItem, SubagentRun } from '../subagents';
 import { outputsByCall } from '../files';
 import { placePlans } from '../plan';
 import type { Plan } from '../plan';
-import type { Approval, Artifact, ToolExecution } from '../types';
+import type { TranscriptItem } from '../transcript';
+import type { Approval, Artifact, SubagentMessage, SubagentMessageMode, ToolExecution } from '../types';
 import { AgentBlock, UserBubble } from './Conversation';
 import EllipsisText from './EllipsisText';
 import type { Files, Thinking } from './Conversation';
@@ -168,44 +170,7 @@ export function SubagentBreadcrumb({
     );
 }
 
-/**
- * Replaces the input while a subagent is open (issue #54, design): "Subagents can't receive messages." and an outlined
- * "Back to chat" in the subagents' violet.
- */
-export function SubagentReadOnlyBar({ onBack }: { onBack: () => void }) {
-    return (
-        <Box
-            data-testid="agent-subagent-readonly"
-            role="status"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, minHeight: 36 }}
-        >
-            <Typography component="span" sx={{ flex: 1, minWidth: 0, fontSize: 13, color: 'text.secondary' }}>
-                Subagents can&apos;t receive messages.
-            </Typography>
-            <Button
-                variant="outlined"
-                onClick={onBack}
-                data-testid="agent-subagent-back-button"
-                startIcon={<ArrowBackIcon sx={{ fontSize: '18px !important' }} />}
-                sx={{
-                    flex: 'none',
-                    height: 36,
-                    px: '15px',
-                    fontSize: 14,
-                    fontWeight: 500,
-                    letterSpacing: '0.4px',
-                    color: agentColors.subagent,
-                    borderColor: 'rgba(94, 53, 177, 0.5)',
-                    '&:hover': { borderColor: agentColors.subagent, bgcolor: 'rgba(94, 53, 177, 0.04)' },
-                }}
-            >
-                Back to chat
-            </Button>
-        </Box>
-    );
-}
-
-/** Head of a subagent's view: its state as a chip ("done", "running") and "Subagent log · read-only". */
+/** Head of a subagent's view: its state as a chip ("done", "running") and "Subagent log". */
 function SubagentLogHead({ status }: { status: RunStatus }) {
     const color = STATE_COLOR[status];
     return (
@@ -238,15 +203,102 @@ function SubagentLogHead({ status }: { status: RunStatus }) {
                 )}
                 {subagentStateText(status)}
             </Box>
-            <span>Subagent log · read-only</span>
+            <span>Subagent log</span>
+        </Box>
+    );
+}
+
+/**
+ * The user's message to a subagent (issue #81): the chat's bubble, then its delivery state; a failed one offers "Send
+ * again", which fills the field. Only the gateway's record makes such a bubble.
+ */
+function YouMessage({
+    message,
+    dense,
+    files,
+    onResend,
+}: {
+    message: SubagentMessage;
+    dense: boolean;
+    files: { chatId?: string; known: Artifact[] };
+    onResend?: (text: string) => void;
+}) {
+    const failed = message.status === 'failed';
+    return (
+        <Box
+            data-testid="agent-subagent-you"
+            data-status={message.status}
+            sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5, minWidth: 0 }}
+        >
+            <UserBubble text={message.text} dense={dense} files={files} />
+            <Box
+                sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    fontSize: 12,
+                    color: failed ? 'error.main' : 'text.secondary',
+                    minWidth: 0,
+                    overflowWrap: 'anywhere',
+                }}
+            >
+                <span>{deliveryText(message)}</span>
+                {failed && onResend && (
+                    <Button
+                        size="small"
+                        onClick={() => onResend(message.text)}
+                        data-testid="agent-subagent-resend"
+                        sx={{ minWidth: 0, py: 0, fontSize: 12, textTransform: 'none' }}
+                    >
+                        Send again
+                    </Button>
+                )}
+            </Box>
+        </Box>
+    );
+}
+
+/** The thread goes on in a new run after the message above (issue #81). */
+function ContinuedLine({ mode }: { mode: SubagentMessageMode }) {
+    const text =
+        mode === 'restart'
+            ? 'Continued in a new run – its earlier session was no longer available, the gateway passed on the transcript'
+            : 'Continued in a new run';
+    return (
+        <Divider data-testid="agent-subagent-continued" sx={{ fontSize: 12, color: 'text.secondary' }}>
+            {text}
+        </Divider>
+    );
+}
+
+/** A later task of the thread: the main agent's message to the subagent, never shown as the user's (issue #81). */
+function NoteLine({ text }: { text: string }) {
+    return (
+        <Box
+            data-testid="agent-subagent-note"
+            sx={{
+                fontSize: 12.5,
+                color: 'text.secondary',
+                borderLeft: 2,
+                borderColor: 'divider',
+                pl: 1.25,
+                minWidth: 0,
+                overflowWrap: 'anywhere',
+                whiteSpace: 'pre-wrap',
+            }}
+        >
+            <Typography component="span" sx={{ display: 'block', fontSize: 11.5, color: 'text.disabled' }}>
+                Message from the main agent
+            </Typography>
+            {text}
         </Box>
     );
 }
 
 /**
  * A subagent's run with the chat's own components: the task as a user message, answers with their thinking and tool
- * steps in order (#57). On top its state and "Subagent log · read-only" (issue #54; the violet selector, or the
- * breadcrumb on /ai-agent, marks that this is not the chat).
+ * steps in order (#57), the user's messages from the gateway's record (#81). On top its state and "Subagent log"
+ * (issue #54; the violet selector, or the breadcrumb on /ai-agent, marks that this is not the chat).
  */
 export function SubagentTranscript({
     run,
@@ -258,6 +310,8 @@ export function SubagentTranscript({
     plans,
     approvals,
     onDecide,
+    messages = [],
+    onResend,
 }: {
     run: SubagentRun;
     status: RunStatus;
@@ -271,15 +325,27 @@ export function SubagentTranscript({
     plans?: Plan[];
     approvals?: Approval[];
     onDecide?: (approval: Approval, approve: boolean) => Promise<void>;
+    /** The chat's messages to subagents; the thread's own are shown in order (issue #81). */
+    messages?: SubagentMessage[];
+    /** "Send again" of a failed message: puts its text into the field. */
+    onResend?: (text: string) => void;
 }) {
     const live = isLiveStatus(status);
-    const items = useMemo(() => runTranscript(run, live, executions), [run, live, executions]);
-    const sent = useMemo(() => outputsByCall(items, artifacts), [items, artifacts]);
+    const items = useMemo<SubagentItem[]>(
+        () => runTranscript(run, live, executions, messages),
+        [run, live, executions, messages],
+    );
+    // the chat's own item kinds (user, agent, notices …) are what files and plans are placed by
+    const base = useMemo(
+        () => items.filter((it): it is TranscriptItem => it.kind === 'user' || it.kind === 'agent'),
+        [items],
+    );
+    const sent = useMemo(() => outputsByCall(base, artifacts), [base, artifacts]);
     const [open, setOpen] = useState<Record<string, boolean>>({});
     const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo<Thinking>(() => ({ open, onOpenChange }), [open, onOpenChange]);
     const files = useMemo<Files>(() => ({ chatId, known: [] }), [chatId]);
-    const placed = useMemo(() => placePlans(items, plans ?? [], false), [items, plans]);
+    const placed = useMemo(() => placePlans(base, plans ?? [], false), [base, plans]);
     return (
         <Box
             data-testid="agent-subagent-transcript"
@@ -295,6 +361,18 @@ export function SubagentTranscript({
             {items.map((it) =>
                 it.kind === 'user' ? (
                     <UserBubble key={it.key} text={it.text} dense={dense} files={files} />
+                ) : it.kind === 'you' ? (
+                    <YouMessage
+                        key={it.key}
+                        message={it.message}
+                        dense={dense}
+                        files={files}
+                        onResend={onResend}
+                    />
+                ) : it.kind === 'continued' ? (
+                    <ContinuedLine key={it.key} mode={it.mode} />
+                ) : it.kind === 'note' ? (
+                    <NoteLine key={it.key} text={it.text} />
                 ) : it.kind === 'agent' ? (
                     <Fragment key={it.key}>
                         {/* no chat id: a subagent's display images are not served per subagent */}

@@ -20,6 +20,8 @@ import type {
     Pool,
     QueueEntry,
     SendResult,
+    SubagentMessage,
+    SubagentMessageMode,
     SubagentRunSummary,
     ToolExecution,
     TrashList,
@@ -228,6 +230,16 @@ export const agentApi = {
     /** Short list of a chat's subagent runs; reading it does not wake the chat (gateway issue #60). */
     subagentRuns: (id: string) =>
         request<SubagentRunSummary[]>(`chats/${enc(id)}/subagent-runs`).then((l) => (Array.isArray(l) ? l : [])),
+    /**
+     * Message from the user to a subagent (gateway issue #81). 202 with the recorded message and its mode: steer to a
+     * running run, resume or restart for a finished one. 409 codes: foreground_run, message_pending, subagent_limit,
+     * chat_in_trash, not_resumable, subagents_unavailable; 429 when there are too many messages in an hour.
+     */
+    sendSubagentMessage: (id: string, run: string, text: string) =>
+        post<{ message: SubagentMessage; mode: SubagentMessageMode }>(
+            `chats/${enc(id)}/subagent-runs/${enc(run)}/messages`,
+            { text },
+        ),
     /** Moves a chat to the trash: stops its work, keeps its history (issue #76). Idempotent. */
     trashChat: (id: string) => post<Chat>(`chats/${enc(id)}/trash`),
     /** Takes a chat back out of the trash; it does not wake up. */

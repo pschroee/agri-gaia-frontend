@@ -28,7 +28,7 @@ import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
 import { partialsReducer } from './stepDetail';
-import { mergeLLMCalls, mergeRunMeta, mergeSubagentEntries } from './subagents';
+import { mergeLLMCalls, mergeRunMeta, mergeSubagentEntries, mergeSubagentMessages } from './subagents';
 import { compactingAfter } from './usage';
 import type { Compacting } from './usage';
 import type {
@@ -46,6 +46,7 @@ import type {
     SocketCall,
     StoredMessage,
     SubagentEntry,
+    SubagentMessage,
     SubagentRunMeta,
     ToolExecution,
 } from './types';
@@ -134,6 +135,13 @@ export type ChatStream = {
     subagentRuns: SubagentRunMeta[];
     /** Model calls at the LLM proxy, for the tokens per subagent run (loaded once subagents exist, SSE "llm_call"). */
     llmCalls: LLMCall[];
+    /** Messages the user wrote to subagents of this chat (GET chat, SSE "subagent_message", issue #81). */
+    subagentMessages: SubagentMessage[];
+    /**
+     * Writes to a subagent (POST …/subagent-runs/{run}/messages, issue #81); run is the newest run of its thread. The
+     * recorded message joins the list at once; throws AgentApiError (409, 429, 400, 404).
+     */
+    sendSubagentMessage: (run: string, text: string) => Promise<SubagentMessage>;
 };
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -181,6 +189,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [subagentEntries, setSubagentEntries] = useState<SubagentEntry[]>([]);
     const [subagentRuns, setSubagentRuns] = useState<SubagentRunMeta[]>([]);
     const [llmCalls, setLLMCalls] = useState<LLMCall[]>([]);
+    const [subagentMessages, setSubagentMessages] = useState<SubagentMessage[]>([]);
     const runningTimer = useRef<ReturnType<typeof setTimeout>>();
     // output so far of running calls: kept in a ref per event, shown at most every 250 ms
     const [partials, setPartials] = useState<Record<string, string>>({});
@@ -222,6 +231,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             if (Array.isArray(d.subagent_entries))
                 setSubagentEntries((l) => mergeSubagentEntries(l, d.subagent_entries ?? []));
             if (Array.isArray(d.subagent_runs)) setSubagentRuns((l) => mergeRunMeta(l, d.subagent_runs ?? []));
+            if (Array.isArray(d.subagent_messages))
+                setSubagentMessages((l) => mergeSubagentMessages(l, d.subagent_messages ?? []));
             setError(undefined);
             // commands started before this view was opened; without a run nothing can be running
             if (d.chat?.running) {
@@ -412,6 +423,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'subagent_run': {
                         const r = ev.data as SubagentRunMeta;
                         if (r?.run_id) setSubagentRuns((l) => mergeRunMeta(l, [r]));
+                        break;
+                    }
+                    case 'subagent_message': {
+                        const m = ev.data as SubagentMessage;
+                        if (typeof m?.id === 'number') setSubagentMessages((l) => mergeSubagentMessages(l, [m]));
                         break;
                     }
                     case 'llm_call': {
@@ -702,6 +718,16 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setApprovals((l) => upsert(l, a, (x) => x.id));
     }, []);
 
+    const sendSubagentMessage = useCallback(
+        async (run: string, text: string) => {
+            if (!chatId) throw new Error('No chat open.');
+            const r = await agentApi.sendSubagentMessage(chatId, run, text);
+            setSubagentMessages((l) => mergeSubagentMessages(l, [r.message]));
+            return r.message;
+        },
+        [chatId],
+    );
+
     return {
         chat,
         messages,
@@ -746,5 +772,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         subagentEntries,
         subagentRuns,
         llmCalls,
+        subagentMessages,
+        sendSubagentMessage,
     };
 }

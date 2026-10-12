@@ -217,9 +217,13 @@ function RunSteps({ run, live, chatId }: { run: SubagentRun; live: boolean; chat
                     <Box key={it.key} sx={{ fontSize: 12.5, maxHeight: 180, overflowY: 'auto', minWidth: 0 }}>
                         <Markdown text={it.text} dense images={{ chatId }} />
                     </Box>
-                ) : (
+                ) : it.type === 'steps' ? (
                     <StepList key={it.key} steps={it.steps} />
-                ),
+                ) : it.type === 'note' ? (
+                    <Typography key={it.key} sx={{ fontSize: 12, color: 'text.secondary', overflowWrap: 'anywhere' }}>
+                        {it.text}
+                    </Typography>
+                ) : null,
             )}
         </Box>
     );
