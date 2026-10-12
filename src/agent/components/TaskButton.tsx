@@ -12,7 +12,7 @@ import SwipeableDrawer from '@mui/material/SwipeableDrawer';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 
-import { compactButtonLabel, POPOVER_MEDIA_QUERY, taskAriaLabel, taskButtonLabel, taskCounts } from '../tasks';
+import { compactButtonLabel, panelPopoverGeometry, POPOVER_MEDIA_QUERY, taskAriaLabel, taskButtonLabel, taskCounts } from '../tasks';
 import type { Task } from '../tasks';
 import TaskList from './TaskList';
 import { agentColors } from './tokens';
@@ -59,6 +59,10 @@ export default function TaskButton({ tasks }: { tasks: Task[] | undefined }) {
     const all = counts.completed === counts.total;
     const running = counts.inProgress > 0 && !all;
     const close = () => setOpen(false);
+    // in the panel the popover spans the panel header's width right below it (read when rendered, so a resize that
+    // changes `width` or re-renders the button follows; Popover itself re-positions on window resize)
+    const header = panel && popover && open ? btn?.closest<HTMLElement>(HOST) : null;
+    const geo = header ? panelPopoverGeometry(header.getBoundingClientRect()) : null;
     return (
         <>
             <ButtonBase
@@ -121,11 +125,21 @@ export default function TaskButton({ tasks }: { tasks: Task[] | undefined }) {
             {popover ? (
                 <Popover
                     open={open}
-                    anchorEl={btn}
                     onClose={close}
-                    anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                    transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-                    slotProps={{ paper: { sx: { width: 360, maxWidth: 'calc(100vw - 24px)', mt: 0.5 } } }}
+                    {...(geo
+                        ? {
+                              anchorReference: 'anchorPosition' as const,
+                              anchorPosition: { top: geo.top, left: geo.left },
+                              transformOrigin: { vertical: 'top' as const, horizontal: 'left' as const },
+                              slotProps: { paper: { sx: { width: geo.width, maxWidth: geo.width } } },
+                              marginThreshold: 0,
+                          }
+                        : {
+                              anchorEl: btn,
+                              anchorOrigin: { vertical: 'bottom' as const, horizontal: 'right' as const },
+                              transformOrigin: { vertical: 'top' as const, horizontal: 'right' as const },
+                              slotProps: { paper: { sx: { width: 360, maxWidth: 'calc(100vw - 24px)', mt: 0.5 } } },
+                          })}
                 >
                     <TaskList tasks={tasks ?? []} onClose={close} maxListHeight="min(440px, calc(100vh - 150px))" />
                 </Popover>

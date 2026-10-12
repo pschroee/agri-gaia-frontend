@@ -163,5 +163,13 @@ export const taskAriaLabel = (c: TaskCounts) => `Show tasks (${c.completed} of $
 export const POPOVER_MIN_WIDTH = 600;
 export const POPOVER_MEDIA_QUERY = `(min-width:${POPOVER_MIN_WIDTH}px)`;
 export const listAsPopover = (viewportWidth: number) => viewportWidth >= POPOVER_MIN_WIDTH;
+/** Gap between the panel edge and the task popover in the context panel (px, each side). */
+export const PANEL_POPOVER_MARGIN = 8;
+/** Position and width of the task popover in the panel: the width of the panel header minus the margin, right below it. */
+export const panelPopoverGeometry = (header: { left: number; bottom: number; width: number }) => ({
+    top: header.bottom,
+    left: header.left + PANEL_POPOVER_MARGIN,
+    width: Math.max(0, header.width - 2 * PANEL_POPOVER_MARGIN),
+});
 /** The button label is compact ("3/7") where the chat area (header) is narrower than this, e.g. in the panel. */
 export const compactButtonLabel = (hostWidth: number) => hostWidth < POPOVER_MIN_WIDTH;

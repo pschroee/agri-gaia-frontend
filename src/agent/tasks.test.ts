@@ -10,6 +10,7 @@ import {
     listAsPopover,
     POPOVER_MEDIA_QUERY,
     openBlockers,
+    panelPopoverGeometry,
     sortedTasks,
     taskAriaLabel,
     taskButtonLabel,
@@ -167,5 +168,9 @@ describe('counts and order', () => {
     it('keeps the compact label for narrow chat areas independent of the list container', () => {
         expect(compactButtonLabel(400)).toBe(true);
         expect(compactButtonLabel(600)).toBe(false);
+    });
+    it('puts the panel popover below the header, inset by 8 px on each side', () => {
+        expect(panelPopoverGeometry({ left: 1200, bottom: 120, width: 400 })).toEqual({ top: 120, left: 1208, width: 384 });
+        expect(panelPopoverGeometry({ left: 0, bottom: 0, width: 10 }).width).toBe(0);
     });
 });
