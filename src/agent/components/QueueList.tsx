@@ -16,6 +16,7 @@ import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNone
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SendIcon from '@mui/icons-material/Send';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 
 import { isHeld, queuePreview, queueStatusText } from '../queue';
 import type { QueueRow } from '../queue';
@@ -39,6 +40,7 @@ const stateLabel: Record<QueueRow['state'], string> = {
 };
 
 const DELIVERED_HINT = 'Handed to the agent; it reads the message after its current step.';
+const SUBAGENT_HINT = 'The agent sees this with its next step.';
 
 /**
  * Queued messages above the input field: one line each, removable as long as the gateway has not delivered
@@ -128,27 +130,40 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                             opacity: r.state === 'removing' ? 0.5 : r.state === 'delivered' ? 0.75 : 1,
                         }}
                     >
-                        {r.system && (
-                            <Tooltip title="Note from the gateway to the agent, not from you">
-                                <NotificationsNoneOutlinedIcon sx={{ fontSize: 15 }} />
+                        {r.subagent ? (
+                            <Tooltip title={SUBAGENT_HINT} disableInteractive>
+                                <SmartToyOutlinedIcon
+                                    aria-label="message to a subagent"
+                                    sx={{ fontSize: 15, flex: 'none' }}
+                                />
                             </Tooltip>
+                        ) : (
+                            r.system && (
+                                <Tooltip title="Note from the gateway to the agent, not from you">
+                                    <NotificationsNoneOutlinedIcon sx={{ fontSize: 15 }} />
+                                </Tooltip>
+                            )
                         )}
-                        <Typography
-                            title={r.state === 'delivered' ? `${r.text}\n\n${DELIVERED_HINT}` : r.text}
-                            sx={{
-                                fontSize: 12.5,
-                                flex: 1,
-                                minWidth: 0,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                                fontStyle: r.system ? 'italic' : 'normal',
-                            }}
-                        >
-                            {r.label ?? (queuePreview(r.text) || 'attachments only')}
-                            {r.attachments.length > 0 &&
-                                ` · ${r.attachments.length === 1 ? r.attachments[0] : `${r.attachments.length} files`}`}
-                        </Typography>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography
+                                title={r.state === 'delivered' ? `${r.text}\n\n${DELIVERED_HINT}` : r.text}
+                                sx={{
+                                    fontSize: 12.5,
+                                    minWidth: 0,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                    fontStyle: r.system && !r.subagent ? 'italic' : 'normal',
+                                }}
+                            >
+                                {r.label ?? (queuePreview(r.text) || 'attachments only')}
+                                {r.attachments.length > 0 &&
+                                    ` · ${r.attachments.length === 1 ? r.attachments[0] : `${r.attachments.length} files`}`}
+                            </Typography>
+                            {r.subagent && (
+                                <Typography sx={{ fontSize: 11, color: 'text.secondary' }}>{SUBAGENT_HINT}</Typography>
+                            )}
+                        </Box>
                         <Typography
                             sx={{
                                 fontSize: 10.5,
@@ -160,7 +175,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                         >
                             {stateLabel[r.state]}
                         </Typography>
-                        {r.state === 'delivered' ? (
+                        {r.subagent ? null : r.state === 'delivered' ? (
                             <Tooltip title={DELIVERED_HINT}>
                                 <HourglassEmptyIcon
                                     aria-label="waiting for the agent"

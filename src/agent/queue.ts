@@ -200,7 +200,35 @@ export type QueueRow = {
     context?: PageContext;
     system: boolean;
     state: QueueRowState;
+    /**
+     * A note of the user's message to a subagent (issue #82): shown as "You wrote to subagent …", not removable,
+     * because the main agent has to learn of it.
+     */
+    subagent?: SubagentNote;
 };
+
+export type SubagentNote = {
+    /** Name of the subagent, missing when the gateway did not name it. */
+    name?: string;
+    /** The user's text, shortened to one line. */
+    text: string;
+};
+
+/**
+ * The user's message in a `subagent_user` note (issue #82): the first line of the entry is the gateway's summary, the
+ * rest the user's text. The name is the entry's `run_name`, else the agent named in the summary "(agent)".
+ */
+export function subagentNote(e: QueueEntry): SubagentNote {
+    const [summary = '', ...rest] = (e.text ?? '').split('\n');
+    const named = e.run_name?.trim() || /subagent \S+ \(([^)]+)\)/.exec(summary)?.[1]?.trim();
+    return { name: named || undefined, text: queuePreview(rest.join(' ')) };
+}
+
+/** Text of a subagent note row: "You wrote to subagent <name>: <text>". */
+export function subagentNoteLine(note: SubagentNote): string {
+    const who = note.name ? `subagent ${note.name}` : 'a subagent';
+    return note.text ? `You wrote to ${who}: ${note.text}` : `You wrote to ${who}`;
+}
 
 /** Is the queue held right now? Only once the agent is idle; while it works the entries wait for the run's end. */
 export function isHeld(chat: Pick<Chat, 'queue_held' | 'running'> | undefined): boolean {
@@ -212,11 +240,14 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
     const held = isHeld(chat);
     const row = (e: QueueEntry, rowState: QueueRowState): QueueRow => {
         const system = e.kind === 'system';
+        const subagent = system && e.note === 'subagent_user' ? subagentNote(e) : undefined;
         return {
             key: e.id,
             id: rowState === 'delivered' ? undefined : e.id,
             text: e.text,
-            label: system
+            label: subagent
+                ? subagentNoteLine(subagent)
+                : system
                 ? noteLabel(
                       { kind: 'system', type: e.note, refs: e.refs },
                       e.text.split('\n').find((l) => l.trim() && !l.startsWith('[')),
@@ -226,6 +257,7 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
             context: !system && isPageContext(e.context) ? e.context : undefined,
             system,
             state: rowState,
+            subagent,
         };
     };
     return [

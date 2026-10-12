@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
     FOREGROUND_NOTE,
+    STARTING_NOTE,
     deliveryText,
     foldContinuations,
     groupOpen,
@@ -504,5 +505,40 @@ describe('messages to subagents (issue #81)', () => {
             [1, 'delivered'],
             [2, 'delivered'],
         ]);
+    });
+});
+
+describe('message state of a subagent run (issue #82)', () => {
+    it('shows a starting run as starting and frees the field once the summary says ok', () => {
+        const starting = subagentInputState({ status: 'running', messageState: 'starting' });
+        expect(starting).toEqual({
+            mode: 'locked',
+            placeholder: 'The subagent is starting – you can write to it in a moment.',
+            note: STARTING_NOTE,
+            blocked: true,
+        });
+        // the same run after the summary says ok: no reload needed, the field is open
+        expect(subagentInputState({ status: 'running', piRunId: 'p1', messageState: 'ok' }).mode).toBe('open');
+        expect(subagentInputState({ status: 'running', piRunId: 'p1', messageState: 'ok' }).blocked).toBe(false);
+    });
+
+    it('keeps the foreground lock for a foreground run and the old rule without the field', () => {
+        expect(subagentInputState({ status: 'running', messageState: 'foreground' })).toMatchObject({
+            mode: 'locked',
+            note: FOREGROUND_NOTE,
+        });
+        expect(subagentInputState({ status: 'running' })).toMatchObject({ mode: 'locked', note: FOREGROUND_NOTE });
+    });
+
+    it('names a run_starting error like the placeholder', () => {
+        expect(subagentSendErrorText({ code: 'run_starting' })).toBe(STARTING_NOTE);
+        expect(subagentSendErrorText({ code: 'foreground_run' })).toBe(FOREGROUND_NOTE);
+    });
+
+    it('takes message_state from the run metadata and from the newest run of a thread', () => {
+        const first = [meta('r1', { state: 'running', message_state: 'starting', started_at: '2026-10-12T10:00:00Z' })];
+        expect(groupRuns([], first)[0].messageState).toBe('starting');
+        const merged = mergeRunMeta(first, [meta('r1', { message_state: 'ok' })]);
+        expect(groupRuns([], merged)[0].messageState).toBe('ok');
     });
 });
