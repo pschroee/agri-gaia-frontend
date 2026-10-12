@@ -490,6 +490,10 @@ export type LLMCall = {
     started_at: string;
     duration_ms: number;
     main: boolean;
+    /** Tool calls the model asked for; `id` is the provider's tool_calls[].id (matches ActivityCall.tool_call_id). */
+    tool_calls?: { id?: string; name: string; arguments?: string }[] | null;
+    /** Size in bytes of the request body sent to the provider (gateway issue #69); missing on older entries. */
+    request_bytes?: number;
 };
 
 export type CreateChatRequest = {
