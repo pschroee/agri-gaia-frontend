@@ -2,25 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
-import IconButton from '@mui/material/IconButton';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
-import CheckIcon from '@mui/icons-material/Check';
 import CompressIcon from '@mui/icons-material/Compress';
-import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
-import { answerMarkdown, answerSteps } from '../answer';
+import { answerSteps } from '../answer';
 import { backgroundByCall } from '../background';
-import { copyText } from '../clipboard';
 import { noticeAnchor } from '../commands';
 import { outputsByStepPart, placeOutputs } from '../files';
 import { placePlans } from '../plan';
@@ -113,44 +108,11 @@ export function UserBubble({
     );
 }
 
-/** Copy under an answer: its text as Markdown to the clipboard; the icon turns into a tick for a moment. */
-export function CopyButton({ text }: { text: string }) {
-    const [state, setState] = useState<'idle' | 'copied' | 'failed'>('idle');
-    useEffect(() => {
-        if (state === 'idle') return;
-        const t = setTimeout(() => setState('idle'), 1200);
-        return () => clearTimeout(t);
-    }, [state]);
-    return (
-        <Box sx={{ display: 'flex', ml: '-8px' }}>
-            <Tooltip
-                title={state === 'copied' ? 'Copied' : state === 'failed' ? 'Could not copy' : 'Copy'}
-                disableInteractive
-            >
-                <IconButton
-                    aria-label="Copy answer"
-                    data-testid="agent-copy"
-                    data-state={state}
-                    onClick={() => void copyText(text).then((ok) => setState(ok ? 'copied' : 'failed'))}
-                    sx={{ width: 32, height: 32, color: 'rgba(0, 0, 0, 0.54)' }}
-                >
-                    {state === 'copied' ? (
-                        <CheckIcon sx={{ fontSize: 18, color: agentColors.green }} />
-                    ) : (
-                        <ContentCopyIcon sx={{ fontSize: 18 }} />
-                    )}
-                </IconButton>
-            </Tooltip>
-        </Box>
-    );
-}
-
 /**
  * One answer of the agent: its parts in the order they happened, live as they arrive (issue #57, as before #54): text
  * as Markdown, each thinking block as one collapsed "Thinking · 3 s", each run of tool calls as a step list with its
  * controls, and right after it the file message with the files those calls sent (issue #62; nothing of them inside the
- * step list). Under the answer the subagents it started as a card (#54), a file message for files placed by time and,
- * once finished, the copy button.
+ * step list). Under the answer the subagents it started as a card (#54) and a file message for files placed by time.
  */
 export function AgentBlock({
     item,
@@ -158,7 +120,6 @@ export function AgentBlock({
     thinking,
     chatId,
     live = false,
-    active = false,
     controls,
     results,
     filesChatId,
@@ -170,17 +131,14 @@ export function AgentBlock({
     controls?: StepControls;
     /** For the answer's display images and file downloads. */
     chatId?: string;
-    /** The answer is still streaming (Mermaid blocks render once closed, no copy yet). */
+    /** The answer is still streaming (Mermaid blocks render once closed). */
     live?: boolean;
-    /** The answer belongs to the turn that runs right now (no copy yet). */
-    active?: boolean;
     /** Files the agent sent in this answer (placeOutputs, outputsByCall). */
     results?: Artifact[];
     /** Chat whose files the file messages download (defaults to chatId; the subagent view has no chatId). */
     filesChatId?: string;
 }) {
     const fileChatId = filesChatId ?? chatId;
-    const markdown = useMemo(() => answerMarkdown(item.parts), [item.parts]);
     const placed = useMemo(() => outputsByStepPart(item.parts, results), [item.parts, results]);
     const subagents = controls?.subagents;
     const runs = useMemo(() => {
@@ -232,7 +190,6 @@ export function AgentBlock({
             )}
             {runs.length > 0 && subagents && <SubagentCard items={runs} onOpen={subagents.onOpen} />}
             {placed.rest.length > 0 && <AgentFileMessage chatId={fileChatId} artifacts={placed.rest} />}
-            {!live && !active && markdown && <CopyButton text={markdown} />}
         </Box>
     );
 }
@@ -354,8 +311,8 @@ function EmptyChat() {
 
 /**
  * The conversation of a chat (issues #54, #57): user messages as light green bubbles with their files above, answers
- * with text, thinking blocks and tool steps in the order they happened, the files and subagents they produced and a
- * copy button; notices of the gateway, the answer that is streaming right now and a working hint while nothing of it
+ * with text, thinking blocks and tool steps in the order they happened and the files and subagents they produced;
+ * notices of the gateway, the answer that is streaming right now and a working hint while nothing of it
  * shows yet. Scrolling is up to the caller (ChatView, useStickToBottom).
  */
 export default function Conversation({
@@ -485,7 +442,6 @@ export default function Conversation({
             thinking={thinking}
             chatId={chat?.id}
             live={isLive}
-            active={it.key === activeKey}
             controls={controls}
             results={placed.byItem.get(it.key)}
         />

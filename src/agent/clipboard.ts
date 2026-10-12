@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Copy button under an answer (issue #54): writes the answer's Markdown to the clipboard.
+// Copy button of a Mermaid diagram: writes its source to the clipboard.
 
 type ClipboardLike = { writeText: (text: string) => Promise<void> };
 type DocumentLike = Pick<Document, 'createElement' | 'execCommand'> & { body: Pick<HTMLElement, 'appendChild'> };
