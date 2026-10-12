@@ -61,6 +61,11 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   of a platform row and kept per chat in `ActivityTable` (`LlmLoad`; reloaded only after an error). Logic in
   `src/agent/sentToModel.ts`, unit-tested. Entries recorded before the gateway measured request sizes show "request size
   not recorded"; the sizes are never costs. The legend describes the four effect classes, not the methods.
+- **Effect classes from the gateway (gateway issue #63):** the class of a platform call (`read`, `write`, `compute`,
+  `irreversible`) comes from the gateway's `effect` field on approvals and socket calls (`src/agent/effect.ts`:
+  `callEffect`, `approvalEffect`). Only entries from before the gateway sent it fall back to `effectOf(method, path)`
+  (`format.ts`). An irreversible approval is a red card with "This cannot be undone", its body in full and no height
+  limit; `data-effect` sits on the card and on the activity's effect cell. Rules and tests: `effect.test.ts`.
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
   reuses the platform's Keycloak session (`return` stays `/agent/`). The visible "Sign in" of `SignInNotice` passes the

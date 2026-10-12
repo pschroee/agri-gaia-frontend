@@ -7,6 +7,7 @@
 // (secrets stay redacted as they arrive).
 
 import { formatBytes } from './files';
+import { approvalEffect, callEffect } from './effect';
 import { effectOf, formatMs, OUTCOME_LABEL, outcomeOf, outcomeReason, splitCall } from './format';
 import type { Effect } from './format';
 import type { Step } from './transcript';
@@ -266,7 +267,7 @@ export function platformRequests(step: Step, named: PlatformRequest[]): Platform
             status: st.text,
             tone: st.tone,
             durationMs: c.duration_ms,
-            effect: method ? effectOf(method, path) : undefined,
+            effect: callEffect(c),
             approval,
         };
     });
@@ -277,7 +278,7 @@ export function platformRequests(step: Step, named: PlatformRequest[]): Platform
         out.push({
             ...r,
             body: (approval && approvalBody(approval)) ?? r.body,
-            effect: effectOf(r.method, r.path ?? ''),
+            effect: (approval && approvalEffect(approval)) ?? effectOf(r.method, r.path ?? ''),
             // no status: the gateway logged no call; a pending approval says so in its own line
             approval,
         });

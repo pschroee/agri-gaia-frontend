@@ -12,7 +12,7 @@ import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutl
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 
 import { artifactApprovalView } from '../files';
-import { effectOf, splitCall } from '../format';
+import { approvalEffect } from '../effect';
 import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
@@ -174,20 +174,33 @@ function ArtifactItem({ approval, onDecide }: { approval: Approval; onDecide: (a
 function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (approve: boolean) => Promise<void> }) {
     const { busy, decide } = useDecide(onDecide);
     const { title, subject, body } = describe(approval);
-    const { method, path } = splitCall(approval.name);
-    const effect = approval.kind === 'platform_write' ? effectOf(method, path) : undefined;
+    // Gateway issue #63: the class comes from the gateway; an irreversible call is shown in red, in full.
+    const effect = approvalEffect(approval);
+    const irreversible = effect === 'irreversible';
 
     return (
         <Box
             data-testid="agent-platform-approval"
             data-approval-id={approval.id}
-            sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}
+            data-effect={effect}
+            sx={{
+                px: 1.5,
+                py: 1.25,
+                borderTop: 1,
+                borderColor: 'divider',
+                ...(irreversible ? { bgcolor: agentColors.redTint, boxShadow: `inset 3px 0 0 ${agentColors.red}` } : {}),
+            }}
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{title}</Typography>
                 {effect && <EffectChip effect={effect} />}
             </Box>
             <Typography sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'anywhere' }}>{subject}</Typography>
+            {irreversible && (
+                <Typography sx={{ fontSize: 12, color: agentColors.red, mt: 0.5 }}>
+                    This cannot be undone. Check every parameter below before you approve.
+                </Typography>
+            )}
             {body && (
                 <Box
                     component="pre"
@@ -202,8 +215,8 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                         p: 1,
                         mt: 0.75,
                         mb: 0,
-                        maxHeight: 160,
-                        overflow: 'auto',
+                        maxHeight: irreversible ? 'none' : 160,
+                        overflow: irreversible ? 'visible' : 'auto',
                         whiteSpace: 'pre-wrap',
                         overflowWrap: 'anywhere',
                     }}
