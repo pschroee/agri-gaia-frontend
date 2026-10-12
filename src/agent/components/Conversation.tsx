@@ -23,6 +23,8 @@ import { backgroundByCall } from '../background';
 import { copyText } from '../clipboard';
 import { noticeAnchor } from '../commands';
 import { outputsByStepPart, placeOutputs } from '../files';
+import { placePlans } from '../plan';
+import type { Plan } from '../plan';
 import type { CommandNotice } from '../commands';
 import type { SubagentNavItem } from '../subagents';
 import type { Artifact } from '../types';
@@ -39,6 +41,7 @@ import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
 import type { StepControls } from './StepList';
 import SubagentCard from './SubagentCard';
+import PlanCard from './PlanCard';
 import ThinkingBlock from './ThinkingBlock';
 import WorkingIndicator from './WorkingIndicator';
 import { agentColors } from './tokens';
@@ -357,6 +360,7 @@ export default function Conversation({
     items,
     dense = false,
     subagents,
+    plans,
 }: {
     stream: ChatStream;
     /** The transcript, built by the caller (it also counts the entries for scrolling). */
@@ -364,6 +368,8 @@ export default function Conversation({
     dense?: boolean;
     /** Runs per `subagent` call, listed as a card under the answer and opened on click (issue #48). */
     subagents?: StepControls['subagents'];
+    /** The chat's plans (issue #70): a card under the answer of their tool call, the rest before the live answer. */
+    plans?: Plan[];
 }) {
     const { chat, live, resumes, pending } = stream;
     const liveP = useMemo(() => liveParts(live), [live]);
@@ -404,6 +410,17 @@ export default function Conversation({
         () => placeOutputs(liveItem ? [...shown, liveItem] : shown, stream.artifacts),
         [shown, liveItem, stream.artifacts],
     );
+    const placedPlans = useMemo(() => placePlans(shown, plans ?? [], true), [shown, plans]);
+    const planCards = (list: Plan[]) =>
+        list.map((p) => (
+            <PlanCard
+                key={p.id}
+                plan={p}
+                approval={stream.approvals.find((a) => a.id === p.approval_id)}
+                onDecide={stream.decide}
+                dense={dense}
+            />
+        ));
     const running = !!chat?.running;
     const waitingApproval = stream.approvals.some((a) => a.state === 'pending');
     // the answer of the running turn: the live one, else the last stored answer while the chat runs
@@ -518,6 +535,7 @@ export default function Conversation({
                     ) : (
                         answer(it, mergeLive && i === shown.length - 1)
                     )}
+                    {it.kind === 'agent' && planCards(placedPlans.byItem.get(it.key) ?? [])}
                     {resumesPlaced.after.get(i)?.map((r) => (
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
                     ))}
@@ -547,6 +565,7 @@ export default function Conversation({
             {notes.end.map((n) => (
                 <CommandLine key={n.key} notice={n} />
             ))}
+            {placedPlans.rest.length > 0 && planCards(placedPlans.rest)}
             {liveItem && answer(liveItem, true)}
             {placed.unplaced.length > 0 && <AgentFileMessage chatId={chat?.id} artifacts={placed.unplaced} />}
             {stream.compacting && <CompactionLine running={stream.compacting} />}

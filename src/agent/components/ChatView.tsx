@@ -24,6 +24,7 @@ import { buildTranscript, countEntries, liveParts } from '../transcript';
 import { useNow } from '../useNow';
 
 import { useChatDraft, useSharedChatStream } from '../sharedChatStream';
+import { usePlans } from '../usePlans';
 import { useStickToBottom } from '../useStickToBottom';
 import ApprovalCard from './ApprovalCard';
 import ChatInput from './ChatInput';
@@ -51,6 +52,7 @@ type Props = {
 export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
     // the current chat's stream lives above page and panel, so it survives the move between them (issue #50)
     const stream = useSharedChatStream(chatId);
+    const plans = usePlans(chatId, [stream.approvals, stream.socketCalls.length, !!stream.chat?.running]);
     const draft = useChatDraft(chatId);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, partials, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
@@ -219,9 +221,18 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                                 chatId={chatId}
                                 executions={stream.executions}
                                 artifacts={stream.artifacts}
+                                plans={plans}
+                                approvals={stream.approvals}
+                                onDecide={stream.decide}
                             />
                         ) : (
-                            <Conversation stream={stream} items={items} dense={dense} subagents={subagentLinks} />
+                            <Conversation
+                                stream={stream}
+                                items={items}
+                                dense={dense}
+                                subagents={subagentLinks}
+                                plans={plans}
+                            />
                         )}
                         <ApprovalCard approvals={pending} onDecide={stream.decide} />
                     </Box>

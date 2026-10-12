@@ -16,6 +16,7 @@ import { effectOf, splitCall } from '../format';
 import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
+import { PlanApprovalItem } from './PlanCard';
 import { agentColors, blockSx, MONO } from './tokens';
 
 function describe(a: Approval): { title: string; subject: string; body?: string } {
@@ -242,10 +243,14 @@ export default function ApprovalCard({
     const [busy, setBusy] = useState(false);
     if (approvals.length === 0) return null;
 
+    // a plan is approved with its own button only: approving all never takes it along (issue #70)
     const approveAll = async () => {
         setBusy(true);
         try {
-            for (const a of approvals) await onDecide(a, true);
+            for (const a of approvals) {
+                if (a.kind === 'plan') continue;
+                await onDecide(a, true);
+            }
         } finally {
             setBusy(false);
         }
@@ -258,7 +263,9 @@ export default function ApprovalCard({
                 <Typography sx={{ ml: 'auto', fontSize: 11.5, color: 'text.secondary' }}>{approvals.length}</Typography>
             </Box>
             {approvals.map((a) =>
-                a.kind === 'internet_access' ? (
+                a.kind === 'plan' ? (
+                    <PlanApprovalItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                ) : a.kind === 'internet_access' ? (
                     <InternetItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ) : a.kind === 'artifact_upload' ? (
                     <ArtifactItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
@@ -266,7 +273,7 @@ export default function ApprovalCard({
                     <ApprovalItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ),
             )}
-            {approvals.length > 1 && (
+            {approvals.filter((a) => a.kind !== 'plan').length > 1 && (
                 <Box sx={{ px: 1.5, py: 1, borderTop: 1, borderColor: 'divider' }}>
                     <Button size="small" variant="contained" disabled={busy} onClick={() => void approveAll()}>
                         Approve all

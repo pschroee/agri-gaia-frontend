@@ -4,7 +4,7 @@
 
 // Looking into a subagent, read-only (issue #48): its sub-entry under the chat, the breadcrumb that replaces the chat's
 // title, the transcript in the chat's own components and the footer that replaces the input (frame since issue #54).
-import { MouseEvent, useCallback, useMemo, useState } from 'react';
+import { Fragment, MouseEvent, useCallback, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
@@ -19,10 +19,13 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { isLiveStatus, runTranscript, subagentStateText } from '../subagents';
 import type { RunStatus, SubagentNavItem, SubagentRun } from '../subagents';
 import { outputsByCall } from '../files';
-import type { Artifact, ToolExecution } from '../types';
+import { placePlans } from '../plan';
+import type { Plan } from '../plan';
+import type { Approval, Artifact, ToolExecution } from '../types';
 import { AgentBlock, UserBubble } from './Conversation';
 import EllipsisText from './EllipsisText';
 import type { Files, Thinking } from './Conversation';
+import PlanCard from './PlanCard';
 import { STATE_COLOR, SubagentIcon, SubagentState } from './SubagentState';
 import WorkingIndicator from './WorkingIndicator';
 import { agentColors } from './tokens';
@@ -252,15 +255,22 @@ export function SubagentTranscript({
     chatId,
     executions,
     artifacts,
+    plans,
+    approvals,
+    onDecide,
 }: {
     run: SubagentRun;
     status: RunStatus;
     dense: boolean;
     chatId: string;
-    /** The chat's tool executions (exit codes, output excerpts of the subagent's calls). */
+    /** The tool executions of the chat (exit codes, output excerpts of the subagent's calls). */
     executions?: ToolExecution[];
     /** The chat's files: those the subagent sent show as its file messages (issue #62). */
     artifacts?: Artifact[];
+    /** The chat's plans (issue #70); those of this subagent's calls show under its answer. */
+    plans?: Plan[];
+    approvals?: Approval[];
+    onDecide?: (approval: Approval, approve: boolean) => Promise<void>;
 }) {
     const live = isLiveStatus(status);
     const items = useMemo(() => runTranscript(run, live, executions), [run, live, executions]);
@@ -269,6 +279,7 @@ export function SubagentTranscript({
     const onOpenChange = useCallback((id: string, o: boolean) => setOpen((c) => ({ ...c, [id]: o })), []);
     const thinking = useMemo<Thinking>(() => ({ open, onOpenChange }), [open, onOpenChange]);
     const files = useMemo<Files>(() => ({ chatId, known: [] }), [chatId]);
+    const placed = useMemo(() => placePlans(items, plans ?? [], false), [items, plans]);
     return (
         <Box
             data-testid="agent-subagent-transcript"
@@ -285,16 +296,27 @@ export function SubagentTranscript({
                 it.kind === 'user' ? (
                     <UserBubble key={it.key} text={it.text} dense={dense} files={files} />
                 ) : it.kind === 'agent' ? (
-                    // no chat id: a subagent's display images are not served per subagent
-                    <AgentBlock
-                        key={it.key}
-                        item={it}
-                        dense={dense}
-                        thinking={thinking}
-                        active={live && it.key === items[items.length - 1].key}
-                        results={sent.get(it.key)}
-                        filesChatId={chatId}
-                    />
+                    <Fragment key={it.key}>
+                        {/* no chat id: a subagent's display images are not served per subagent */}
+                        <AgentBlock
+                            item={it}
+                            dense={dense}
+                            thinking={thinking}
+                            active={live && it.key === items[items.length - 1].key}
+                            results={sent.get(it.key)}
+                            filesChatId={chatId}
+                        />
+                        {/* plans of this subagent's calls (issue #70); the plans left over are not shown here */}
+                        {placed.byItem.get(it.key)?.map((p) => (
+                            <PlanCard
+                                key={p.id}
+                                plan={p}
+                                approval={approvals?.find((a) => a.id === p.approval_id)}
+                                onDecide={onDecide}
+                                dense={dense}
+                            />
+                        ))}
+                    </Fragment>
                 ) : null,
             )}
             {/* the working hint only while the run shows nothing of its current answer yet (#57); quiet: always */}

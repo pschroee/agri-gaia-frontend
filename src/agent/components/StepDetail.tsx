@@ -154,6 +154,7 @@ const APPROVAL_KIND: Record<Approval['kind'], string> = {
     platform_write: 'Platform call',
     artifact_upload: 'Upload',
     internet_access: 'Internet access',
+    plan: 'Plan',
 };
 
 /** Scrolls to the open approval card of the chat (ApprovalCard marks its items with the approval's ID). */
