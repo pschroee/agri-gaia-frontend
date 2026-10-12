@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -18,14 +18,17 @@ import { chatTitle, formatRelativeDay } from '../format';
 import { AgentTab, agentTabOf } from '../panelCarry';
 import { runSince, runStateOf } from '../runState';
 import type { SubagentNavItem } from '../subagents';
+import type { Chat } from '../types';
 import { useChatSubagentGroups } from '../useChatSubagentGroups';
 import { useSubagentNav } from '../useSubagentNav';
 import { useRenameChat } from '../useRenameChat';
+import { useTrashActions } from '../useTrash';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
 import ChatView from './ChatView';
 import { GroupNote } from './ChatSelector';
 import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename';
+import { TrashBanner, TrashDialogs, TrashEntryButton, TrashSnackbar, TrashView } from './TrashView';
 import { ChatTokens, ContextMeter } from './ContextMeter';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
@@ -98,165 +101,170 @@ function HistorySubagents({
     );
 }
 
-function History() {
-    const { chats, selectedChatId, selectChat } = useAgent();
+/** The history column: the chats (scrolling) and, fixed at its bottom, the entry of the trash (issue #76). */
+function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) => void; onOpenTrash: () => void }) {
+    const { chats, selectedChatId, selectChat, trash } = useAgent();
     const sub = useSubagentNav();
     const groups = useChatSubagentGroups(chats);
     const rename = useRenameChat();
     return (
-        <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, overflowY: 'auto', minHeight: 0 }}>
-            <NewChatButton fullWidth sx={{ mb: 2 }} />
-            <NewChatError sx={{ mb: 2 }} />
-            <Typography
-                sx={{
-                    fontSize: 11.5,
-                    letterSpacing: 1.2,
-                    textTransform: 'uppercase',
-                    color: 'text.disabled',
-                    mb: 1.25,
-                }}
-            >
-                History
-            </Typography>
-            {chats.length === 0 && (
-                <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>No chats yet.</Typography>
-            )}
-            {chats.map((c) => {
-                const on = c.id === selectedChatId;
-                const state = runStateOf(c);
-                const withSubs = on && c.id === sub.chatId && sub.items.length > 0;
-                // another chat with subagents: its group loads on the first expand, without waking it (issue #60)
-                const other = !withSubs && (c.subagents ?? 0) > 0 ? groups.group(c) : undefined;
-                const editing = rename.state.chatId === c.id;
-                const failure = rename.state.error?.chatId === c.id ? rename.state.error.text : undefined;
-                return (
-                    <Fragment key={c.id}>
-                        <Box
-                            role="button"
-                            tabIndex={0}
-                            onClick={() => selectChat(c.id)}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter' || e.key === ' ') selectChat(c.id);
-                                else if (e.key === 'F2') rename.start(c);
-                            }}
-                            data-testid="agent-history-entry"
-                            data-chat-id={c.id}
-                            // two lines at most; the full title on hover
-                            title={editing ? undefined : chatTitle(c)}
-                            sx={{
-                                px: 1.25,
-                                py: 1.1,
-                                mb: 0.4,
-                                borderRadius: 1,
-                                cursor: 'pointer',
-                                fontSize: 13,
-                                lineHeight: 1.4,
-                                color: on ? 'text.primary' : 'text.secondary',
-                                bgcolor: on ? agentColors.greenTint : undefined,
-                                '&:hover': { bgcolor: on ? agentColors.greenTint : 'action.hover' },
-                                [`&:hover .${ENTRY_MENU_CLASS}, &:focus-within .${ENTRY_MENU_CLASS}`]: { opacity: 1 },
-                            }}
-                        >
-                            {editing ? (
-                                <RenameField
-                                    value={rename.state.draft}
-                                    onChange={rename.change}
-                                    onCommit={() => void rename.commit()}
-                                    onCancel={rename.cancel}
-                                />
-                            ) : (
-                                <Box sx={{ display: 'flex', alignItems: 'flex-start', columnGap: 0.5 }}>
-                                    <Box
-                                        data-testid="agent-history-title"
-                                        // double-click renames, like the menu (issue #49)
-                                        onDoubleClick={() => rename.start(c)}
-                                        sx={{
-                                            flex: 1,
-                                            minWidth: 0,
-                                            overflow: 'hidden',
-                                            textOverflow: 'ellipsis',
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 2,
-                                            WebkitBoxOrient: 'vertical',
-                                            // a word longer than the line breaks instead of running out of the list
-                                            overflowWrap: 'anywhere',
-                                        }}
-                                    >
-                                        {chatTitle(c)}
-                                    </Box>
-                                    <HistoryEntryMenu
-                                        title={chatTitle(c)}
-                                        visible={on}
-                                        onRename={() => rename.start(c)}
-                                    />
-                                </Box>
-                            )}
+        <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+                <NewChatButton fullWidth sx={{ mb: 2 }} />
+                <NewChatError sx={{ mb: 2 }} />
+                <Typography
+                    sx={{
+                        fontSize: 11.5,
+                        letterSpacing: 1.2,
+                        textTransform: 'uppercase',
+                        color: 'text.disabled',
+                        mb: 1.25,
+                    }}
+                >
+                    History
+                </Typography>
+                {chats.length === 0 && (
+                    <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>No chats yet.</Typography>
+                )}
+                {chats.map((c) => {
+                    const on = c.id === selectedChatId;
+                    const state = runStateOf(c);
+                    const withSubs = on && c.id === sub.chatId && sub.items.length > 0;
+                    // another chat with subagents: its group loads on the first expand, without waking it (issue #60)
+                    const other = !withSubs && (c.subagents ?? 0) > 0 ? groups.group(c) : undefined;
+                    const editing = rename.state.chatId === c.id;
+                    const failure = rename.state.error?.chatId === c.id ? rename.state.error.text : undefined;
+                    return (
+                        <Fragment key={c.id}>
                             <Box
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => selectChat(c.id)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') selectChat(c.id);
+                                    else if (e.key === 'F2') rename.start(c);
+                                }}
+                                data-testid="agent-history-entry"
+                                data-chat-id={c.id}
+                                // two lines at most; the full title on hover
+                                title={editing ? undefined : chatTitle(c)}
                                 sx={{
-                                    fontSize: 11,
-                                    color: 'text.disabled',
-                                    mt: 0.25,
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    flexWrap: 'wrap',
-                                    columnGap: 1,
+                                    px: 1.25,
+                                    py: 1.1,
+                                    mb: 0.4,
+                                    borderRadius: 1,
+                                    cursor: 'pointer',
+                                    fontSize: 13,
+                                    lineHeight: 1.4,
+                                    color: on ? 'text.primary' : 'text.secondary',
+                                    bgcolor: on ? agentColors.greenTint : undefined,
+                                    '&:hover': { bgcolor: on ? agentColors.greenTint : 'action.hover' },
+                                    [`&:hover .${ENTRY_MENU_CLASS}, &:focus-within .${ENTRY_MENU_CLASS}`]: { opacity: 1 },
                                 }}
                             >
-                                <span>{formatRelativeDay(c.updated_at)}</span>
-                                <RunStateChip state={state} since={runSince(c)} />
-                                {c.pending_approvals > 0 && state !== 'waiting' && (
-                                    <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
-                                )}
-                                {withSubs && (
-                                    <Box component="span" sx={{ ml: 'auto' }}>
-                                        <GroupToggleButton
-                                            open={sub.open}
-                                            count={sub.items.length}
-                                            onToggle={sub.toggle}
+                                {editing ? (
+                                    <RenameField
+                                        value={rename.state.draft}
+                                        onChange={rename.change}
+                                        onCommit={() => void rename.commit()}
+                                        onCancel={rename.cancel}
+                                    />
+                                ) : (
+                                    <Box sx={{ display: 'flex', alignItems: 'flex-start', columnGap: 0.5 }}>
+                                        <Box
+                                            data-testid="agent-history-title"
+                                            // double-click renames, like the menu (issue #49)
+                                            onDoubleClick={() => rename.start(c)}
+                                            sx={{
+                                                flex: 1,
+                                                minWidth: 0,
+                                                overflow: 'hidden',
+                                                textOverflow: 'ellipsis',
+                                                display: '-webkit-box',
+                                                WebkitLineClamp: 2,
+                                                WebkitBoxOrient: 'vertical',
+                                                // a word longer than the line breaks instead of running out of the list
+                                                overflowWrap: 'anywhere',
+                                            }}
+                                        >
+                                            {chatTitle(c)}
+                                        </Box>
+                                        <HistoryEntryMenu
+                                            title={chatTitle(c)}
+                                            visible={on}
+                                            onRename={() => rename.start(c)}
+                                            onTrash={() => onMoveToTrash(c)}
                                         />
                                     </Box>
                                 )}
-                                {other && (
-                                    <Box component="span" sx={{ ml: 'auto' }}>
-                                        <GroupToggleButton
-                                            open={other.open}
-                                            count={c.subagents ?? 0}
-                                            onToggle={() => groups.toggle(c)}
-                                        />
+                                <Box
+                                    sx={{
+                                        fontSize: 11,
+                                        color: 'text.disabled',
+                                        mt: 0.25,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        flexWrap: 'wrap',
+                                        columnGap: 1,
+                                    }}
+                                >
+                                    <span>{formatRelativeDay(c.updated_at)}</span>
+                                    <RunStateChip state={state} since={runSince(c)} />
+                                    {c.pending_approvals > 0 && state !== 'waiting' && (
+                                        <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
+                                    )}
+                                    {withSubs && (
+                                        <Box component="span" sx={{ ml: 'auto' }}>
+                                            <GroupToggleButton
+                                                open={sub.open}
+                                                count={sub.items.length}
+                                                onToggle={sub.toggle}
+                                            />
+                                        </Box>
+                                    )}
+                                    {other && (
+                                        <Box component="span" sx={{ ml: 'auto' }}>
+                                            <GroupToggleButton
+                                                open={other.open}
+                                                count={c.subagents ?? 0}
+                                                onToggle={() => groups.toggle(c)}
+                                            />
+                                        </Box>
+                                    )}
+                                </Box>
+                                {failure && (
+                                    <Box
+                                        role="alert"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            rename.dismiss();
+                                        }}
+                                        sx={{ fontSize: 11, color: 'error.main', mt: 0.25 }}
+                                    >
+                                        {failure}
                                     </Box>
                                 )}
                             </Box>
-                            {failure && (
-                                <Box
-                                    role="alert"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        rename.dismiss();
-                                    }}
-                                    sx={{ fontSize: 11, color: 'error.main', mt: 0.25 }}
-                                >
-                                    {failure}
-                                </Box>
+                            {withSubs && sub.open && (
+                                <HistorySubagents
+                                    items={sub.items}
+                                    selectedRunId={sub.selected?.runId}
+                                    onSelect={sub.select}
+                                />
                             )}
-                        </Box>
-                        {withSubs && sub.open && (
-                            <HistorySubagents
-                                items={sub.items}
-                                selectedRunId={sub.selected?.runId}
-                                onSelect={sub.select}
-                            />
-                        )}
-                        {other?.open &&
-                            (other.items?.length ? (
-                                <HistorySubagents items={other.items} onSelect={(runId) => selectChat(c.id, runId)} />
-                            ) : (
-                                <Box sx={{ mb: 0.75 }}>
-                                    <GroupNote loading={other.loading} error={other.error} indent={1.5} />
-                                </Box>
-                            ))}
-                    </Fragment>
-                );
-            })}
+                            {other?.open &&
+                                (other.items?.length ? (
+                                    <HistorySubagents items={other.items} onSelect={(runId) => selectChat(c.id, runId)} />
+                                ) : (
+                                    <Box sx={{ mb: 0.75 }}>
+                                        <GroupNote loading={other.loading} error={other.error} indent={1.5} />
+                                    </Box>
+                                ))}
+                        </Fragment>
+                    );
+                })}
+        </Box>
+        <TrashEntryButton count={trash?.chats.length} onOpen={onOpenTrash} />
         </Box>
     );
 }
@@ -341,7 +349,7 @@ export default function AgentPage() {
 }
 
 function AgentPageContent() {
-    const { status, selectedChatId, selectChat, refreshChats } = useAgent();
+    const { status, selectedChatId, selectChat, refreshChats, trash } = useAgent();
     const [params, setParams] = useSearchParams();
     const tab = agentTabOf(params.get('tab'));
     const openChat = (id: string) => {
@@ -349,6 +357,19 @@ function AgentPageContent() {
         setParams({});
     };
     const [refreshKey, setRefreshKey] = useState(0);
+    // the trash replaces the history on the chat tab (?view=trash, issue #76); a chat in it is read only on the right
+    const trashView = tab === 'chat' && params.get('view') === 'trash';
+    const [trashOpenId, setTrashOpenId] = useState<string>();
+    const actions = useTrashActions({ onRestored: () => setParams({}) });
+    // a chat that leaves the trash (restored, deleted, emptied) closes its read-only view
+    useEffect(() => {
+        if (trashOpenId && trash && !trash.chats.some((c) => c.id === trashOpenId)) setTrashOpenId(undefined);
+    }, [trashOpenId, trash]);
+    const openHistory = () => {
+        setTrashOpenId(undefined);
+        setParams({});
+    };
+    const trashOpen = trashView && trashOpenId ? trash?.chats.find((c) => c.id === trashOpenId) : undefined;
 
     const refresh = () => {
         void refreshChats();
@@ -399,9 +420,42 @@ function AgentPageContent() {
                         mt: 2.5,
                     }}
                 >
-                    <History />
+                    {trashView ? (
+                        <TrashView
+                            trash={trash}
+                            openId={trashOpenId}
+                            onBack={openHistory}
+                            onOpen={setTrashOpenId}
+                            onRestore={actions.restore}
+                            onDelete={actions.requestDelete}
+                            onEmpty={actions.requestEmpty}
+                        />
+                    ) : (
+                        <History
+                            onMoveToTrash={actions.requestMove}
+                            onOpenTrash={() => setParams({ view: 'trash' })}
+                        />
+                    )}
                     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                        {selectedChatId ? (
+                        {trashView ? (
+                            trashOpen ? (
+                                <ChatView
+                                    key={trashOpen.id}
+                                    chatId={trashOpen.id}
+                                    readOnly
+                                    header={
+                                        <TrashBanner
+                                            onRestore={() => actions.restore(trashOpen.id)}
+                                            onDelete={() => actions.requestDelete(trashOpen)}
+                                        />
+                                    }
+                                />
+                            ) : (
+                                <Typography sx={{ color: 'text.secondary', fontSize: 14 }}>
+                                    Choose a chat from the trash to read it.
+                                </Typography>
+                            )
+                        ) : selectedChatId ? (
                             <ChatView
                                 key={selectedChatId}
                                 chatId={selectedChatId}
@@ -423,6 +477,8 @@ function AgentPageContent() {
                     <StatusView refreshKey={refreshKey} onOpenChat={openChat} />
                 </Box>
             )}
+            <TrashDialogs dialog={actions.dialog} onCancel={actions.closeDialog} onConfirm={actions.confirm} />
+            <TrashSnackbar notice={actions.notice} onClose={actions.dismissNotice} />
         </Box>
     );
 }

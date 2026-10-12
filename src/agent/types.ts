@@ -123,6 +123,8 @@ export type Chat = {
     subagents_running?: number;
     artifact_count: number;
     pending_approvals: number;
+    /** Moved to the trash (issue #76): not in the history or the chat selector; read-only until restored. */
+    trashed_at?: string;
     resuming?: boolean;
     /**
      * A new chat created with `async` waits for its first sandbox (gateway issue #30); `resuming` is set as well. A
@@ -316,7 +318,24 @@ export type ActivityCall = SocketCall & {
 };
 
 /** What the activity view gets of a chat. */
-export type ActivityChat = { id: string; title: string; model: string; variant: string };
+/** A chat as the activity table names it; `deleted` for a chat permanently deleted since (anonymised record, issue #76). */
+export type ActivityChat = { id: string; title: string; model: string; variant: string; deleted?: boolean };
+
+/** A chat in the trash (GET /api/trash, issue #76). `purge_at` only while a retention is configured. */
+export type TrashEntry = {
+    id: string;
+    title: string;
+    model: string;
+    variant: VariantId;
+    updated_at: string;
+    trashed_at: string;
+    messages: number;
+    bytes: number;
+    purge_at?: string;
+};
+
+/** The user's trash; `retention_days` 0 means chats stay until deleted by hand. */
+export type TrashList = { retention_days: number; chats: TrashEntry[] };
 
 /** Summary of all platform calls of the period (not limited by outcome or page; internet entries never count). */
 export type ActivitySummary = {

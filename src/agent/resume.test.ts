@@ -224,3 +224,15 @@ describe('resume on opening the chat (issue #31)', () => {
         expect(texts).not.toMatch(/rest\b|resting|dormant/i);
     });
 });
+
+describe('resumeOnOpen for a chat in the trash (issue #76)', () => {
+    it('skips a dormant chat in the trash: it stays asleep until restored', () => {
+        const chat = { state: 'dormant' as const, trashed_at: '2026-10-12T10:00:00Z' };
+        expect(resumeOnOpen({ chat, loaded: true, streamReady: true, decided: false })).toBe('skip');
+    });
+
+    it('still waits for the load before deciding', () => {
+        const chat = { state: 'dormant' as const, trashed_at: '2026-10-12T10:00:00Z' };
+        expect(resumeOnOpen({ chat, loaded: false, streamReady: true, decided: false })).toBe('wait');
+    });
+});

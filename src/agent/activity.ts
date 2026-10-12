@@ -120,6 +120,14 @@ export function activityRows(page: ActivityPage, kind: KindFilter = 'all'): Acti
         });
 }
 
+/**
+ * The chat's name in the table: a chat deleted since keeps its anonymised record and reads "Deleted chat" (issue #76);
+ * otherwise its title, or "Untitled chat".
+ */
+export function activityChatName(chat: Pick<ActivityChat, 'title' | 'deleted'>): string {
+    return chat.deleted ? 'Deleted chat' : chat.title || 'Untitled chat';
+}
+
 /** "–" (not measured), "0.4 ms", "12 ms", "1.2 s". */
 export function formatDuration(ms: number | undefined | null): string {
     if (ms === undefined || ms === null || !Number.isFinite(ms) || ms < 0) return '–';

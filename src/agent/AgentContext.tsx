@@ -11,8 +11,9 @@ import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
 import { PanelState, panelReducer, panelShown } from './panelCarry';
 import type { SubagentRun } from './subagents';
-import type { Approval, Chat, Config, Me, Model } from './types';
+import type { Approval, Chat, Config, Me, Model, TrashList } from './types';
 import type { Compacting } from './usage';
+import { dropTrashed, nextChatAfterRemoval } from './trash';
 
 export type SessionStatus = 'checking' | 'ready' | 'signed-out' | 'error';
 
@@ -24,6 +25,8 @@ type AgentState = {
     retrySignIn: () => void;
     chats: Chat[];
     chatsLoaded: boolean;
+    /** The user's trash (issue #76); undefined until loaded, and on gateways without the route. */
+    trash?: TrashList;
     /** Selectable models of the gateway (loaded once after sign-in; empty until then or on failure). */
     models: Model[];
     /** Defaults and limits of the gateway (loaded once after sign-in; undefined until then or on failure). */
@@ -47,6 +50,11 @@ type AgentState = {
     loadChatRuns: (chatId: string) => void;
     /** Adds a newly created chat and selects it. */
     addChat: (chat: Chat) => void;
+    /**
+     * Takes a chat out of the lists at once (moved to the trash); when it was the open one, the next chat (below it,
+     * else above it) is selected.
+     */
+    removeChat: (id: string) => void;
     /**
      * "New chat": creates a chat with the gateway's defaults right away (no dialog), selects it and hands its input
      * the focus and `files` (dropped without an open chat). Ignored while a creation is on its way.
@@ -117,6 +125,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [error, setError] = useState<string>();
     const [chats, setChats] = useState<Chat[]>([]);
     const [chatsLoaded, setChatsLoaded] = useState(false);
+    const [trash, setTrash] = useState<TrashList>();
     const [models, setModels] = useState<Model[]>([]);
     const [config, setConfig] = useState<Config>();
     const [selectedChatId, setSelectedChatId] = useState<string | undefined>(() => load(CHAT_KEY) ?? undefined);
@@ -174,9 +183,14 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
     const refreshChats = useCallback(async () => {
         try {
-            const list = await agentApi.chats();
-            setChats(Array.isArray(list) ? list : []);
+            const [list, trashed] = await Promise.all([
+                agentApi.chats(),
+                // the count of the trash must not hide the chats: without it (older gateway) the entry shows no count
+                agentApi.trash().catch(() => undefined),
+            ]);
+            setChats(Array.isArray(list) ? dropTrashed(list) : []);
             setChatsLoaded(true);
+            if (trashed && Array.isArray(trashed.chats)) setTrash(trashed);
         } catch (e) {
             if (e instanceof AgentApiError && e.status === 401) setStatus('signed-out');
         }
@@ -273,8 +287,20 @@ export function AgentProvider({ children }: { children: ReactNode }) {
 
     const addChat = useCallback(
         (chat: Chat) => {
+            if (chat.trashed_at) return;
             setChats((list) => [chat, ...list.filter((c) => c.id !== chat.id)]);
             selectChat(chat.id);
+        },
+        [selectChat],
+    );
+
+    const selectedRef = useRef(selectedChatId);
+    selectedRef.current = selectedChatId;
+    const removeChat = useCallback(
+        (id: string) => {
+            const next = nextChatAfterRemoval(chatsRef.current, id);
+            setChats((list) => list.filter((c) => c.id !== id));
+            if (selectedRef.current === id) selectChat(next);
         },
         [selectChat],
     );
@@ -309,15 +335,23 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         [],
     );
 
-    const updateChat = useCallback((chat: Chat) => {
-        setChats((list) => {
-            const i = list.findIndex((c) => c.id === chat.id);
-            if (i < 0 || list[i] === chat) return list;
-            const next = list.slice();
-            next[i] = chat;
-            return next;
-        });
-    }, []);
+    const updateChat = useCallback(
+        (chat: Chat) => {
+            // moved to the trash (here or in another tab): it leaves the lists like a removed chat
+            if (chat.trashed_at) {
+                removeChat(chat.id);
+                return;
+            }
+            setChats((list) => {
+                const i = list.findIndex((c) => c.id === chat.id);
+                if (i < 0 || list[i] === chat) return list;
+                const next = list.slice();
+                next[i] = chat;
+                return next;
+            });
+        },
+        [removeChat],
+    );
 
     const setCompacting = useCallback((chatId: string, c: Compacting | undefined) => {
         setCompactingState((m) => {
@@ -349,6 +383,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             retrySignIn: () => void check(true),
             chats,
             chatsLoaded,
+            trash,
             models,
             config,
             refreshChats,
@@ -361,6 +396,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             chatRuns,
             loadChatRuns,
             addChat,
+            removeChat,
             startNewChat,
             creatingChat,
             newChatError,
@@ -384,6 +420,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             check,
             chats,
             chatsLoaded,
+            trash,
             models,
             config,
             refreshChats,
@@ -396,6 +433,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             chatRuns,
             loadChatRuns,
             addChat,
+            removeChat,
             startNewChat,
             creatingChat,
             newChatError,

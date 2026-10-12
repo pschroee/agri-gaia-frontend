@@ -25,6 +25,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 
 import {
     ActivityRow,
+    activityChatName,
     formatDuration,
     internetEvent,
     InternetEvent,
@@ -423,8 +424,16 @@ export default function ActivityTable({
                                         {formatClock(call.created_at)}
                                     </TableCell>
                                     <TableCell>
-                                        <Typography noWrap sx={{ fontSize: 14, maxWidth: 180 }} title={chat.title}>
-                                            {chat.title || 'Untitled chat'}
+                                        <Typography
+                                            noWrap
+                                            sx={{
+                                                fontSize: 14,
+                                                maxWidth: 180,
+                                                ...(chat.deleted && { color: 'text.secondary', fontStyle: 'italic' }),
+                                            }}
+                                            title={chat.title}
+                                        >
+                                            {activityChatName(chat)}
                                         </Typography>
                                     </TableCell>
                                     {internet ? (
