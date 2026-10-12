@@ -118,8 +118,8 @@ describe('Office documents (issue #42)', () => {
 
     it('names the readable formats and the limit in the paperclip hint', () => {
         for (const f of ['Word', 'Excel', 'PowerPoint', 'PDF', 'CSV', 'images']) expect(READABLE_FORMATS).toContain(f);
-        expect(attachHint(50)).toBe(`Attach files (${READABLE_FORMATS}, at most 50 MB each). They are placed under /workspace/inputs/.`);
-        expect(attachHint(undefined)).toBe(`Attach files (${READABLE_FORMATS}). They are placed under /workspace/inputs/.`);
+        expect(attachHint(50)).toBe(`Attach files (${READABLE_FORMATS}, at most 50 MB each). They are sent to the agent with your message.`);
+        expect(attachHint(undefined)).toBe(`Attach files (${READABLE_FORMATS}). They are sent to the agent with your message.`);
     });
 
     it('turns a 413 into a size message, other failures stay as they are', () => {
