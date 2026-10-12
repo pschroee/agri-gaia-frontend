@@ -120,6 +120,18 @@ export function pageContextOf(
     return ctx;
 }
 
+/**
+ * The checked rows of a list page as the page's selection (issue #77), in list order. Ids that are not in the list
+ * (filtered out or deleted) are left out; without a checked row the result is empty and no chip shows.
+ */
+export function checkedSelection(
+    kind: ContextKind,
+    items: readonly { id: number; name: string }[],
+    checked: readonly number[],
+): PageSelection[] {
+    return items.filter((i) => checked.includes(i.id)).map((i) => ({ kind, id: i.id, name: i.name }));
+}
+
 /** The objects of a context: `objects`, or the single `object` of an older gateway or stored row. */
 export function contextObjects(ctx: PageContext | undefined): ContextObject[] {
     if (!ctx) return [];
