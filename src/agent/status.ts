@@ -169,6 +169,7 @@ export const APPROVAL_KIND_LABEL: Record<Approval['kind'], string> = {
     platform_write: 'Platform write',
     artifact_upload: 'File handover',
     internet_access: 'Internet access',
+    plan: 'Plan',
 };
 
 /** What an approval is about: the call, the file or the reason for internet access. */
