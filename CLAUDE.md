@@ -55,6 +55,12 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   gateway never counts internet entries into; the footer counts platform calls and switches apart (`shownText`). A
   gateway before #37 ignores `kind` and sends entries without it: they count as platform calls, and "Internet
   switches" then shows an empty table, never platform calls (`activityRows` filters by `kindOf`).
+- **Sent to model (gateway issue #69):** an expanded platform row shows the model call whose `tool_calls[].id` equals the
+  row's `tool_call_id` ("This call": model, tokens in with the cache share, tokens out, request size) and the chat's
+  totals ("Chat in total"). The model calls come from `GET chats/{id}/llm_calls`, loaded lazily on the first expansion
+  of a platform row and kept per chat in `ActivityTable` (`LlmLoad`; reloaded only after an error). Logic in
+  `src/agent/sentToModel.ts`, unit-tested. Entries recorded before the gateway measured request sizes show "request size
+  not recorded"; the sizes are never costs. The legend describes the four effect classes, not the methods.
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
   reuses the platform's Keycloak session (`return` stays `/agent/`). The visible "Sign in" of `SignInNotice` passes the

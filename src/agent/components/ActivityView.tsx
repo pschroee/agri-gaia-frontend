@@ -72,10 +72,10 @@ export function Kpi({
 }
 
 const LEGEND: { effect: Effect; text: string }[] = [
-    { effect: 'read', text: 'GET' },
-    { effect: 'write', text: 'POST, PUT, PATCH' },
-    { effect: 'compute', text: 'training start' },
-    { effect: 'irreversible', text: 'DELETE' },
+    { effect: 'read', text: 'reads only, runs without asking' },
+    { effect: 'write', text: 'changes data, needs your approval' },
+    { effect: 'compute', text: 'uses compute time (training), needs your approval' },
+    { effect: 'irreversible', text: 'cannot be undone, always needs your approval' },
 ];
 
 /**

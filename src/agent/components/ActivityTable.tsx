@@ -44,6 +44,9 @@ import {
 import type { ActivityCall } from '../types';
 import EffectChip from './EffectChip';
 import { agentColors, MONO } from './tokens';
+import { agentApi } from '../api';
+import { needsLlmLoad, sentCallText, sentChatText, sentToModel } from '../sentToModel';
+import type { LlmLoad } from '../sentToModel';
 
 /** Outcome as the gateway classified it; older entries without it from the result text. */
 const outcomeOfCall = (c: ActivityCall): Outcome => c.outcome ?? outcomeOf(c.result);
@@ -219,7 +222,25 @@ function InternetLog({ row }: { row: ActivityRow }) {
     );
 }
 
-function CallLog({ row }: { row: ActivityRow }) {
+/** "Sent to model": the model call that asked for this platform call, and the chat's totals (gateway issue #69). */
+function SentToModelText({ sent, toolCallId }: { sent: LlmLoad | undefined; toolCallId?: string }) {
+    if (sent === undefined || sent === 'loading') return <Box>Loading …</Box>;
+    if (sent === 'error') return <Box>Could not load the model calls of this chat.</Box>;
+    if (sent.length === 0) return <Box>No model calls recorded for this chat.</Box>;
+    const { call, chat } = sentToModel(sent, toolCallId);
+    return (
+        <>
+            <Box>
+                {call
+                    ? `This call: ${sentCallText(call)}`
+                    : 'This call: the model call that asked for it is not among the recorded ones.'}
+            </Box>
+            <Box sx={{ color: 'text.secondary' }}>{`Chat in total: ${sentChatText(chat)}`}</Box>
+        </>
+    );
+}
+
+function CallLog({ row, sent }: { row: ActivityRow; sent?: LlmLoad }) {
     const { call, chat, log } = row;
     const lines: { at: string; text: string; tone?: 'warn' | 'bad' }[] = [];
     for (const c of log) {
@@ -307,6 +328,10 @@ function CallLog({ row }: { row: ActivityRow }) {
                         ? `${formatDuration(call.duration_ms)} round trip to the platform`
                         : 'not measured (the call did not go out, or it predates the measurement)'}
                 </dd>
+                <dt>Sent to model</dt>
+                <dd data-testid="activity-sent-to-model" style={{ overflowWrap: 'anywhere' }}>
+                    <SentToModelText sent={sent} toolCallId={call.tool_call_id} />
+                </dd>
                 {call.tool_call_id && (
                     <>
                         <dt>Tool call</dt>
@@ -330,6 +355,17 @@ export default function ActivityTable({
     emptyText?: string;
 }) {
     const [open, setOpen] = useState<number>();
+    // Model calls per chat, loaded when a platform row of the chat is first expanded (gateway issue #69).
+    const [sent, setSent] = useState<Record<string, LlmLoad>>({});
+
+    const loadSent = (chatId: string) => {
+        if (!needsLlmLoad(sent[chatId])) return;
+        setSent((s) => ({ ...s, [chatId]: 'loading' }));
+        agentApi.llmCalls(chatId).then(
+            (calls) => setSent((s) => ({ ...s, [chatId]: calls })),
+            () => setSent((s) => ({ ...s, [chatId]: 'error' })),
+        );
+    };
 
     if (rows.length === 0) {
         return <Typography sx={{ color: 'text.secondary', fontSize: 14, py: 3 }}>{emptyText}</Typography>;
@@ -364,7 +400,10 @@ export default function ActivityTable({
                             <Fragment key={call.id}>
                                 <TableRow
                                     hover
-                                    onClick={() => setOpen(expanded ? undefined : call.id)}
+                                    onClick={() => {
+                                        setOpen(expanded ? undefined : call.id);
+                                        if (!expanded && !internet) loadSent(chat.id);
+                                    }}
                                     sx={{
                                         cursor: 'pointer',
                                         '& > td': { borderBottom: expanded ? 0 : undefined },
@@ -431,7 +470,7 @@ export default function ActivityTable({
                                 <TableRow>
                                     <TableCell colSpan={8} sx={{ p: 0, borderBottom: expanded ? undefined : 0 }}>
                                         <Collapse in={expanded} timeout="auto" unmountOnExit>
-                                            {internet ? <InternetLog row={row} /> : <CallLog row={row} />}
+                                            {internet ? <InternetLog row={row} /> : <CallLog row={row} sent={sent[chat.id]} />}
                                         </Collapse>
                                     </TableCell>
                                 </TableRow>
