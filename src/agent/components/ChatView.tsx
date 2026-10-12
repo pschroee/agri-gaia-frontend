@@ -151,7 +151,6 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
     useEffect(() => {
         jumpToLatest();
     }, [subagentId, jumpToLatest]);
-    const backToChat = useCallback(() => selectSubagent?.(undefined), [selectSubagent]);
     // the field under a subagent (issue #81): its messages, the one still on its way, and "Send again" of a failed one
     const subMessages = stream.subagentMessages;
     const sendSubagentMessage = stream.sendSubagentMessage;
@@ -316,15 +315,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                         }}
                     >
                         {/* the subagent's field (issue #81) replaces the chat's; the chat's input stays mounted (hidden), so a
-                            draft and staged files are still there after "Back to chat" */}
+                            draft and staged files are still there after the way back (top left) */}
                         {subRun && inputState && (
                             <SubagentInput
                                 key={subRun.runId}
                                 state={inputState}
-                                dense={dense}
                                 limit={agent?.config?.max_subagents}
                                 onSend={sendToSubagent}
-                                onBack={backToChat}
                                 prefill={resend}
                             />
                         )}
