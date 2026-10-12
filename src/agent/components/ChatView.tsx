@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { ReactNode, useCallback, useEffect, useMemo } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -18,7 +18,16 @@ import type { PageContext } from '../pageContext';
 import { useCurrentPageContext } from '../pageSelection';
 import { resumeRunning } from '../resume';
 import { runStateOf } from '../runState';
-import { groupRuns, isLiveStatus, runStatus, runsByCall, subagentNav } from '../subagents';
+import {
+    groupRuns,
+    isLiveStatus,
+    latestRunId,
+    runStatus,
+    runsByCall,
+    subagentInputState,
+    subagentNav,
+    threadIds,
+} from '../subagents';
 import type { SubagentNavItem } from '../subagents';
 import { buildTranscript, countEntries, liveParts } from '../transcript';
 import { useNow } from '../useNow';
@@ -32,7 +41,8 @@ import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
 import QueueList from './QueueList';
-import { SubagentReadOnlyBar, SubagentTranscript } from './SubagentView';
+import SubagentInput from './SubagentInput';
+import { SubagentTranscript } from './SubagentView';
 import TaskStrip from './TaskStrip';
 
 type Props = {
@@ -142,6 +152,26 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
         jumpToLatest();
     }, [subagentId, jumpToLatest]);
     const backToChat = useCallback(() => selectSubagent?.(undefined), [selectSubagent]);
+    // the field under a subagent (issue #81): its messages, the one still on its way, and "Send again" of a failed one
+    const subMessages = stream.subagentMessages;
+    const sendSubagentMessage = stream.sendSubagentMessage;
+    const threadMessages = subRun ? subMessages.filter((m) => threadIds(subRun).includes(m.run_id)) : [];
+    const awaitingArrival = threadMessages.some((m) => m.status === 'sending' || m.status === 'sent');
+    const inputState =
+        subRun && subStatus
+            ? subagentInputState({ status: subStatus, piRunId: subRun.piRunId, pending: awaitingArrival })
+            : undefined;
+    const [resend, setResend] = useState<{ text: string; nonce: number }>();
+    const onResend = useCallback((text: string) => setResend((p) => ({ text, nonce: (p?.nonce ?? 0) + 1 })), []);
+    const sendToSubagent = useCallback(
+        async (text: string) => {
+            if (!subRun) return;
+            // the newest run of the thread: a finished thread continues from its latest session
+            await sendSubagentMessage(latestRunId(subRun), text);
+            jumpToLatest();
+        },
+        [subRun, sendSubagentMessage, jumpToLatest],
+    );
     // the platform page next to the panel (none on /ai-agent)
     const pageContext = useCurrentPageContext();
     // After sending, the own message and the answer are what the user wants to see.
@@ -233,6 +263,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                                     plans={plans}
                                     approvals={stream.approvals}
                                     onDecide={stream.decide}
+                                    messages={subMessages}
+                                    onResend={onResend}
                                 />
                             ) : (
                                 <Conversation
@@ -278,9 +310,19 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                                 : { px: dense ? 1.5 : 0, pt: 1, pb: dense ? 1.5 : 0 }),
                         }}
                     >
-                        {/* read-only: no input and no stop per subagent; the chat's input stays mounted (hidden), so a draft
-                            and staged files are still there after "Back to chat" */}
-                        {subRun && subStatus && <SubagentReadOnlyBar onBack={backToChat} />}
+                        {/* the subagent's field (issue #81) replaces the chat's; the chat's input stays mounted (hidden), so a
+                            draft and staged files are still there after "Back to chat" */}
+                        {subRun && inputState && (
+                            <SubagentInput
+                                key={subRun.runId}
+                                state={inputState}
+                                dense={dense}
+                                limit={agent?.config?.max_subagents}
+                                onSend={sendToSubagent}
+                                onBack={backToChat}
+                                prefill={resend}
+                            />
+                        )}
                         <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
                             <QueueList
                                 chat={stream.chat}

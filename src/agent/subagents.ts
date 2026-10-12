@@ -7,7 +7,15 @@
 // web/src/lib/subagents.ts and subagent-overview.ts.
 import { byToolCall, displayToolName, parseArgs, summarizeArgs } from './transcript';
 import type { AgentPart, Step, TranscriptItem } from './transcript';
-import type { LLMCall, StoredMessage, SubagentEntry, SubagentRunMeta, ToolExecution } from './types';
+import type {
+    LLMCall,
+    StoredMessage,
+    SubagentEntry,
+    SubagentMessage,
+    SubagentMessageMode,
+    SubagentRunMeta,
+    ToolExecution,
+} from './types';
 
 export type SubagentRun = {
     runId: string;
@@ -24,7 +32,21 @@ export type SubagentRun = {
     task?: string;
     toolCalls: number;
     errors: number;
+    /** Run this one continues (a resume or restart after a message, issue #81). */
+    continues?: string;
+    /** pi-subagents' run ID of the newest run; missing for a foreground run, which cannot be addressed (issue #81). */
+    piRunId?: string;
+    /** Thread of a run and its continuations, origin first (issue #81); missing: the run alone. */
+    members?: string[];
+    /** Newest run of the thread: the one a message is addressed to; missing: the run itself. */
+    latest?: string;
 };
+
+/** The runs of a thread (the run itself and its continuations); a single run is its own thread. */
+export const threadIds = (run: Pick<SubagentRun, 'runId' | 'members'>): string[] => run.members ?? [run.runId];
+
+/** The run a message is addressed to: the newest of the thread (issue #81). */
+export const latestRunId = (run: Pick<SubagentRun, 'runId' | 'latest'>): string => run.latest ?? run.runId;
 
 const ms = (iso: string | undefined) => {
     const v = iso ? Date.parse(iso) : NaN;
@@ -75,7 +97,8 @@ export function mergeRunMeta(list: SubagentRunMeta[], add: SubagentRunMeta[]): S
  */
 export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []): SubagentRun[] {
     const byRun = new Map<string, SubagentEntry[]>();
-    for (const e of entries) {
+    // user_echo: the relay message of a user, shown from the gateway's record instead (issue #81)
+    for (const e of entries.filter((x) => x.kind !== 'user_echo')) {
         const l = byRun.get(e.run_id);
         if (l) l.push(e);
         else byRun.set(e.run_id, [e]);
@@ -103,6 +126,8 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
             if (m.agent) r.agent = m.agent;
             r.label = m.label || undefined;
             r.state = m.state || undefined;
+            r.continues = m.continues_run_id || undefined;
+            r.piRunId = m.pi_run_id || undefined;
             if (started && started < r.start) r.start = started;
             if (ended > r.end) r.end = ended;
         } else if (started) {
@@ -111,6 +136,8 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
                 agent: m.agent,
                 label: m.label || undefined,
                 state: m.state || undefined,
+                continues: m.continues_run_id || undefined,
+                piRunId: m.pi_run_id || undefined,
                 entries: [],
                 start: started,
                 end: Math.max(started, ended),
@@ -119,7 +146,61 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
             });
         }
     }
-    return [...runs.values()].sort((a, b) => a.start - b.start);
+    return foldContinuations([...runs.values()].sort((a, b) => a.start - b.start));
+}
+
+/**
+ * Joins each run with the runs that continue it into one thread (issue #81): one entry in the lists, its entries in time
+ * order (an entry the continuation repeats from the earlier session counts once), its state that of the newest run.
+ * A continuation whose origin is unknown stays a thread of its own.
+ */
+export function foldContinuations(runs: SubagentRun[]): SubagentRun[] {
+    const ids = new Set(runs.map((r) => r.runId));
+    const continuing = new Set<string>();
+    const following = new Map<string, SubagentRun[]>();
+    for (const r of runs) {
+        if (!r.continues || r.continues === r.runId || !ids.has(r.continues)) continue;
+        continuing.add(r.runId);
+        const list = following.get(r.continues);
+        if (list) list.push(r);
+        else following.set(r.continues, [r]);
+    }
+    return runs
+        .filter((r) => !continuing.has(r.runId))
+        .map((root) => {
+            const chain: SubagentRun[] = [];
+            const seen = new Set([root.runId]);
+            for (let cur: SubagentRun = root; ; ) {
+                const next = following.get(cur.runId)?.find((x) => !seen.has(x.runId));
+                if (!next) break;
+                seen.add(next.runId);
+                chain.push(next);
+                cur = next;
+            }
+            if (chain.length === 0) return root;
+            const all = [root, ...chain];
+            const newest = chain[chain.length - 1];
+            const byId = new Set<string>();
+            const entries = all
+                .flatMap((r) => r.entries)
+                .sort((a, b) => ms(a.created_at) - ms(b.created_at))
+                .filter((e) => {
+                    if (byId.has(e.entry_id)) return false;
+                    byId.add(e.entry_id);
+                    return true;
+                });
+            return {
+                ...root,
+                entries,
+                members: all.map((r) => r.runId),
+                latest: newest.runId,
+                piRunId: newest.piRunId,
+                state: newest.state,
+                end: Math.max(...all.map((r) => r.end)),
+                toolCalls: entries.filter((e) => e.kind === 'tool_call').length,
+                errors: entries.filter((e) => e.kind === 'tool_result' && e.payload?.is_error).length,
+            };
+        });
 }
 
 export type RunStatus = 'running' | 'idle' | 'done' | 'failed' | 'stopped';
@@ -258,25 +339,43 @@ export function mergeLLMCalls(list: LLMCall[], add: LLMCall[]): LLMCall[] {
 }
 
 export type RunItem =
+    /** The first task of a thread: the job the subagent got. */
     | { type: 'task'; key: string; text: string }
+    /** Later tasks: the main agent's messages to the subagent, never shown as a message of the user (issue #81). */
+    | { type: 'note'; key: string; text: string }
     | { type: 'text'; key: string; text: string }
-    | { type: 'steps'; key: string; steps: Step[] };
+    | { type: 'steps'; key: string; steps: Step[] }
+    /** A message the user wrote, from the gateway's record. */
+    | { type: 'message'; key: string; message: SubagentMessage }
+    /** The thread continues in a new run after the message above (resume or restart). */
+    | { type: 'continued'; key: string; mode: SubagentMessageMode };
 
 /**
  * The steps of a run as the transcript shows them: the task, text answers and tool calls joined into step lists. A
  * result belongs to its call by ID, otherwise to the oldest open call of the same name. Open calls run while the run
- * runs, otherwise they did not finish.
+ * runs, otherwise they did not finish. `messages` (the user's, from the gateway) are placed by their time before the
+ * entry that follows them.
  */
 export function runItems(
     run: Pick<SubagentRun, 'entries'>,
     live: boolean,
     executions: ToolExecution[] = [],
+    messages: SubagentMessage[] = [],
 ): RunItem[] {
     const execsByCall = byToolCall(executions);
     const durationOf = (l: ToolExecution[] | undefined) =>
         l ? l.reduce((sum, e) => sum + (e.duration_ms ?? 0), 0) : undefined;
     const items: RunItem[] = [];
     const open: { step: Step; name: string; callId?: string }[] = [];
+    const queue = messages.slice().sort((a, b) => ms(a.created_at) - ms(b.created_at));
+    const flush = (until: number) => {
+        while (queue.length && ms(queue[0].created_at) <= until) {
+            const m = queue.shift() as SubagentMessage;
+            items.push({ type: 'message', key: `m${m.id}`, message: m });
+            if (m.target_run_id) items.push({ type: 'continued', key: `c${m.id}`, mode: m.mode });
+        }
+    };
+    let tasks = 0;
     const steps = (): Step[] => {
         const last = items[items.length - 1];
         if (last?.type === 'steps') return last.steps;
@@ -285,9 +384,14 @@ export function runItems(
         return fresh.steps;
     };
     for (const e of run.entries) {
+        flush(ms(e.created_at));
         const p = e.payload ?? {};
-        if (e.kind === 'task' || e.kind === 'text') {
-            if (p.text?.trim()) items.push({ type: e.kind, key: e.entry_id, text: p.text });
+        if (e.kind === 'user_echo') continue;
+        if (e.kind === 'task') {
+            const first = tasks++ === 0;
+            if (p.text?.trim()) items.push({ type: first ? 'task' : 'note', key: e.entry_id, text: p.text });
+        } else if (e.kind === 'text') {
+            if (p.text?.trim()) items.push({ type: 'text', key: e.entry_id, text: p.text });
         } else if (e.kind === 'tool_call') {
             const execs = p.id ? execsByCall.get(p.id) : undefined;
             const step: Step = {
@@ -317,6 +421,7 @@ export function runItems(
             }
         }
     }
+    flush(Infinity);
     return items;
 }
 
@@ -390,22 +495,40 @@ export function toggleGroup(statuses: RunStatus[], toggle: GroupToggle | undefin
     return { open: !groupOpen(statuses, toggle, hasSelected), madeWhenDefault: groupOpenByDefault(statuses) };
 }
 
+/** A transcript item of a subagent's view: the chat's items plus the user's messages and the thread's breaks. */
+export type SubagentItem =
+    | TranscriptItem
+    | { kind: 'note'; key: string; text: string }
+    | { kind: 'you'; key: string; message: SubagentMessage }
+    | { kind: 'continued'; key: string; mode: SubagentMessageMode };
+
 /**
- * A run's entries as transcript items, for the same components as the chat: each task as a user message, text answers
- * and tool calls (as step lists with their result: done, failed, still running or not finished) joined into agent
- * blocks until the next task.
+ * A run's entries as transcript items, for the same components as the chat: the first task as a user message, later
+ * tasks as notes, text answers and tool calls (as step lists with their result: done, failed, still running or not
+ * finished) joined into agent blocks until the next task. The user's messages come from `messages` (the gateway's
+ * record), only those addressed to the run's thread.
  */
 export function runTranscript(
-    run: Pick<SubagentRun, 'entries' | 'runId'>,
+    run: Pick<SubagentRun, 'entries' | 'runId' | 'members'>,
     live: boolean,
     executions?: ToolExecution[],
-): TranscriptItem[] {
-    const out: TranscriptItem[] = [];
+    messages: SubagentMessage[] = [],
+): SubagentItem[] {
+    const mine = new Set(threadIds(run));
+    const out: SubagentItem[] = [];
     let agent: Extract<TranscriptItem, { kind: 'agent' }> | undefined;
-    for (const it of runItems(run, live, executions)) {
+    for (const it of runItems(run, live, executions, messages.filter((m) => mine.has(m.run_id)))) {
         if (it.type === 'task') {
             agent = undefined;
             out.push({ kind: 'user', key: `${run.runId}:${it.key}`, text: it.text.trim() });
+            continue;
+        }
+        if (it.type === 'note' || it.type === 'message' || it.type === 'continued') {
+            agent = undefined;
+            const key = `${run.runId}:${it.key}`;
+            if (it.type === 'note') out.push({ kind: 'note', key, text: it.text.trim() });
+            else if (it.type === 'message') out.push({ kind: 'you', key, message: it.message });
+            else out.push({ kind: 'continued', key, mode: it.mode });
             continue;
         }
         const part: AgentPart =
@@ -417,6 +540,111 @@ export function runTranscript(
         agent.parts.push(part);
     }
     return out;
+}
+
+/** Adds the user's messages by id; a newer record (status changed) replaces the older one. */
+export function mergeSubagentMessages(list: SubagentMessage[], add: SubagentMessage[]): SubagentMessage[] {
+    let next = list;
+    for (const m of add) {
+        if (typeof m?.id !== 'number') continue;
+        const i = next.findIndex((x) => x.id === m.id);
+        if (i < 0) next = [...next, m];
+        else {
+            next = next.slice();
+            next[i] = m;
+        }
+    }
+    return next;
+}
+
+/** Reason of a failed delivery in plain words (the gateway's error texts stay in the record). */
+export function deliveryErrorText(error?: string): string {
+    if (!error) return 'the subagent did not take it';
+    if (error === 'relay timed out') return 'the subagent did not answer in time';
+    if (error === 'run ended before the message arrived') return 'the subagent ended before it read the message';
+    return error;
+}
+
+/** Line under a user's bubble: "Sending …", "Sent", "Delivered" or "Not delivered: <reason>". */
+export function deliveryText(m: Pick<SubagentMessage, 'status' | 'error'>): string {
+    switch (m.status) {
+        case 'sending':
+            return 'Sending …';
+        case 'sent':
+            return 'Sent';
+        case 'delivered':
+            return 'Delivered';
+        default:
+            return `Not delivered: ${deliveryErrorText(m.error)}`;
+    }
+}
+
+/** Text of the field: what the user may write to the open subagent now (issue #81). */
+export type SubagentInputState = {
+    /** 'open': the field takes text; 'locked': shown disabled with the note; 'hidden': no field (trash). */
+    mode: 'open' | 'locked' | 'hidden';
+    placeholder: string;
+    /** Why the field is locked, or why sending waits. */
+    note?: string;
+    /** Sending is blocked (the last message has not arrived yet, or the field is locked). */
+    blocked: boolean;
+};
+
+export const FOREGROUND_NOTE = 'Runs inside a step of the main agent – write to it when it has finished.';
+export const PENDING_NOTE = 'Waiting for your last message to arrive';
+
+/**
+ * State of the subagent's field. A running run takes a hint (it reads it after its current step); a finished one a
+ * follow-up with its history. A run inside a step of the main agent (no pi-subagents ID) is locked while it runs.
+ */
+export function subagentInputState({
+    status,
+    piRunId,
+    trashed = false,
+    pending = false,
+}: {
+    status: RunStatus;
+    piRunId?: string;
+    trashed?: boolean;
+    pending?: boolean;
+}): SubagentInputState {
+    if (trashed) return { mode: 'hidden', placeholder: '', blocked: true };
+    if (isLiveStatus(status) && !piRunId)
+        return { mode: 'locked', placeholder: FOREGROUND_NOTE, note: FOREGROUND_NOTE, blocked: true };
+    const placeholder = isLiveStatus(status)
+        ? 'Message the subagent – it reads it after its current step'
+        : 'Ask a follow-up – continues with its history';
+    if (pending) return { mode: 'open', placeholder, note: PENDING_NOTE, blocked: true };
+    return { mode: 'open', placeholder, blocked: false };
+}
+
+/**
+ * Error of sending to a subagent in plain words, from the gateway's codes (409, 429, 404); `limit` is the number of
+ * subagents at the same time (gateway config).
+ */
+export function subagentSendErrorText(e: unknown, limit?: number): string {
+    const o = (e ?? {}) as { code?: unknown; status?: unknown; message?: unknown };
+    switch (o.code) {
+        case 'subagent_limit':
+            return limit === 1
+                ? '1 subagent is already running – try again when it has finished.'
+                : limit
+                  ? `${limit} subagents are already running – try again when one has finished.`
+                  : 'The limit of running subagents is reached – try again when one has finished.';
+        case 'foreground_run':
+            return FOREGROUND_NOTE;
+        case 'message_pending':
+            return PENDING_NOTE;
+        case 'chat_in_trash':
+            return 'This chat is in the trash. Restore it to write.';
+        case 'not_resumable':
+            return 'This subagent can no longer be continued.';
+        case 'subagents_unavailable':
+            return 'Subagents are not available in this chat.';
+    }
+    if (o.status === 429) return 'Too many messages to subagents within an hour – try again later.';
+    if (o.status === 404) return 'This subagent is no longer available.';
+    return typeof o.message === 'string' && o.message ? o.message : 'The message could not be sent.';
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);

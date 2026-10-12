@@ -6,7 +6,7 @@
 // runs (GET /chats/{id}/subagent-runs) when the user expands its "🤖 n" badge, without opening or waking the chat, and
 // keep it afterwards. Titles and states follow the same rules as for the open chat (runTitle, runStatus). Pure logic;
 // AgentContext holds the cache, useChatSubagentGroups the open state per chat.
-import { isLiveStatus, subagentNav } from './subagents';
+import { foldContinuations, isLiveStatus, subagentNav } from './subagents';
 import type { SubagentNavItem, SubagentRun } from './subagents';
 import type { Chat, SubagentRunSummary } from './types';
 
@@ -27,6 +27,7 @@ export function summaryRun(s: SubagentRunSummary, chatId: string): SubagentRun {
         agent: s.agent,
         label: s.label || undefined,
         state: s.state || undefined,
+        continues: s.continues_run_id || undefined,
         entries: s.last_kind
             ? [
                   {
@@ -55,8 +56,9 @@ export function summaryNav(
     chatId: string,
     { chatRunning, now }: { chatRunning: boolean; now: number },
 ): SubagentNavItem[] {
+    // a continuation (issue #81) is part of its thread's sub-entry, not one of its own
     return subagentNav(
-        runs.map((r) => summaryRun(r, chatId)),
+        foldContinuations(runs.map((r) => summaryRun(r, chatId))),
         { chatRunning, now },
     );
 }
