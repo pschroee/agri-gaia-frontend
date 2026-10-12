@@ -357,7 +357,12 @@ export default function ChatInput({
                     }}
                 />
             )}
-            {chip && <PageContextChip context={chip} onRemove={() => setDismissedContext(contextKey(chip))} />}
+            {chip && (
+                // the wrapper lets the chip shrink below its content, so a long name ends in "…" and the cross stays
+                <Box sx={{ display: 'flex', minWidth: 0, maxWidth: '100%', justifySelf: 'start' }}>
+                    <PageContextChip context={chip} onRemove={() => setDismissedContext(contextKey(chip))} />
+                </Box>
+            )}
             {/* the field (design): outlined box with the staged files, the text and a row with paperclip, model,
                 thinking level and the round send button; 2 px in the primary colour while focused */}
             <Box

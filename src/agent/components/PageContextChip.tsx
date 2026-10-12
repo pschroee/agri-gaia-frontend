@@ -60,7 +60,15 @@ export function PageContextChip({ context, onRemove }: { context: PageContext; o
                 label={
                     <Box
                         component="span"
-                        sx={{ fontFamily: single ? MONO : undefined, fontSize: single ? 12.5 : 13 }}
+                        sx={{
+                            display: 'block',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            minWidth: 0,
+                            fontFamily: single ? MONO : undefined,
+                            fontSize: single ? 12.5 : 13,
+                        }}
                     >
                         {contextLabel(context)}
                     </Box>
@@ -70,15 +78,24 @@ export function PageContextChip({ context, onRemove }: { context: PageContext; o
                 // design: 28 px pill tinted in the primary colour, name in mono, filled cross
                 sx={{
                     justifySelf: 'start',
+                    display: 'flex',
+                    minWidth: 0,
                     maxWidth: '100%',
                     height: 28,
                     borderRadius: '14px',
                     fontSize: 13,
                     color: agentColors.green,
                     bgcolor: alpha(agentColors.green, 0.08),
-                    '& .MuiChip-icon': { color: agentColors.green, ml: 1, mr: -0.25 },
-                    '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis', px: 0.75 },
+                    '& .MuiChip-icon': { color: agentColors.green, ml: 1, mr: -0.25, flexShrink: 0 },
+                    '& .MuiChip-label': {
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        minWidth: 0,
+                        px: 0.75,
+                    },
                     '& .MuiChip-deleteIcon': {
+                        flexShrink: 0,
                         fontSize: 18,
                         color: alpha(agentColors.green, 0.5),
                         mr: 0.5,
