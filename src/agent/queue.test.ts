@@ -15,6 +15,8 @@ import {
     queueStatusText,
     removeErrorText,
     settleDelivered,
+    subagentNote,
+    subagentNoteLine,
 } from './queue';
 import type { QueueState } from './queue';
 import type { QueueDelivery, QueueEntry, StoredMessage } from './types';
@@ -458,3 +460,42 @@ describe('queued messages with a page context', () => {
     });
 });
 
+describe('notes to the main agent about messages to a subagent (issue #82)', () => {
+    const note = (text: string, extra: Partial<QueueEntry> = {}) =>
+        entry('n1', text, { kind: 'system', note: 'subagent_user', refs: ['run-1'], ...extra });
+
+    it('reads the name from run_name or from the agent in the summary, and the text after the summary', () => {
+        const steered = 'The user wrote directly to subagent run-1 (worker); it receives the message after its step.';
+        expect(subagentNote(note(`${steered}\nPlease check the file.`, { run_name: 'Reviewer' }))).toEqual({
+            name: 'Reviewer',
+            text: 'Please check the file.',
+        });
+        const resumed = 'The user wrote directly to subagent run-1 (worker); it continues in a new run.';
+        expect(subagentNote(note(`${resumed}\nhallo`))).toEqual({ name: 'worker', text: 'hallo' });
+    });
+
+    it('shows the entry as "You wrote to subagent …" without a remove button', () => {
+        const rows = queueRows(
+            { ...emptyQueue, entries: [note('The user wrote directly to subagent run-1 (worker); x.\nhallo')] },
+            undefined,
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].label).toBe('You wrote to subagent worker: hallo');
+        expect(rows[0].subagent).toEqual({ name: 'worker', text: 'hallo' });
+        // the view shows no remove control for a subagent note (QueueList branches on `subagent`)
+        expect(subagentNoteLine({ text: '' })).toBe('You wrote to a subagent');
+    });
+
+    it('leaves other gateway notes as they were, with a remove control', () => {
+        const rows = queueRows(
+            {
+                ...emptyQueue,
+                entries: [entry('b1', 'Background task b1 ended', { kind: 'system', note: 'background', refs: ['b1'] })],
+            },
+            undefined,
+        );
+        expect(rows[0].subagent).toBeUndefined();
+        expect(rows[0].system).toBe(true);
+        expect(rows[0].id).toBe('b1');
+    });
+});

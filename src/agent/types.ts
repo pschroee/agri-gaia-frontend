@@ -144,6 +144,12 @@ export type Chat = {
 export type HoldReason = 'abort' | 'wake_limit' | 'auto_turns';
 
 /**
+ * Whether the user can write to a subagent run now (gateway issue #82): ok (yes), starting (a run that has not
+ * reported its pi-subagents ID yet), foreground (runs inside a step of the main agent), ended, unavailable.
+ */
+export type SubagentMessageState = 'ok' | 'starting' | 'foreground' | 'ended' | 'unavailable';
+
+/**
  * Message queued by the gateway while the agent works. kind "system": a note of the gateway (note
  * "background" or "sandbox", refs the tasks concerned), not from the user.
  */
@@ -156,6 +162,8 @@ export type QueueEntry = {
     kind: 'user' | 'system';
     note?: string;
     refs?: string[];
+    /** Note "subagent_user": name of the subagent the user wrote to (issue #82; the agent's name if missing). */
+    run_name?: string;
     /** Page context the user sent the message with (user entries; gateway API.md, *Page context*). */
     context?: PageContext;
 };
@@ -512,6 +520,8 @@ export type SubagentRunMeta = {
     /** State according to pi-subagents: running, complete, failed, cancelled … */
     state?: string;
     pi_run_id?: string;
+    /** Whether the user can write to the run now (issue #82). */
+    message_state?: SubagentMessageState;
     parent_run_id?: string;
     /** The run this one continues (a resume or restart after a message, issue #81); set by the gateway only. */
     continues_run_id?: string;
@@ -540,6 +550,8 @@ export type SubagentRunSummary = {
     entries: number;
     /** The run this one continues (issue #81); such a run is shown as part of its thread, not as a sub-entry. */
     continues_run_id?: string;
+    /** Whether the user can write to the run now (issue #82). */
+    message_state?: SubagentMessageState;
 };
 
 /** Model call recorded at the LLM proxy (subset); main: the main session's answer, otherwise subagent or compaction. */

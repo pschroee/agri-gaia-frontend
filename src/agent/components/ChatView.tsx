@@ -159,7 +159,12 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
     const awaitingArrival = threadMessages.some((m) => m.status === 'sending' || m.status === 'sent');
     const inputState =
         subRun && subStatus
-            ? subagentInputState({ status: subStatus, piRunId: subRun.piRunId, pending: awaitingArrival })
+            ? subagentInputState({
+                  status: subStatus,
+                  piRunId: subRun.piRunId,
+                  messageState: subRun.messageState,
+                  pending: awaitingArrival,
+              })
             : undefined;
     const [resend, setResend] = useState<{ text: string; nonce: number }>();
     const onResend = useCallback((text: string) => setResend((p) => ({ text, nonce: (p?.nonce ?? 0) + 1 })), []);

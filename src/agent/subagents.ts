@@ -13,6 +13,7 @@ import type {
     SubagentEntry,
     SubagentMessage,
     SubagentMessageMode,
+    SubagentMessageState,
     SubagentRunMeta,
     ToolExecution,
 } from './types';
@@ -40,6 +41,8 @@ export type SubagentRun = {
     members?: string[];
     /** Newest run of the thread: the one a message is addressed to; missing: the run itself. */
     latest?: string;
+    /** Whether the user can write to the run now (issue #82); missing from older gateways. */
+    messageState?: SubagentMessageState;
 };
 
 /** The runs of a thread (the run itself and its continuations); a single run is its own thread. */
@@ -128,6 +131,7 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
             r.state = m.state || undefined;
             r.continues = m.continues_run_id || undefined;
             r.piRunId = m.pi_run_id || undefined;
+            r.messageState = m.message_state || undefined;
             if (started && started < r.start) r.start = started;
             if (ended > r.end) r.end = ended;
         } else if (started) {
@@ -138,6 +142,7 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
                 state: m.state || undefined,
                 continues: m.continues_run_id || undefined,
                 piRunId: m.pi_run_id || undefined,
+                messageState: m.message_state || undefined,
                 entries: [],
                 start: started,
                 end: Math.max(started, ended),
@@ -195,6 +200,7 @@ export function foldContinuations(runs: SubagentRun[]): SubagentRun[] {
                 members: all.map((r) => r.runId),
                 latest: newest.runId,
                 piRunId: newest.piRunId,
+                messageState: newest.messageState,
                 state: newest.state,
                 end: Math.max(...all.map((r) => r.end)),
                 toolCalls: entries.filter((e) => e.kind === 'tool_call').length,
@@ -591,6 +597,7 @@ export type SubagentInputState = {
 };
 
 export const FOREGROUND_NOTE = 'Runs inside a step of the main agent – write to it when it has finished.';
+export const STARTING_NOTE = 'The subagent is starting – you can write to it in a moment.';
 export const PENDING_NOTE = 'Waiting for your last message to arrive';
 
 /**
@@ -600,16 +607,21 @@ export const PENDING_NOTE = 'Waiting for your last message to arrive';
 export function subagentInputState({
     status,
     piRunId,
+    messageState,
     trashed = false,
     pending = false,
 }: {
     status: RunStatus;
     piRunId?: string;
+    messageState?: SubagentMessageState;
     trashed?: boolean;
     pending?: boolean;
 }): SubagentInputState {
     if (trashed) return { mode: 'hidden', placeholder: '', blocked: true };
-    if (isLiveStatus(status) && !piRunId)
+    // the gateway's own verdict (issue #82) decides; without it (older gateway) a live run without ID is foreground
+    if (messageState === 'starting')
+        return { mode: 'locked', placeholder: STARTING_NOTE, note: STARTING_NOTE, blocked: true };
+    if (messageState === 'foreground' || (messageState === undefined && isLiveStatus(status) && !piRunId))
         return { mode: 'locked', placeholder: FOREGROUND_NOTE, note: FOREGROUND_NOTE, blocked: true };
     const placeholder = isLiveStatus(status)
         ? 'Message the subagent – it reads it after its current step'
@@ -633,6 +645,8 @@ export function subagentSendErrorText(e: unknown, limit?: number): string {
                   : 'The limit of running subagents is reached – try again when one has finished.';
         case 'foreground_run':
             return FOREGROUND_NOTE;
+        case 'run_starting':
+            return STARTING_NOTE;
         case 'message_pending':
             return PENDING_NOTE;
         case 'chat_in_trash':

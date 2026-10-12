@@ -28,6 +28,7 @@ export function summaryRun(s: SubagentRunSummary, chatId: string): SubagentRun {
         label: s.label || undefined,
         state: s.state || undefined,
         continues: s.continues_run_id || undefined,
+        messageState: s.message_state || undefined,
         entries: s.last_kind
             ? [
                   {
