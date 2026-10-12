@@ -380,7 +380,6 @@ export function SubagentTranscript({
                             item={it}
                             dense={dense}
                             thinking={thinking}
-                            active={live && it.key === items[items.length - 1].key}
                             results={sent.get(it.key)}
                             filesChatId={chatId}
                         />

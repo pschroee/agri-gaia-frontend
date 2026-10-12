@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { answerMarkdown, answerSteps } from './answer';
+import { answerSteps } from './answer';
 import type { AgentPart, Step, StepStatus } from './transcript';
 
 const step = (id: string, status: StepStatus = 'done'): Step => ({ id, tool: 'bash', status });
@@ -23,20 +23,5 @@ describe('answerSteps', () => {
         ];
         expect(answerSteps(parts).map((s) => s.id)).toEqual(['a', 'b', 'c']);
         expect(answerSteps([think('t')])).toEqual([]);
-    });
-});
-
-describe('answerMarkdown', () => {
-    it('copies the texts as Markdown, without thinking and steps', () => {
-        expect(
-            answerMarkdown([
-                think('t1'),
-                text('**Bold** start.\n'),
-                { type: 'steps', steps: [step('a')] },
-                text('  \n'),
-                text('| a | b |\n|---|---|'),
-            ]),
-        ).toBe('**Bold** start.\n\n| a | b |\n|---|---|');
-        expect(answerMarkdown([think('t')])).toBe('');
     });
 });
