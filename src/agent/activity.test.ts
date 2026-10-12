@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    activityChatName,
     activityFigures,
     activityQuery,
     activityRows,
@@ -241,5 +242,16 @@ describe('internet rows', () => {
         expect(shownText(activityRows(page([inet(9, 'internet', 'approved')]), 'internet'), 0, 'internet', '')).toBe(
             'Shows 1 internet switch.',
         );
+    });
+});
+
+describe('activityChatName', () => {
+    it('names a deleted chat "Deleted chat" whatever its record says', () => {
+        expect(activityChatName({ title: 'Old talk', deleted: true })).toBe('Deleted chat');
+    });
+
+    it('shows the title, or "Untitled chat" without one', () => {
+        expect(activityChatName({ title: 'Schweine' })).toBe('Schweine');
+        expect(activityChatName({ title: '  ' })).toBe('Untitled chat');
     });
 });
