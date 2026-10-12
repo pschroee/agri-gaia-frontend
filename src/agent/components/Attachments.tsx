@@ -8,7 +8,7 @@
 // message (its attachments) and as the agent's file message for files it sent (issue #62). Cards never grow past their
 // row.
 
-import type { ReactNode } from 'react';
+import { useState, type KeyboardEvent, type ReactNode } from 'react';
 
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
@@ -28,7 +28,7 @@ import { artifactUrl } from '../api';
 import { FILE_TYPE_LABEL, fileMessageLabel, fileMeta, fileTypeOf, previewKind, splitFileName, uploadingText } from '../files';
 import type { FileType, UploadInFlight } from '../files';
 import type { Artifact, ArtifactKind } from '../types';
-import ImagePreview from './ImagePreview';
+import FilePreviewDialog, { type PreviewTarget } from './FilePreviewDialog';
 import { agentColors } from './tokens';
 
 /** Width of a card in the transcript (design: 220 px, at most 85 % of the row). */
@@ -108,6 +108,7 @@ function Card({
     tooltip,
     width,
     maxWidth = '100%',
+    onOpen,
 }: {
     name: string;
     meta: string;
@@ -116,6 +117,8 @@ function Card({
     thumb?: ReactNode;
     /** Download address (files in the transcript). */
     href?: string;
+    /** Opens the preview (issue #74); the card is then a button. */
+    onOpen?: () => void;
     /** Remove cross in the top right corner (staged files). */
     onRemove?: () => void;
     /** Share uploaded so far, while the file is on its way. */
@@ -125,14 +128,27 @@ function Card({
     /** Share of the row a card may take at most (85 % in the transcript, as in the design). */
     maxWidth?: string;
 }) {
+    const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+        // Enter or Space on the card itself; keys on the download link or the cross keep their own meaning
+        if (onOpen && e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            onOpen();
+        }
+    };
     return (
         <Box
             component="li"
             data-testid="agent-attachment"
             data-type={type}
             data-uploading={progress !== undefined ? 'true' : undefined}
+            role={onOpen ? 'button' : undefined}
+            tabIndex={onOpen ? 0 : undefined}
+            aria-label={onOpen ? `Preview ${name}` : undefined}
+            onClick={onOpen}
+            onKeyDown={onOpen ? onKeyDown : undefined}
             sx={{
                 position: 'relative',
+                cursor: onOpen ? 'pointer' : undefined,
                 display: 'flex',
                 alignItems: 'center',
                 gap: '10px',
@@ -185,6 +201,7 @@ function Card({
                         download={name}
                         aria-label={`Download ${name}`}
                         data-testid="agent-file-download"
+                        onClick={(e) => e.stopPropagation()}
                         sx={{ width: 32, height: 32, flex: 'none', color: 'rgba(0, 0, 0, 0.54)' }}
                     >
                         <DownloadIcon sx={{ fontSize: 18 }} />
@@ -224,34 +241,33 @@ function Card({
     );
 }
 
-/** Thumbnail of a raster image that enlarges on click; the type icon if it cannot be loaded. */
-function Thumb({ src, name }: { src: string; name: string }) {
+/** Thumbnail of a raster image; the type icon if it cannot be loaded. A click opens the preview of the card. */
+function Thumb({ src }: { src: string }) {
+    const [broken, setBroken] = useState(false);
+    if (broken) return <FileTypeIcon type="image" />;
     return (
         <Box
-            sx={{
-                width: THUMB,
-                height: THUMB,
-                flex: 'none',
-                position: 'relative',
-                zIndex: 1,
-                lineHeight: 0,
-                borderRadius: '4px',
-                overflow: 'hidden',
-            }}
-        >
-            <ImagePreview
-                src={src}
-                alt={name}
-                label={name}
-                filename={name}
-                tile={THUMB}
-                fallback={<FileTypeIcon type="image" />}
-            />
-        </Box>
+            component="img"
+            src={src}
+            alt=""
+            loading="lazy"
+            onError={() => setBroken(true)}
+            data-testid="agent-file-thumb"
+            sx={{ width: THUMB, height: THUMB, flex: 'none', display: 'block', objectFit: 'cover', borderRadius: '4px', bgcolor: '#f5f5f5' }}
+        />
     );
 }
 
-type CardFile = { name: string; size?: number; content_type?: string };
+type CardFile = { name: string; size?: number; content_type?: string; preview?: string };
+
+/** The preview dialog of a list of cards: `open` shows a file, `dialog` renders the dialog (nothing without a chat). */
+function useFilePreview(chatId?: string) {
+    const [target, setTarget] = useState<PreviewTarget | null>(null);
+    return {
+        open: (file: CardFile, kind: ArtifactKind) => setTarget({ ...file, kind }),
+        dialog: chatId ? <FilePreviewDialog chatId={chatId} target={target} onClose={() => setTarget(null)} /> : null,
+    };
+}
 
 /** An artifact as a card: thumbnail only for raster images whose content type and extension agree (previewKind). */
 function ArtifactCard({
@@ -263,6 +279,7 @@ function ArtifactCard({
     where,
     width,
     maxWidth,
+    onOpen,
 }: {
     chatId?: string;
     file: CardFile;
@@ -274,6 +291,8 @@ function ArtifactCard({
     where: string;
     width: number;
     maxWidth?: string;
+    /** Opens the preview of the file (transcript only). */
+    onOpen?: () => void;
 }) {
     const url = chatId ? artifactUrl(chatId, file.name, kind) : undefined;
     const image =
@@ -284,8 +303,9 @@ function ArtifactCard({
             name={file.name}
             meta={meta}
             type={fileTypeOf(file)}
-            thumb={image && url ? <Thumb src={url} name={file.name} /> : undefined}
+            thumb={image && url ? <Thumb src={url} /> : undefined}
             href={download ? url : undefined}
+            onOpen={onOpen}
             onRemove={onRemove}
             tooltip={`${file.name} · ${meta} · ${where}`}
             width={width}
@@ -361,27 +381,35 @@ export function StagedAttachments({
  * not know yet shows by its extension, never with a thumbnail (its content type is unknown).
  */
 export function MessageAttachments({ chatId, files, known }: { chatId?: string; files: string[]; known: Artifact[] }) {
+    const preview = useFilePreview(chatId);
     if (files.length === 0) return null;
     return (
-        <Box
-            component="ul"
-            aria-label="Attachments"
-            data-testid="agent-message-attachments"
-            sx={{ ...listSx, flexDirection: 'column', alignItems: 'flex-end', alignSelf: 'stretch' }}
-        >
-            {files.map((name) => (
-                <ArtifactCard
-                    key={name}
-                    chatId={chatId}
-                    file={known.find((x) => x.kind === 'input' && x.name === name) ?? { name }}
-                    kind="input"
-                    download
-                    where={`/workspace/inputs/${name}`}
-                    width={CARD_WIDTH}
-                    maxWidth="85%"
-                />
-            ))}
-        </Box>
+        <>
+            <Box
+                component="ul"
+                aria-label="Attachments"
+                data-testid="agent-message-attachments"
+                sx={{ ...listSx, flexDirection: 'column', alignItems: 'flex-end', alignSelf: 'stretch' }}
+            >
+                {files.map((name) => {
+                    const file = known.find((x) => x.kind === 'input' && x.name === name) ?? { name };
+                    return (
+                        <ArtifactCard
+                            key={name}
+                            chatId={chatId}
+                            file={file}
+                            kind="input"
+                            download
+                            where={`/workspace/inputs/${name}`}
+                            width={CARD_WIDTH}
+                            maxWidth="85%"
+                            onOpen={chatId ? () => preview.open(file, 'input') : undefined}
+                        />
+                    );
+                })}
+            </Box>
+            {preview.dialog}
+        </>
     );
 }
 
@@ -392,27 +420,32 @@ export function MessageAttachments({ chatId, files, known }: { chatId?: string; 
  * "artifact", so the message appears while the answer is still running.
  */
 export function AgentFileMessage({ chatId, artifacts }: { chatId?: string; artifacts: Artifact[] }) {
+    const preview = useFilePreview(chatId);
     if (artifacts.length === 0 || !chatId) return null;
     return (
-        <Box
-            component="ul"
-            aria-label={fileMessageLabel(artifacts.length)}
-            data-testid="agent-file-message"
-            data-count={artifacts.length}
-            sx={{ ...listSx, flexDirection: 'column', alignItems: 'flex-start', alignSelf: 'stretch', my: '4px' }}
-        >
-            {artifacts.map((a) => (
-                <ArtifactCard
-                    key={`${a.kind}/${a.name}`}
-                    chatId={chatId}
-                    file={a}
-                    kind={a.kind}
-                    download
-                    where="sent by the agent"
-                    width={CARD_WIDTH}
-                    maxWidth="85%"
-                />
-            ))}
-        </Box>
+        <>
+            <Box
+                component="ul"
+                aria-label={fileMessageLabel(artifacts.length)}
+                data-testid="agent-file-message"
+                data-count={artifacts.length}
+                sx={{ ...listSx, flexDirection: 'column', alignItems: 'flex-start', alignSelf: 'stretch', my: '4px' }}
+            >
+                {artifacts.map((a) => (
+                    <ArtifactCard
+                        key={`${a.kind}/${a.name}`}
+                        chatId={chatId}
+                        file={a}
+                        kind={a.kind}
+                        download
+                        where="sent by the agent"
+                        width={CARD_WIDTH}
+                        maxWidth="85%"
+                        onOpen={() => preview.open(a, a.kind)}
+                    />
+                ))}
+            </Box>
+            {preview.dialog}
+        </>
     );
 }
