@@ -62,12 +62,15 @@ export function UserBubble({
     text,
     dense,
     pending,
+    quiet,
     attachments,
     files,
 }: {
     text: string;
     dense: boolean;
     pending?: string;
+    /** Slightly dimmed until the stored message replaces it, without a hint text. */
+    quiet?: boolean;
     /** Names of the attachments that went with the message. */
     attachments?: string[];
     files: Files;
@@ -76,14 +79,14 @@ export function UserBubble({
     return (
         <Box
             title={pending}
-            data-pending={pending ? 'true' : undefined}
+            data-pending={pending || quiet ? 'true' : undefined}
             sx={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'flex-end',
                 gap: '6px',
                 minWidth: 0,
-                opacity: pending ? 0.6 : 1,
+                opacity: pending || quiet ? 0.6 : 1,
             }}
         >
             {withFiles && <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />}
@@ -491,6 +494,7 @@ export default function Conversation({
         items.length === 0 &&
         !hasLive &&
         !pending &&
+        stream.delivered.length === 0 &&
         resumes.length === 0 &&
         notes.end.length === 0 &&
         !chat?.starting &&
@@ -569,6 +573,17 @@ export default function Conversation({
             {liveItem && answer(liveItem, true)}
             {placed.unplaced.length > 0 && <AgentFileMessage chatId={chat?.id} artifacts={placed.unplaced} />}
             {stream.compacting && <CompactionLine running={stream.compacting} />}
+            {/* handed to the agent, which reads it after its current step: the stored message takes this place */}
+            {stream.delivered.map((d) => (
+                <UserBubble
+                    key={d.key}
+                    text={d.text}
+                    attachments={d.attachments}
+                    files={files}
+                    dense={dense}
+                    quiet
+                />
+            ))}
             {/* the agent works, but nothing of this turn's answer shows yet: a subtle hint, never in place of the steps */}
             {(running || pending) && !activeKey && !resuming && !chat?.starting && !stream.compacting && (
                 <WorkingIndicator

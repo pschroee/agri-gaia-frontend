@@ -11,7 +11,6 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import NotificationsNoneOutlinedIcon from '@mui/icons-material/NotificationsNoneOutlined';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import ScheduleIcon from '@mui/icons-material/Schedule';
@@ -36,22 +35,19 @@ const stateLabel: Record<QueueRow['state'], string> = {
     removing: 'removing',
     held: 'held',
     waiting: 'queued',
-    delivered: 'with the agent',
 };
 
-const DELIVERED_HINT = 'Handed to the agent; it reads the message after its current step.';
 const SUBAGENT_HINT = 'The agent sees this with its next step.';
 
 /**
  * Queued messages above the input field: one line each, removable as long as the gateway has not delivered
- * them. After an abort (queue_held) they wait for the next message or for "Send now". Delivered entries stay,
- * greyed, until the agent has read them (their user message is in the transcript).
+ * them. After an abort (queue_held) they wait for the next message or for "Send now". A delivered message is not
+ * listed here any more: it stands as a user bubble in the history (notes to a subagent stay as information).
  */
 export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Props) {
     const [flushing, setFlushing] = useState(false);
     if (rows.length === 0 && !error) return null;
     const held = isHeld(chat);
-    const onlyDelivered = rows.length > 0 && rows.every((r) => r.state === 'delivered');
 
     const flush = async () => {
         setFlushing(true);
@@ -81,8 +77,6 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                 >
                     {held ? (
                         <PauseCircleOutlineIcon sx={{ fontSize: 16, color: agentColors.amber }} />
-                    ) : onlyDelivered ? (
-                        <HourglassEmptyIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
                     ) : (
                         <ScheduleIcon sx={{ fontSize: 16, color: agentColors.green }} />
                     )}
@@ -108,7 +102,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                         </Button>
                     )}
                     <Typography sx={{ gridColumn: '2 / 4', fontSize: 11.5, color: 'text.secondary' }}>
-                        {queueStatusText(chat, onlyDelivered)}
+                        {queueStatusText(chat)}
                     </Typography>
                 </Box>
             )}
@@ -126,8 +120,8 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                             borderTop: 1,
                             borderColor: 'divider',
                             minWidth: 0,
-                            color: r.system || r.state === 'delivered' ? 'text.secondary' : 'text.primary',
-                            opacity: r.state === 'removing' ? 0.5 : r.state === 'delivered' ? 0.75 : 1,
+                            color: r.system ? 'text.secondary' : 'text.primary',
+                            opacity: r.state === 'removing' ? 0.5 : 1,
                         }}
                     >
                         {r.subagent ? (
@@ -146,7 +140,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                         )}
                         <Box sx={{ flex: 1, minWidth: 0 }}>
                             <Typography
-                                title={r.state === 'delivered' ? `${r.text}\n\n${DELIVERED_HINT}` : r.text}
+                                title={r.text}
                                 sx={{
                                     fontSize: 12.5,
                                     minWidth: 0,
@@ -175,14 +169,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                         >
                             {stateLabel[r.state]}
                         </Typography>
-                        {r.subagent ? null : r.state === 'delivered' ? (
-                            <Tooltip title={DELIVERED_HINT}>
-                                <HourglassEmptyIcon
-                                    aria-label="waiting for the agent"
-                                    sx={{ fontSize: 15, mx: 0.25, color: 'text.secondary' }}
-                                />
-                            </Tooltip>
-                        ) : r.id ? (
+                        {r.subagent ? null : r.id ? (
                             <Tooltip title="Remove (not handed to the agent yet)">
                                 <span>
                                     <IconButton

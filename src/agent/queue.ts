@@ -4,13 +4,16 @@
 
 // Queue of a chat: messages sent while the agent works. The gateway keeps them and hands them to pi (steered in
 // during a run, or at its end; API.md, "Queue"). pi reads a steered message only after its current step, and the
-// user message is stored only then. The UI therefore keeps delivered entries visible above the input field
-// ("waiting for the agent") until the matching user message shows in the transcript. After a page reload the gateway
-// lists them in `queue_delivered` of GET /chats/{id}, and they show the same way.
+// user message is stored only then. A message is therefore in exactly one place: queued (above the input field,
+// removable) or delivered. A delivered entry leaves the queue and shows as a greyed user bubble at the end of the
+// history (`deliveredBubbles`) until the stored user message replaces it at its place between the steps. After a page
+// reload the gateway lists them in `queue_delivered` of GET /chats/{id}, and they show the same way. Notes of the
+// user to a subagent (issue #82) are no user message: they stay in the queue as information until the main agent
+// has read them.
 // Pure state logic, used by useChatStream and QueueList.
 
 import { noteLabel, textOf } from './transcript';
-import type { Chat, HoldReason, QueueDelivery, QueueEntry, QueueEvent, StoredMessage } from './types';
+import type { Chat, ChatDetail, HoldReason, QueueDelivery, QueueEntry, QueueEvent, StoredMessage } from './types';
 import { isPageContext, type PageContext } from './pageContext';
 
 /** Sent while the agent works, the gateway's response is still pending (optimistic). */
@@ -25,6 +28,8 @@ export type QueueState = {
     removing: string[];
     /** Handed to pi (SSE "delivered"), but the user message is not in the transcript yet. */
     delivered: Delivered[];
+    /** Seqs of stored user messages that settled a delivery; the same list is applied again after every reload. */
+    settledSeqs?: number[];
 };
 
 /** One delivery: the entries handed to pi together as one user message. */
@@ -159,7 +164,7 @@ function carries(message: string, d: Delivered): boolean {
 export function settleDelivered(state: QueueState, messages: StoredMessage[]): QueueState {
     if (state.delivered.length === 0) return state;
     const users = (Array.isArray(messages) ? messages : []).filter((m) => m.role === 'user');
-    const used = new Set<number>();
+    const used = new Set<number>(state.settledSeqs ?? []);
     const delivered = state.delivered.filter((d) => {
         // the user message of a turn started from the queue carries trigger queue (wake: notes only); pi may
         // also change the text, so either sign settles the delivery
@@ -173,7 +178,9 @@ export function settleDelivered(state: QueueState, messages: StoredMessage[]): Q
         used.add(hit.seq);
         return false;
     });
-    return delivered.length === state.delivered.length ? state : { ...state, delivered };
+    return delivered.length === state.delivered.length
+        ? state
+        : { ...state, delivered, settledSeqs: [...used].filter((q) => q > 0) };
 }
 
 /** Highest seq of the stored messages (0 without any). */
@@ -183,10 +190,10 @@ export function lastSeq(messages: StoredMessage[]): number {
 
 /**
  * State of a row: `sending` not yet confirmed, `removing` removal in flight, `held` waits for the next message
- * or "Send now", `waiting` goes to the agent after its current step, `delivered` handed to the agent, which
- * reads it after its current step (cannot be removed any more).
+ * or "Send now", `waiting` goes to the agent after its current step. There is no state for "delivered": such an
+ * entry is no queue row any more (see `deliveredBubbles`).
  */
-export type QueueRowState = 'sending' | 'removing' | 'held' | 'waiting' | 'delivered';
+export type QueueRowState = 'sending' | 'removing' | 'held' | 'waiting';
 
 export type QueueRow = {
     key: string;
@@ -238,6 +245,34 @@ export function isHeld(chat: Pick<Chat, 'queue_held' | 'running'> | undefined): 
     return !!chat?.queue_held && !chat.running;
 }
 
+const isSubagentNote = (e: QueueEntry) => e.kind === 'system' && e.note === 'subagent_user';
+
+/** A delivered message as the greyed user bubble that stands in for the stored message until pi has read it. */
+export type DeliveredBubble = { key: string; text: string; attachments: string[] };
+
+/**
+ * Deliveries that left the queue and wait for the stored user message: one bubble each, with the user's texts of
+ * the entries (the whole instruction when the entries are unknown). Deliveries of notes alone have no bubble.
+ */
+export function deliveredBubbles(state: QueueState): DeliveredBubble[] {
+    return state.delivered.flatMap((d): DeliveredBubble[] => {
+        if (d.entries.length === 0)
+            return d.text.trim() ? [{ key: `delivered-${d.ids[0]}`, text: d.text, attachments: [] }] : [];
+        const users = d.entries.filter((e) => e.kind !== 'system');
+        if (users.length === 0) return [];
+        return [
+            {
+                key: `delivered-${d.ids[0]}`,
+                text: users
+                    .map((e) => e.text)
+                    .filter((t) => t.trim())
+                    .join('\n\n'),
+                attachments: users.flatMap((e) => (Array.isArray(e.attachments) ? e.attachments : [])),
+            },
+        ];
+    });
+}
+
 /** Gateway entries in order, followed by the not yet confirmed ones. */
 export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'running'> | undefined): QueueRow[] {
     const held = isHeld(chat);
@@ -246,7 +281,7 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
         const subagent = system && e.note === 'subagent_user' ? subagentNote(e) : undefined;
         return {
             key: e.id,
-            id: rowState === 'delivered' ? undefined : e.id,
+            id: e.id,
             text: e.text,
             label: subagent
                 ? subagentNoteLine(subagent)
@@ -264,10 +299,9 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
         };
     };
     return [
-        ...state.delivered.flatMap((d): QueueRow[] =>
-            d.entries.length > 0
-                ? d.entries.map((e) => row(e, 'delivered'))
-                : [{ key: `delivered-${d.ids[0]}`, text: d.text, attachments: [], system: false, state: 'delivered' }],
+        // a note to a subagent stays as information until the main agent has read it; it cannot be removed
+        ...state.delivered.flatMap((d) =>
+            d.entries.filter(isSubagentNote).map((e): QueueRow => ({ ...row(e, 'waiting'), id: undefined })),
         ),
         ...state.entries.map((e) => row(e, state.removing.includes(e.id) ? 'removing' : held ? 'held' : 'waiting')),
         ...state.local.map(
@@ -294,6 +328,47 @@ export function expectQueued(chat: Pick<Chat, 'running' | 'resuming' | 'starting
     return !!chat?.running;
 }
 
+/**
+ * May the gateway have taken the message although the request failed? A network failure (no status), a gateway or
+ * timeout error: the response was lost, the message may have arrived. A 4xx answer is a refusal.
+ */
+export function mayHaveArrived(status: number | undefined): boolean {
+    return status === undefined || status === 408 || status >= 500;
+}
+
+/** What the UI knew of the queue and the history when it sent the message. */
+export type SendMark = { afterSeq: number; queueIds: string[] };
+
+/** Ids of every entry the queue knows (open and delivered), for `SendMark`. */
+export const knownQueueIds = (state: QueueState): string[] => [
+    ...state.entries.map((e) => e.id),
+    ...state.delivered.flatMap((d) => d.ids),
+];
+
+/**
+ * Did the gateway take a message whose request failed? Then the chat holds it: a user message stored after the
+ * send, or an entry in the queue (open or delivered) that was not there before. Judged by the text; an empty
+ * text (attachments only) cannot be recognised and counts as not taken.
+ */
+export function sendArrived(
+    detail: Pick<ChatDetail, 'messages' | 'queue' | 'queue_delivered'>,
+    text: string,
+    mark: SendMark,
+): boolean {
+    const want = squash(text);
+    if (!want) return false;
+    const known = new Set(mark.queueIds);
+    const stored = (Array.isArray(detail.messages) ? detail.messages : []).some(
+        (m) => m.role === 'user' && m.seq > mark.afterSeq && squash(textOf(m.message?.content)).includes(want),
+    );
+    if (stored) return true;
+    const entries = [
+        ...entriesOf(detail.queue),
+        ...(Array.isArray(detail.queue_delivered) ? detail.queue_delivered : []).flatMap((d) => entriesOf(d.entries)),
+    ];
+    return entries.some((e) => e.kind !== 'system' && !known.has(e.id) && squash(e.text) === want);
+}
+
 /** Single-line preview of a queued text. */
 export function queuePreview(text: string, max = 140): string {
     const one = text.split(/\s+/).filter(Boolean).join(' ');
@@ -314,12 +389,8 @@ export function holdReasonText(reason: HoldReason | undefined): string | undefin
     }
 }
 
-/** Status line of the queue header; onlyDelivered: every row has been handed to the agent already. */
-export function queueStatusText(
-    chat: Pick<Chat, 'queue_held' | 'running' | 'hold_reason'> | undefined,
-    onlyDelivered = false,
-): string {
-    if (onlyDelivered) return 'waiting for the agent, will be read after the current step';
+/** Status line of the queue header. */
+export function queueStatusText(chat: Pick<Chat, 'queue_held' | 'running' | 'hold_reason'> | undefined): string {
     if (isHeld(chat)) {
         const why = holdReasonText(chat?.hold_reason);
         return `${why ? `${why}, ` : ''}goes along with your next message`;

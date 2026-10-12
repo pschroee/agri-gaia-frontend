@@ -5,15 +5,19 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    deliveredBubbles,
     emptyQueue,
     expectQueued,
     holdReasonText,
     isHeld,
+    knownQueueIds,
+    mayHaveArrived,
     queuePreview,
     queueReducer,
     queueRows,
     queueStatusText,
     removeErrorText,
+    sendArrived,
     settleDelivered,
     subagentNote,
     subagentNoteLine,
@@ -222,23 +226,24 @@ describe('delivered entries (steered in, not yet read by the agent)', () => {
         lastSeq: 7,
     });
 
-    it('keeps a delivered entry visible as "delivered" without a remove action', () => {
+    it('takes a delivered entry out of the queue and shows it as a bubble in the history', () => {
         expect(delivered.entries).toEqual([]);
         expect(delivered.delivered).toHaveLength(1);
         expect(delivered.delivered[0].afterSeq).toBe(7);
-        const rows = queueRows(delivered, running);
-        expect(rows).toHaveLength(1);
-        expect(rows[0]).toMatchObject({ key: 'q1', state: 'delivered', text: 'Also check the night images.' });
-        expect(rows[0].id).toBeUndefined();
+        expect(queueRows(delivered, running)).toEqual([]);
+        expect(deliveredBubbles(delivered)).toEqual([
+            { key: 'delivered-q1', text: 'Also check the night images.', attachments: [] },
+        ]);
     });
 
-    it('lists delivered entries before the open ones', () => {
+    it('lists only the open entries in the queue (header counts them alone)', () => {
         const s = queueReducer(delivered, {
             type: 'event',
             event: { entries: [entry('q2', 'Then train.')], change: 'queued', ids: ['q2'] },
             lastSeq: 7,
         });
-        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q1:delivered', 'q2:waiting']);
+        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q2:waiting']);
+        expect(deliveredBubbles(s).map((b) => b.key)).toEqual(['delivered-q1']);
     });
 
     it('falls back to the delivered text when the entries were not known', () => {
@@ -247,9 +252,8 @@ describe('delivered entries (steered in, not yet read by the agent)', () => {
             event: { entries: [], change: 'delivered', ids: ['q9'], text: 'From another tab.' },
             lastSeq: 3,
         });
-        expect(queueRows(s, running)).toEqual([
-            { key: 'delivered-q9', text: 'From another tab.', attachments: [], system: false, state: 'delivered' },
-        ]);
+        expect(queueRows(s, running)).toEqual([]);
+        expect(deliveredBubbles(s)).toEqual([{ key: 'delivered-q9', text: 'From another tab.', attachments: [] }]);
     });
 
     it('ignores a second delivered event for the same ids', () => {
@@ -278,6 +282,7 @@ describe('delivered entries (steered in, not yet read by the agent)', () => {
         });
         expect(s.delivered).toEqual([]);
         expect(queueRows(s, running)).toEqual([]);
+        expect(deliveredBubbles(s)).toEqual([]);
     });
 
     it('disappears on a later user message of a queue turn even if pi changed the text', () => {
@@ -320,8 +325,20 @@ describe('delivered entries (steered in, not yet read by the agent)', () => {
         expect(s.delivered).toEqual([]);
     });
 
-    it('says the agent reads it after the current step', () => {
-        expect(queueStatusText(running, true)).toBe('waiting for the agent, will be read after the current step');
+    it('joins the user texts and attachments of one delivery into one bubble', () => {
+        const a = { ...entry('q1', 'First.'), attachments: ['a.png'] };
+        const b = entry('q2', 'Second.');
+        let s = queueReducer(emptyQueue, {
+            type: 'event',
+            event: { entries: [a, b], change: 'queued', ids: ['q1', 'q2'] },
+            lastSeq: 7,
+        });
+        s = queueReducer(s, { type: 'event', event: { entries: [], change: 'delivered', ids: ['q1', 'q2'] }, lastSeq: 7 });
+        expect(deliveredBubbles(s)).toEqual([{ key: 'delivered-q1', text: 'First.\n\nSecond.', attachments: ['a.png'] }]);
+    });
+
+    it('keeps the header text for the queue only (no "with the agent" state)', () => {
+        expect(queueStatusText(running)).toBe('goes to the agent after its current step');
     });
 });
 
@@ -354,22 +371,19 @@ describe('delivered entries after a page reload (queue_delivered)', () => {
         );
         expect(loaded.delivered).toEqual(live.delivered);
         expect(queueRows(loaded, running)).toEqual(queueRows(live, running));
-        expect(queueRows(loaded, running)[0]).toMatchObject({ key: 'q1', state: 'delivered' });
-        expect(queueStatusText(running, true)).toBe('waiting for the agent, will be read after the current step');
+        expect(queueRows(loaded, running)).toEqual([]);
+        expect(deliveredBubbles(loaded).map((b) => b.text)).toEqual(['Also check the night images.']);
     });
 
-    it('lists them before open entries and keeps the order of the gateway', () => {
+    it('lists only the open entries; the delivered ones are bubbles in the order of the gateway', () => {
         let s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q3', 'Then train.')] });
         s = queueReducer(s, {
             type: 'delivered_loaded',
             deliveries: [delivery(['q1', 'q2'], ['a', 'b'])],
             lastSeq: 4,
         });
-        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual([
-            'q1:delivered',
-            'q2:delivered',
-            'q3:waiting',
-        ]);
+        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q3:waiting']);
+        expect(deliveredBubbles(s).map((b) => b.text)).toEqual(['a\n\nb']);
     });
 
     it('does not add a delivery the live event already showed', () => {
@@ -386,7 +400,8 @@ describe('delivered entries after a page reload (queue_delivered)', () => {
     it('takes a delivered entry out of an older open list', () => {
         let s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q1', 'x')] });
         s = queueReducer(s, { type: 'delivered_loaded', deliveries: [delivery(['q1'], ['x'])], lastSeq: 2 });
-        expect(queueRows(s, running).map((r) => `${r.key}:${r.state}`)).toEqual(['q1:delivered']);
+        expect(queueRows(s, running)).toEqual([]);
+        expect(deliveredBubbles(s).map((b) => b.key)).toEqual(['delivered-q1']);
     });
 
     it('is settled by the user message stored after the reload, not by older ones', () => {
@@ -501,5 +516,102 @@ describe('notes to the main agent about messages to a subagent (issue #82)', () 
         expect(rows[0].subagent).toBeUndefined();
         expect(rows[0].system).toBe(true);
         expect(rows[0].id).toBe('b1');
+    });
+});
+
+describe('notes to a subagent after delivery (issue #82)', () => {
+    const note = entry('n1', 'You wrote to subagent scout (scout)\nlook at the logs', {
+        kind: 'system',
+        note: 'subagent_user',
+        subagent: { run_id: 'r1', agent: 'scout', text_head: 'look at the logs' },
+    });
+    const delivered = queueReducer(
+        queueReducer(emptyQueue, { type: 'event', event: { entries: [note], change: 'queued', ids: ['n1'] }, lastSeq: 1 }),
+        { type: 'event', event: { entries: [], change: 'delivered', ids: ['n1'] }, lastSeq: 1 },
+    );
+
+    it('stays as an information row, not removable, until the main agent has read it', () => {
+        const rows = queueRows(delivered, running);
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ key: 'n1', state: 'waiting', label: 'You wrote to subagent scout: look at the logs' });
+        expect(rows[0].id).toBeUndefined();
+        expect(deliveredBubbles(delivered)).toEqual([]);
+    });
+
+    it('is gone once the main agent has read it', () => {
+        const s = settleDelivered(delivered, [userMsg(3, 'x', { trigger: 'wake' })]);
+        expect(queueRows(s, running)).toEqual([]);
+    });
+});
+
+describe('a held queue after a stop keeps its rows and "Send now"', () => {
+    it('shows held rows, never bubbles', () => {
+        const s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q1', 'later')] });
+        const idleHeld = { queue_held: true, running: false };
+        expect(queueRows(s, idleHeld).map((r) => r.state)).toEqual(['held']);
+        expect(deliveredBubbles(s)).toEqual([]);
+    });
+});
+
+describe('a send whose response was lost', () => {
+    const mark = { afterSeq: 4, queueIds: ['old'] };
+    const detail = (over: Record<string, unknown>) =>
+        ({ messages: [], queue: [], queue_delivered: [], ...over }) as Parameters<typeof sendArrived>[0];
+
+    it('may have arrived after a network failure, a timeout or a server error, not after a refusal', () => {
+        expect(mayHaveArrived(undefined)).toBe(true);
+        expect(mayHaveArrived(504)).toBe(true);
+        expect(mayHaveArrived(408)).toBe(true);
+        expect(mayHaveArrived(400)).toBe(false);
+        expect(mayHaveArrived(409)).toBe(false);
+        expect(mayHaveArrived(401)).toBe(false);
+    });
+
+    it('arrived when the chat holds a newer user message with the text', () => {
+        expect(sendArrived(detail({ messages: [userMsg(5, 'moinsen  wie geht es?')] }), 'moinsen wie geht es?', mark)).toBe(true);
+    });
+
+    it('did not arrive when only an older user message has the text', () => {
+        expect(sendArrived(detail({ messages: [userMsg(4, 'hello')] }), 'hello', mark)).toBe(false);
+    });
+
+    it('arrived when the queue holds a new entry with the text, open or delivered', () => {
+        expect(sendArrived(detail({ queue: [entry('q7', 'hello')] }), 'hello', mark)).toBe(true);
+        const delivery: QueueDelivery = { ids: ['q8'], entries: [entry('q8', 'hello')], text: 'hello', delivered_at: '' };
+        expect(sendArrived(detail({ queue_delivered: [delivery] }), 'hello', mark)).toBe(true);
+    });
+
+    it('did not arrive when the entry with the text was already there before', () => {
+        expect(sendArrived(detail({ queue: [entry('old', 'hello')] }), 'hello', mark)).toBe(false);
+    });
+
+    it('cannot recognise an empty text (attachments only)', () => {
+        expect(sendArrived(detail({ messages: [userMsg(5, '')] }), '', mark)).toBe(false);
+    });
+
+    it('remembers the open and delivered ids at the time of sending', () => {
+        const s = queueReducer(emptyQueue, { type: 'loaded', entries: [entry('q1', 'a')] });
+        expect(knownQueueIds(s)).toEqual(['q1']);
+    });
+});
+
+describe('settling after repeated reloads', () => {
+    it('does not let one stored message settle a second delivery on the next reload', () => {
+        let s = queueReducer(emptyQueue, {
+            type: 'event',
+            event: { entries: [entry('q1', 'a')], change: 'queued', ids: ['q1'] },
+            lastSeq: 2,
+        });
+        s = queueReducer(s, { type: 'event', event: { entries: [entry('q2', 'b')], change: 'queued', ids: ['q2'] }, lastSeq: 2 });
+        s = queueReducer(s, { type: 'event', event: { entries: [], change: 'delivered', ids: ['q1'], text: 'a' }, lastSeq: 2 });
+        s = queueReducer(s, { type: 'event', event: { entries: [], change: 'delivered', ids: ['q2'], text: 'b' }, lastSeq: 2 });
+        const msgs = [userMsg(3, 'rewritten', { trigger: 'queue' })];
+        s = queueReducer(s, { type: 'messages', messages: msgs });
+        expect(s.delivered.map((d) => d.ids)).toEqual([['q2']]);
+        s = queueReducer(s, { type: 'messages', messages: msgs });
+        s = queueReducer(s, { type: 'messages', messages: msgs });
+        expect(s.delivered.map((d) => d.ids)).toEqual([['q2']]);
+        s = queueReducer(s, { type: 'messages', messages: [...msgs, userMsg(5, 'rewritten again', { trigger: 'queue' })] });
+        expect(s.delivered).toEqual([]);
     });
 });
