@@ -4,7 +4,20 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchPlans, placePlans, planLabel, Plan, PlanStep, stepStatus } from './plan';
+import {
+    agentNote,
+    agentTitle,
+    fetchPlans,
+    placePlans,
+    planLabel,
+    Plan,
+    PlanStep,
+    stepCount,
+    stepMain,
+    stepStatus,
+    stepTechnical,
+    summaryParts,
+} from './plan';
 import type { Step, TranscriptItem } from './transcript';
 
 const step = (over: Partial<PlanStep> = {}): PlanStep => ({
@@ -98,5 +111,60 @@ describe('fetchPlans', () => {
             vi.fn(async () => new Response(null, { status: 404, statusText: 'Not Found' })),
         );
         await expect(fetchPlans('c1')).resolves.toEqual([]);
+    });
+});
+
+describe('gateway summaries (gateway issue #72)', () => {
+    it('shows the gateway summary as the main line, never the agent note', () => {
+        const s = step({
+            method: 'PATCH',
+            path: '/datasets/16',
+            summary: 'Rename dataset 16 "mnist-mini" → "a"\nCurrent values as they will be after step 1 of this plan.',
+            agent_note: 'Pushes image evil/x:v9',
+        });
+        expect(stepMain(s)).toEqual({
+            head: 'Rename dataset 16 "mnist-mini" → "a"',
+            details: ['Current values as they will be after step 1 of this plan.'],
+            fromGateway: true,
+        });
+        expect(agentNote(s)).toBe('Pushes image evil/x:v9');
+        expect(JSON.stringify(stepMain(s))).not.toContain('evil');
+    });
+
+    it('falls back to the call for steps without a summary (older plans), not to the note', () => {
+        const old = step({ method: 'PATCH', path: '/models/3', query: { x: '1' }, description: 'Renames model 3' });
+        expect(stepMain(old)).toEqual({ head: 'PATCH /models/3?x=1', details: [], fromGateway: false });
+        expect(agentNote(old)).toBe('Renames model 3');
+    });
+
+    it('reads the agent title from both gateway versions', () => {
+        expect(agentTitle(plan({ title: undefined, agent_title: ' Rename twice ' }))).toBe('Rename twice');
+        expect(agentTitle(plan({ title: 'Old title' }))).toBe('Old title');
+        expect(agentTitle(plan({ title: undefined }))).toBe('');
+    });
+
+    it('keeps the technical details complete', () => {
+        const s = step({
+            tool: 'build_inference_image',
+            args: { model_id: '7', name: 'demo' },
+            method: 'POST',
+            path: '/container-images/build',
+            body: { repository: 'OWNER/demo' },
+            files: [{ field: 'f', path: '/workspace/a', sha256: 'aa' }],
+        });
+        const t = stepTechnical(s);
+        expect(t).toContain('POST /container-images/build');
+        expect(t).toContain('tool build_inference_image with {');
+        expect(t).toContain('"model_id": "7"');
+        expect(t).toContain('file f: /workspace/a  sha256 aa');
+        expect(t).toContain('body {\n  "repository": "OWNER/demo"\n}');
+        expect(stepTechnical(step({ method: 'PATCH', path: '/x', body: { name: 'a' } }))).toBe('PATCH /x\nbody {\n  "name": "a"\n}');
+    });
+
+    it('splits summaries and counts steps', () => {
+        expect(summaryParts(undefined)).toBeUndefined();
+        expect(summaryParts('A\n\nB')).toEqual({ head: 'A', details: ['B'] });
+        expect(stepCount(1)).toBe('1 step');
+        expect(stepCount(2)).toBe('2 steps');
     });
 });

@@ -172,14 +172,24 @@ export const APPROVAL_KIND_LABEL: Record<Approval['kind'], string> = {
     plan: 'Plan',
 };
 
-/** What an approval is about: the call, the file or the reason for internet access. */
+/**
+ * What an approval is about: the gateway's summary of a call or plan (its first line; gateway issue #72), else the
+ * call, the file or the reason for internet access. A plan is only a reference here ("Plan with 2 steps"): it is
+ * decided on its card in the chat.
+ */
 export function approvalSubject(a: Approval): string {
     if (a.kind === 'internet_access') {
         const reason = a.name?.trim();
         return reason && reason !== '(no reason given)' ? reason : 'No reason given';
     }
-    return a.name;
+    if (a.kind === 'plan') return a.size === 1 ? 'Plan with 1 step' : `Plan with ${a.size} steps`;
+    const head = a.summary?.split('\n')[0]?.trim();
+    return head || a.name;
 }
+
+/** Whether the subject is the gateway's prose (shown in the text font) rather than a technical name (mono). */
+export const subjectIsText = (a: Approval): boolean =>
+    a.kind === 'internet_access' || a.kind === 'plan' || !!a.summary?.trim();
 
 /** Pending approvals, oldest first (the one waiting longest on top). */
 export const sortApprovals = (list: Approval[]) =>

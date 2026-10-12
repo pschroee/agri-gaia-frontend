@@ -11,6 +11,7 @@ import {
     activityText,
     bindingsText,
     approvalSubject,
+    subjectIsText,
     formatAgo,
     gatewayCheck,
     modelRows,
@@ -209,6 +210,16 @@ describe('approvals', () => {
         expect(approvalSubject(ap('a', 'platform_write', 'POST /datasets', 'x'))).toBe('POST /datasets');
         expect(approvalSubject(ap('a', 'internet_access', '(no reason given)', 'x'))).toBe('No reason given');
         expect(approvalSubject(ap('a', 'internet_access', 'pip install torch', 'x'))).toBe('pip install torch');
+    });
+
+    it('takes the gateway summary and shows a plan only as a reference (gateway issue #72)', () => {
+        const call = { ...ap('a', 'platform_write', 'PATCH /datasets/16', 'x'), summary: 'Rename dataset 16 "a" → "b"\nx: y' };
+        expect(approvalSubject(call)).toBe('Rename dataset 16 "a" → "b"');
+        expect(subjectIsText(call)).toBe(true);
+        expect(subjectIsText(ap('a', 'platform_write', 'POST /datasets', 'x'))).toBe(false);
+        const plan = { ...ap('p', 'plan', 'Plan: Rename twice (agent text)', 'x'), size: 2 };
+        expect(approvalSubject(plan)).toBe('Plan with 2 steps');
+        expect(approvalSubject({ ...plan, size: 1 })).toBe('Plan with 1 step');
     });
 
     it('sorts the pending ones oldest first', () => {

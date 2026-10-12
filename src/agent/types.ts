@@ -241,8 +241,8 @@ export type MessageSource = {
 export type Approval = {
     id: string;
     chat_id: string;
-    /** platform_write: name is "METHOD path", preview carries the JSON body. plan: name is "Plan: <title>", size the
-     * number of steps, preview the plan (issue #70). */
+    /** platform_write: name is "METHOD path", preview carries the JSON body. plan: name is "Plan with N steps" (older
+     * gateways: "Plan: <title>"), size the number of steps, preview the plan (issue #70). */
     kind: 'artifact_upload' | 'internet_access' | 'platform_write' | 'plan';
     via: 'cli' | 'mcp';
     name: string;
@@ -257,6 +257,11 @@ export type Approval = {
     tool_call_id?: string;
     /** platform_write: class of the call (gateway issue #63; missing on older entries). */
     effect?: 'read' | 'write' | 'compute' | 'irreversible';
+    /**
+     * platform_write and plan: what will happen, written by the gateway from the call and platform state, never by the
+     * agent (gateway issue #72). First line the action, then one detail per line; missing on older entries.
+     */
+    summary?: string;
 };
 
 /**

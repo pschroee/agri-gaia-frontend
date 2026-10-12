@@ -26,6 +26,7 @@ import {
     APPROVAL_KIND_LABEL,
     bindingsText,
     approvalSubject,
+    subjectIsText,
     Check,
     formatAgo,
     gatewayCheck,
@@ -398,13 +399,24 @@ export default function StatusView({
                                         {APPROVAL_KIND_LABEL[a.kind] ?? a.kind}
                                     </TableCell>
                                     <TableCell
+                                        data-testid="agent-status-approval-subject"
                                         sx={{
-                                            fontFamily: a.kind === 'internet_access' ? undefined : MONO,
+                                            fontFamily: subjectIsText(a) ? undefined : MONO,
                                             fontSize: '13px !important',
                                             overflowWrap: 'anywhere',
                                         }}
                                     >
                                         {approvalSubject(a)}
+                                        {a.kind === 'plan' && (
+                                            <Link
+                                                component="button"
+                                                type="button"
+                                                onClick={() => onOpenChat(a.chat_id)}
+                                                sx={{ fontSize: 13, ml: 1 }}
+                                            >
+                                                Show plan
+                                            </Link>
+                                        )}
                                     </TableCell>
                                     <TableCell sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
                                         {a.via}
