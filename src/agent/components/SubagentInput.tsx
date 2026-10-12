@@ -8,12 +8,9 @@
 import { KeyboardEvent, useEffect, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import InputBase from '@mui/material/InputBase';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 
 import { subagentSendErrorText } from '../subagents';
@@ -22,18 +19,15 @@ import { agentColors } from './tokens';
 
 type Props = {
     state: SubagentInputState;
-    /** Narrow layout (panel): the back button is an icon with a tooltip. */
-    dense: boolean;
     /** Subagents at the same time (gateway config), for the limit message. */
     limit?: number;
     /** Sends the text to the subagent; throws with the gateway's error (shown above the field, text kept). */
     onSend: (text: string) => Promise<void>;
-    onBack: () => void;
     /** Puts text into the field ("Send again" of a failed message); a new nonce each time. */
     prefill?: { text: string; nonce: number };
 };
 
-export default function SubagentInput({ state, dense, limit, onSend, onBack, prefill }: Props) {
+export default function SubagentInput({ state, limit, onSend, prefill }: Props) {
     const [text, setText] = useState('');
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
@@ -66,47 +60,8 @@ export default function SubagentInput({ state, dense, limit, onSend, onBack, pre
             void submit();
         }
     };
-    const back = dense ? (
-        <Tooltip title="Back to chat" disableInteractive>
-            <IconButton
-                onClick={onBack}
-                aria-label="Back to chat"
-                data-testid="agent-subagent-back-button"
-                sx={{
-                    flex: 'none',
-                    width: 36,
-                    height: 36,
-                    color: agentColors.subagent,
-                    border: 1,
-                    borderColor: 'rgba(94, 53, 177, 0.5)',
-                    '&:hover': { borderColor: agentColors.subagent, bgcolor: 'rgba(94, 53, 177, 0.04)' },
-                }}
-            >
-                <ArrowBackIcon sx={{ fontSize: 18 }} />
-            </IconButton>
-        </Tooltip>
-    ) : (
-        <Button
-            variant="outlined"
-            onClick={onBack}
-            data-testid="agent-subagent-back-button"
-            startIcon={<ArrowBackIcon sx={{ fontSize: '18px !important' }} />}
-            sx={{
-                flex: 'none',
-                height: 36,
-                px: '15px',
-                fontSize: 14,
-                fontWeight: 500,
-                letterSpacing: '0.4px',
-                color: agentColors.subagent,
-                borderColor: 'rgba(94, 53, 177, 0.5)',
-                '&:hover': { borderColor: agentColors.subagent, bgcolor: 'rgba(94, 53, 177, 0.04)' },
-            }}
-        >
-            Back to chat
-        </Button>
-    );
-    if (state.mode === 'hidden') return <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>{back}</Box>;
+    // a trashed subagent has no field (its way back is the top-left arrow)
+    if (state.mode === 'hidden') return null;
     return (
         <Box data-testid="agent-subagent-input" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, minWidth: 0 }}>
             {state.note && !locked && (
@@ -167,7 +122,6 @@ export default function SubagentInput({ state, dense, limit, onSend, onBack, pre
                         <ArrowUpwardIcon sx={{ fontSize: 20 }} />
                     </IconButton>
                 </Box>
-                {back}
             </Box>
         </Box>
     );
