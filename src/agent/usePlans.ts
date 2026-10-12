@@ -34,7 +34,6 @@ export function usePlans(chatId: string | undefined, trigger: unknown[]): Plan[]
             cancelled = true;
         };
         // trigger has a fixed length (the caller's list of changing values)
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [chatId, ...trigger]);
 
     useEffect(() => {
