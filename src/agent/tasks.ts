@@ -159,6 +159,9 @@ export const taskButtonLabel = (c: TaskCounts, compact: boolean) =>
 
 export const taskAriaLabel = (c: TaskCounts) => `Show tasks (${c.completed} of ${c.total} done)`;
 
-/** The list opens as popover when the chat area is at least this wide (px), else as bottom sheet. */
+/** The list opens as popover on a viewport at least this wide (px), else as bottom sheet (mobile). */
 export const POPOVER_MIN_WIDTH = 600;
-export const listAsPopover = (width: number) => width >= POPOVER_MIN_WIDTH;
+export const POPOVER_MEDIA_QUERY = `(min-width:${POPOVER_MIN_WIDTH}px)`;
+export const listAsPopover = (viewportWidth: number) => viewportWidth >= POPOVER_MIN_WIDTH;
+/** The button label is compact ("3/7") where the chat area (header) is narrower than this, e.g. in the panel. */
+export const compactButtonLabel = (hostWidth: number) => hostWidth < POPOVER_MIN_WIDTH;
