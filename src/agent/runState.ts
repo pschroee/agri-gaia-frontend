@@ -76,21 +76,24 @@ export type InputControls = {
     buttons: InputButton[];
     /** What the primary action and Enter do with text in the field. */
     enter: 'send' | 'queue';
+    /** Stop as a small text button in the row below the field (only while a turn runs and there is text). */
+    stopInline: boolean;
 };
 
 /**
- * Buttons of the input field (issue #39). Stop lives in the field again, there is no status bar above it:
+ * Buttons of the input field (issues #39, #80). Stop lives in the field, there is no status bar above it:
  * - nothing running: the send arrow;
  * - a turn runs (working or waiting for approval) and the field is empty: the send arrow becomes Stop;
- * - a turn runs and there is text: Stop moves left and the queue arrow takes the last place, Enter queues.
- * The last place is always what fits the field's content, so a click there after typing never stops the agent by
- * mistake (stopping cancels the turn; a queued message can be removed again). `queued`: the gateway queues a message
- * sent now (the chat runs); without it, a running state counts.
+ * - a turn runs and there is text: only the queue arrow stays in the field (one button in the same place, Enter
+ *   queues, no Stop next to it); Stop moves to a small text button below the field (`stopInline`), so a stop never
+ *   sits beside the arrow and stopping does not cost the typed text.
+ * `queued`: the gateway queues a message sent now (the chat runs); without it, a running state counts.
  */
 export function inputControls(state: RunState | undefined, hasText: boolean, queued = isRunning(state)): InputControls {
     const enter = queued ? 'queue' : 'send';
-    if (!isRunning(state)) return { buttons: [enter], enter };
-    return { buttons: hasText ? ['stop', enter] : ['stop'], enter };
+    if (!isRunning(state)) return { buttons: [enter], enter, stopInline: false };
+    if (hasText) return { buttons: [enter], enter, stopInline: true };
+    return { buttons: ['stop'], enter, stopInline: false };
 }
 
 export const RUN_STATE_HINT: Record<RunState, string> = {

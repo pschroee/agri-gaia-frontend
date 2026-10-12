@@ -5,6 +5,7 @@
 import { ClipboardEvent, KeyboardEvent, ReactNode, useEffect, useId, useReducer, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import InputBase from '@mui/material/InputBase';
@@ -86,11 +87,11 @@ type Props = {
 const NO_COMMANDS: Command[] = [];
 
 /**
- * Message field with send (Enter) and a row below (model, thinking level, run state). While a turn runs, the
- * send arrow becomes Stop (issue #39); with text in the field the queue arrow sits next to it and Enter queues: the
- * gateway queues the message and the queue above the field shows it. Escape never stops. The run state ("Working ·
- * 12 s", "Needs approval", "Stopping …") shows small in the row below the field, a failed stop as a short
- * line until the state changes or the user dismisses it.
+ * Message field with send (Enter) and a row below (model, thinking level). While a turn runs, the send arrow
+ * becomes Stop (issue #39). With text in the field only the queue arrow stays there (issue #80) and Enter queues:
+ * the gateway queues the message and the queue above the field shows it. Stop then sits as a small text button in
+ * the row below the field ("agent-stop-inline"), so it never sits next to the arrow. Escape never stops. A failed
+ * stop shows as a short line below the field until the state changes or the user dismisses it.
  */
 export default function ChatInput({
     onSend,
@@ -277,7 +278,7 @@ export default function ChatInput({
                 <IconButton
                     disabled={disabled || busy || !sendable}
                     onClick={() => void send()}
-                    aria-label={queueing ? 'Queue message' : 'Send'}
+                    aria-label={queueing ? 'Queue message (Enter)' : 'Send'}
                     data-testid="agent-send"
                     sx={{
                         ...roundSx,
@@ -438,6 +439,20 @@ export default function ChatInput({
                     {sendButton}
                 </Box>
             </Box>
+            {controls.stopInline && (
+                // issue #80: with text in the field Stop is a small text button here, not beside the queue arrow
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', minWidth: 0 }}>
+                    <Button
+                        size="small"
+                        disabled={stopping}
+                        onClick={() => void stop()}
+                        data-testid="agent-stop-inline"
+                        sx={{ fontSize: 12, color: 'error.main', minWidth: 0, py: 0, textTransform: 'none' }}
+                    >
+                        {stopping ? 'Stopping …' : 'Stop'}
+                    </Button>
+                </Box>
+            )}
             {onCommand && <SlashCommandMenu menu={slash} anchor={anchor} id={listId} />}
             {(error || staged.error) && (
                 <Typography role="alert" sx={{ fontSize: 11.5, color: 'error.main' }}>
