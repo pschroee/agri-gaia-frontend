@@ -509,7 +509,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   with title (workflow label, else the task's first line), state, duration, tool count, agent and short run ID, and
   the tokens recorded at the LLM proxy (`runUsage`, input plus output; `GET …/llm_calls`, matched by the `response_id` of the run's entries, loaded once
   subagents exist). A run opens to its own steps (`runItems`: task, step lists, text answers) and has a button that opens
-  its read-only view (see *Looking into a subagent*). Data: `background`,
+  its view (see *Looking into a subagent*). Data: `background`,
   `subagent_entries`, `subagent_runs` of `GET /chats/{id}`, SSE `background` (a throttled `output` never overwrites an
   end), `subagent`, `subagent_run`, `llm_call`. A run's state comes from pi-subagents when known, otherwise it is
   estimated from its entries (`runStatus`, `src/agent/subagents.ts`). **Notes:** the gateway's note that a task ended
@@ -517,13 +517,20 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (`BackgroundNoteLine`), opening to command, last lines and log path; queued notes are labelled from their header line.
   Render check: answer `tools/running`, `background`, `llm_calls` and the chat's `background`/`subagent_*` fields, drive
   SSE `pi` `tool_execution_start|end`, `background`, `subagent`, `subagent_run`.
-- **Looking into a subagent (issue #48):** every subagent run of the open chat can be opened read-only, with the
+- **Looking into a subagent (issue #48):** every subagent run of the open chat can be opened, with the
   transcript components of the chat (`runTranscript` in `src/agent/subagents.ts`: each task as a user bubble, text
   answers and tool calls as agent blocks with step lists, result done/failed/running/not finished), live through the
-  SSE events `subagent` and `subagent_run`. No input and no stop per subagent; the chat's `ChatInput` stays mounted but
-  hidden, so a draft and staged files survive. **Frame (issue #54):** on top of its transcript a state chip ("done",
-  "running" …) and "Subagent log · read-only"; in place of the input "Subagents can't receive messages." with an
-  outlined violet "Back to chat" (`SubagentReadOnlyBar`). Selection lives in `AgentContext` (`selectedSubagent`,
+  SSE events `subagent` and `subagent_run`. No stop per subagent; the chat's `ChatInput` stays mounted but hidden, so a
+  draft and staged files survive. **Writing to a subagent (issue #81, no longer read-only):** in place of the chat input
+  sits `SubagentInput` (no attachments, slash menu, model choice or page context; "Back to chat" beside it) that sends
+  `POST …/subagent-runs/{run}/messages` (`#` as `%23`). `subagentInputState` decides placeholder and lock: running ->
+  "Message the subagent …", finished -> "Ask a follow-up – continues with its history", foreground run (no `pi_run_id`)
+  -> locked with a note, trash -> no field, open message -> send blocked. Own messages come from the gateway's
+  `subagent_messages` (SSE `subagent_message`), shown as "You" bubbles with "Sending / Sent / Delivered / Not
+  delivered" (`user_echo` entries of the session are hidden, never shown as the user's); a continuation run
+  (`continues_run_id`) is merged into one history with the run it continues and is no sub-entry of its own, with a
+  divider "Continued in a new run" (`restart`: "its earlier session was no longer available"). **Frame (issue #54):** on top of its transcript a state chip ("done",
+  "running" …) and "Subagent log"; the input is `SubagentInput` (see above). Selection lives in `AgentContext` (`selectedSubagent`,
   `selectSubagent`, valid only for the selected chat; `selectChat`, also of the same chat, and "New chat" leave it; a
   run the loaded chat does not know falls back to the chat). The open `ChatView` publishes its runs
   (`openChatSubagents`), which `useSubagentNav` turns into sub-entries (robot, title, state). **Titles cost nothing:**
