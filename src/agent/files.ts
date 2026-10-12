@@ -61,7 +61,7 @@ export const READABLE_FORMATS = 'Word, Excel, PowerPoint, PDF, CSV, text, HTML, 
 /** Tooltip of the paperclip: the readable formats, the size limit when known and where the files land. */
 export function attachHint(maxMb: number | undefined): string {
     const limit = maxMb && maxMb > 0 ? `, at most ${maxMb} MB each` : '';
-    return `Attach files (${READABLE_FORMATS}${limit}). They are placed under /workspace/inputs/.`;
+    return `Attach files (${READABLE_FORMATS}${limit}). They are sent to the agent with your message.`;
 }
 
 /**

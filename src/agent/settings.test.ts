@@ -57,7 +57,7 @@ describe('compactNowState', () => {
         expect(compactNowState({ ...idle, resuming: true }, undefined).disabled).toBe(true);
         expect(compactNowState({ ...idle, resuming: true, starting: true }, undefined)).toEqual({
             disabled: true,
-            hint: 'The sandbox of the chat is being prepared; nothing to compact yet.',
+            hint: 'The chat is being prepared; nothing to compact yet.',
         });
         expect(compactNowState(idle, { reason: 'manual', since: 1 })).toEqual({
             disabled: true,

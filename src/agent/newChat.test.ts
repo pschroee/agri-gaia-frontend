@@ -26,7 +26,7 @@ describe('newChatRequest', () => {
 
 describe('newChatErrorText', () => {
     it('explains an empty pool', () => {
-        expect(newChatErrorText(503, 'No free slot in the pool')).toMatch(/No free agent sandbox/);
+        expect(newChatErrorText(503, 'No free slot in the pool')).toMatch(/The agent is busy right now/);
     });
 
     it('asks to sign in again on 401', () => {

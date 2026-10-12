@@ -150,7 +150,7 @@ export function noteLabel(src: MessageSource, summary?: string): string | undefi
         case 'language':
             return `preferred browser language passed to the agent${refs[0] ? `: ${refs[0]}` : ''}`;
         case 'sandbox':
-            return `background tasks ended with the previous sandbox${refs.length ? `: ${refs.join(', ')}` : ''}`;
+            return `background tasks ended when the chat was paused${refs.length ? `: ${refs.join(', ')}` : ''}`;
         case 'background':
             if (summary && /^Background task /.test(summary.trim()))
                 return `background task ${compactNoteSummary(summary)}`;

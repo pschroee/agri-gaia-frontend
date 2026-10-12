@@ -78,7 +78,7 @@ export function pickerState(
     const levels = allowedLevels(chat.model, chat);
     const locked = chat.running || !!chat.resuming;
     const lockHint = chat.starting
-        ? 'Can be changed once the sandbox of the chat is ready.'
+        ? 'Can be changed once the chat is ready.'
         : chat.resuming
           ? 'Can be changed once the chat has resumed.'
           : RUNNING_HINT;

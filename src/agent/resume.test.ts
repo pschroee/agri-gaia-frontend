@@ -79,7 +79,7 @@ describe('applyResumeStep', () => {
         const [r] = run([step('workspace', 'warning', { detail: 'restoring failed' })]);
         expect(r.steps[3]).toMatchObject({ status: 'warning', detail: 'restoring failed' });
         expect(resumeSummary({ ...r, state: 'done', totalMs: 1500 }, formatMs)).toBe(
-            'Resumed in a fresh sandbox · 1.5 s · with warning',
+            'Chat resumed · 1.5 s · with warning',
         );
     });
 
@@ -103,10 +103,10 @@ describe('start of a new chat', () => {
         const steps = [step('acquire', 'running', { start: true }), step('acquire', 'done', { start: true })];
         const [r] = run(steps, 0);
         expect(r.start).toBe(true);
-        expect(resumeSummary(r, formatMs)).toBe('Starting a sandbox for the chat …');
-        expect(resumeSummary({ ...r, state: 'done', totalMs: 16200 }, formatMs)).toBe('Started in a fresh sandbox · 16.2 s');
+        expect(resumeSummary(r, formatMs)).toBe('Starting the chat …');
+        expect(resumeSummary({ ...r, state: 'done', totalMs: 16200 }, formatMs)).toBe('Chat started · 16.2 s');
         expect(resumeSummary({ ...r, state: 'failed', error: 'No free slot in the pool' }, formatMs)).toBe(
-            'Starting the sandbox failed: No free slot in the pool',
+            'Starting the chat failed: No free slot in the pool',
         );
     });
 
@@ -135,9 +135,9 @@ describe('texts', () => {
         const [r] = run([step('acquire', 'running')]);
         expect(resumeSummary(r, formatMs)).toBe('Resuming the chat …');
         expect(resumeSummary({ ...r, state: 'done', totalMs: 2400 }, formatMs)).toBe(
-            'Resumed in a fresh sandbox · 2.4 s',
+            'Chat resumed · 2.4 s',
         );
-        expect(resumeSummary({ ...r, state: 'done' }, formatMs)).toBe('Resumed in a fresh sandbox');
+        expect(resumeSummary({ ...r, state: 'done' }, formatMs)).toBe('Chat resumed');
         expect(resumeSummary({ ...r, state: 'failed', error: 'timeout' }, formatMs)).toBe('Resuming failed: timeout');
     });
 

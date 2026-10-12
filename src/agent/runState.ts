@@ -96,8 +96,8 @@ export function inputControls(state: RunState | undefined, hasText: boolean, que
 export const RUN_STATE_HINT: Record<RunState, string> = {
     working: 'The agent works on your request. Messages you send now are queued.',
     waiting: 'The agent waits for your decision on an approval.',
-    starting: 'No sandbox was free; one is being started for this chat. You can type already: your message goes to the agent once the sandbox is ready.',
-    resuming: 'The chat is being loaded into a sandbox. You can type already: your message goes to the agent once it is ready.',
+    starting: 'The agent is busy; your chat is being prepared. You can type already: your message goes to the agent once it is ready.',
+    resuming: 'The chat is being loaded. You can type already: your message goes to the agent once it is ready.',
     idle: 'Ready for your next message.',
 };
 

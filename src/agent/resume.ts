@@ -104,10 +104,10 @@ export function closeResumes(list: ResumeView[]): ResumeView[] {
 export const resumeRunning = (list: ResumeView[]) => list.some((r) => r.state === 'running');
 
 export const RESUME_STEP_LABEL: Record<StepPhase, string> = {
-    acquire: 'Take a sandbox from the pool',
+    acquire: 'Prepare the chat environment',
     session: 'Restore the session',
     settings: 'Apply settings',
-    workspace: 'Restore the workspace',
+    workspace: "Restore the chat's files",
     inputs: 'Provide the inputs',
 };
 
@@ -143,14 +143,14 @@ export function stepDetail(s: ResumeStepView): string | undefined {
 
 /** Head line of the block; once finished, the line that stays in the transcript. */
 export function resumeSummary(r: ResumeView, formatMs: (ms: number | undefined) => string | undefined): string {
-    if (r.state === 'running') return r.start ? 'Starting a sandbox for the chat …' : 'Resuming the chat …';
+    if (r.state === 'running') return r.start ? 'Starting the chat …' : 'Resuming the chat …';
     if (r.state === 'failed') {
         const why = r.error ? `: ${r.error}` : '';
-        return r.start ? `Starting the sandbox failed${why}` : `Resuming failed${why}`;
+        return r.start ? `Starting the chat failed${why}` : `Resuming failed${why}`;
     }
     const total = formatMs(r.totalMs);
     const warn = r.steps.some((s) => s.status === 'warning') ? ' · with warning' : '';
-    return `${r.start ? 'Started' : 'Resumed'} in a fresh sandbox${total ? ` · ${total}` : ''}${warn}`;
+    return `${r.start ? 'Chat started' : 'Chat resumed'}${total ? ` · ${total}` : ''}${warn}`;
 }
 
 /**

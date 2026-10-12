@@ -56,7 +56,7 @@ const STATE_LABEL: Record<BackgroundState, string> = {
     failed: 'failed',
     timeout: 'time limit',
     stopped: 'stopped',
-    lost: 'lost with the sandbox',
+    lost: 'stopped when the chat was paused',
     suspended: 'ended after inactivity',
     closed: 'ended with the chat',
 };
