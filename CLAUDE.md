@@ -66,6 +66,20 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `callEffect`, `approvalEffect`). Only entries from before the gateway sent it fall back to `effectOf(method, path)`
   (`format.ts`). An irreversible approval is a red card with "This cannot be undone", its body in full and no height
   limit; `data-effect` sits on the card and on the activity's effect cell. Rules and tests: `effect.test.ts`.
+- **Plans and approvals in the gateway's words (gateway issues #70, #72):** what an approval says will happen is the
+  gateway's `summary` (first line the action, then one detail per line), never the agent's text. A plan is decided in
+  **one** place: its card in the transcript (`PlanCard`, panel, `/ai-agent`, subagent view), with one "Approve plan".
+  Each step shows the gateway's summary as its main line, the effect chip, the summary's details, the agent's note
+  apart and labelled "Agent's note – not verified" (the title likewise), and the call, tool arguments, body, form and
+  files collapsed under "Technical details" (`stepTechnical`); steps from before #72 show "METHOD path" instead, never
+  the note. The list of pending approvals shows a plan as a reference line ("Plan · 2 steps", "Show plan" scrolls to
+  the card) when the view shows its card; otherwise (a subagent's plan in the main view, plans not loaded) it shows the
+  card itself. Which cards a view shows is tracked by `planRegistry.tsx` (provider in `ChatView`; the card inside the
+  approval list does not register). The Status page lists a plan only as "Plan with N steps" plus "Show plan" (opens the
+  chat). A single platform approval shows the summary on top and method, path and body collapsed (open for irreversible
+  calls). The gateway names the agent's text `agent_title`/`agent_note`; `title`/`description` of older gateways are
+  read too. Logic in `plan.ts`/`status.ts`, unit-tested; render check with plans, approvals and a chat mocked under
+  `/agent/api/**`.
 - Data comes from the gateway API on the same host, `/agent/api/…` (cookie session, path `/agent/`); types and calls
   are a subset of the gateway's `web/src/api`. On 401 a hidden iframe loads `/agent/oidc/login?prompt=none`, which
   reuses the platform's Keycloak session (`return` stays `/agent/`). The visible "Sign in" of `SignInNotice` passes the

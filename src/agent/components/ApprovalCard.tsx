@@ -16,7 +16,10 @@ import { approvalEffect } from '../effect';
 import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
-import { PlanApprovalItem } from './PlanCard';
+import type { Plan } from '../plan';
+import { summaryParts } from '../plan';
+import { useShownPlanCards } from '../planRegistry';
+import PlanCard, { PlanApprovalItem, PlanReference, SummaryDetails, Technical } from './PlanCard';
 import { agentColors, blockSx, MONO } from './tokens';
 
 function describe(a: Approval): { title: string; subject: string; body?: string } {
@@ -177,6 +180,9 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
     // Gateway issue #63: the class comes from the gateway; an irreversible call is shown in red, in full.
     const effect = approvalEffect(approval);
     const irreversible = effect === 'irreversible';
+    // Gateway issue #72: what will happen, in the gateway's words; method, path and body below, collapsed.
+    const summary = summaryParts(approval.summary);
+    const technical = [subject, body].filter(Boolean).join('\n\n');
 
     return (
         <Box
@@ -188,6 +194,7 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                 py: 1.25,
                 borderTop: 1,
                 borderColor: 'divider',
+                minWidth: 0,
                 ...(irreversible ? { bgcolor: agentColors.redTint, boxShadow: `inset 3px 0 0 ${agentColors.red}` } : {}),
             }}
         >
@@ -195,34 +202,50 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{title}</Typography>
                 {effect && <EffectChip effect={effect} />}
             </Box>
-            <Typography sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'anywhere' }}>{subject}</Typography>
+            {summary ? (
+                <>
+                    <Typography
+                        data-testid="agent-approval-summary"
+                        sx={{ fontSize: 13, fontWeight: 500, overflowWrap: 'anywhere' }}
+                    >
+                        {summary.head}
+                    </Typography>
+                    <SummaryDetails details={summary.details} />
+                </>
+            ) : (
+                <Typography sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'anywhere' }}>{subject}</Typography>
+            )}
             {irreversible && (
                 <Typography sx={{ fontSize: 12, color: agentColors.red, mt: 0.5 }}>
                     This cannot be undone. Check every parameter below before you approve.
                 </Typography>
             )}
-            {body && (
-                <Box
-                    component="pre"
-                    sx={{
-                        fontFamily: MONO,
-                        fontSize: 11.5,
-                        lineHeight: 1.55,
-                        bgcolor: '#fafafa',
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 0.5,
-                        p: 1,
-                        mt: 0.75,
-                        mb: 0,
-                        maxHeight: irreversible ? 'none' : 160,
-                        overflow: irreversible ? 'visible' : 'auto',
-                        whiteSpace: 'pre-wrap',
-                        overflowWrap: 'anywhere',
-                    }}
-                >
-                    {body}
-                </Box>
+            {summary ? (
+                <Technical text={technical} open={irreversible} full={irreversible} testId="agent-approval-technical" />
+            ) : (
+                body && (
+                    <Box
+                        component="pre"
+                        sx={{
+                            fontFamily: MONO,
+                            fontSize: 11.5,
+                            lineHeight: 1.55,
+                            bgcolor: '#fafafa',
+                            border: 1,
+                            borderColor: 'divider',
+                            borderRadius: 0.5,
+                            p: 1,
+                            mt: 0.75,
+                            mb: 0,
+                            maxHeight: irreversible ? 'none' : 160,
+                            overflow: irreversible ? 'visible' : 'auto',
+                            whiteSpace: 'pre-wrap',
+                            overflowWrap: 'anywhere',
+                        }}
+                    >
+                        {body}
+                    </Box>
+                )
             )}
             <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
@@ -243,17 +266,46 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
 }
 
 /**
+ * A plan in the approval list (gateway issue #72): a reference line when the view shows its card, else the card itself
+ * (the only place to decide it), else, without plan data, the gateway's summary with the decision.
+ */
+function PlanItem({
+    approval,
+    plan,
+    shown,
+    onDecide,
+}: {
+    approval: Approval;
+    plan?: Plan;
+    shown: boolean;
+    onDecide: (approval: Approval, approve: boolean) => Promise<void>;
+}) {
+    if (plan && shown) return <PlanReference approval={approval} plan={plan} />;
+    if (plan)
+        return (
+            <Box sx={{ px: 1, py: 1, borderTop: 1, borderColor: 'divider', minWidth: 0 }}>
+                <PlanCard plan={plan} approval={approval} onDecide={onDecide} dense register={false} />
+            </Box>
+        );
+    return <PlanApprovalItem approval={approval} onDecide={(approve) => onDecide(approval, approve)} />;
+}
+
+/**
  * Pending approvals of a chat as one card, like the prototype's "Suggestions" block: each request with
  * APPROVE / REJECT, and APPROVE ALL when there is more than one.
  */
 export default function ApprovalCard({
     approvals,
     onDecide,
+    plans,
 }: {
     approvals: Approval[];
     onDecide: (approval: Approval, approve: boolean) => Promise<void>;
+    /** The chat's plans: a plan approval whose card the view shows becomes a reference line (gateway issue #72). */
+    plans?: Plan[];
 }) {
     const [busy, setBusy] = useState(false);
+    const shown = useShownPlanCards();
     if (approvals.length === 0) return null;
 
     // a plan is approved with its own button only: approving all never takes it along (issue #70)
@@ -277,7 +329,13 @@ export default function ApprovalCard({
             </Box>
             {approvals.map((a) =>
                 a.kind === 'plan' ? (
-                    <PlanApprovalItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                    <PlanItem
+                        key={a.id}
+                        approval={a}
+                        plan={plans?.find((p) => p.approval_id === a.id)}
+                        shown={!!plans?.some((p) => p.approval_id === a.id && shown.has(p.id))}
+                        onDecide={onDecide}
+                    />
                 ) : a.kind === 'internet_access' ? (
                     <InternetItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ) : a.kind === 'artifact_upload' ? (
