@@ -208,7 +208,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   to the gateway's page id (`/data` → `datasets`, `/models/7` → model 7, `/edge/3` → edge device 3; none on `/ai-agent`,
   debug pages or open data) and takes the objects from a detail route or from what the page publishes with
   `usePublishPageSelection` (`src/agent/pageSelection.tsx`, a no-op without the agent; one object or a list, the
-  selection changes only when its content does): `DataManagement` publishes all checked datasets, `ModelDetails` and
+  selection changes only when its content does): `DataManagement` and `ModelManagement` publish all checked datasets/models (`checkedSelection`), `ModelDetails` and
   `EdgeDetails` the loaded object with its name. Ids must be canonical integers, names are cleaned of control and
   formatting characters and cut to 200 characters, each id once, at most 50 objects, otherwise the gateway answers 400.
   **The page goes with every message silently; there is no chip for it** (issue #45: the model read "Refers to
