@@ -366,6 +366,8 @@ export type Artifact = {
     created_at: string;
     via: 'cli' | 'mcp' | 'ui';
     tool_call_id?: string;
+    /** How the file can be previewed, decided by the gateway from its bytes (issue #74); absent for older artifacts. */
+    preview?: 'image' | 'pdf' | 'table' | 'text' | 'none';
 };
 
 export type ArtifactKind = 'input' | 'output';

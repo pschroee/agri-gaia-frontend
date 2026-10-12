@@ -434,6 +434,15 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   the window end it at once. A `ChatInput` outside a zone keeps its own drop target (`useFileDrop`). Render check: drop
   with a `DataTransfer` built in the page and `dispatchEvent('dragenter'|'dragleave'|'dragover'|'drop', {dataTransfer,
   relatedTarget})` on any element of `agent-drop-area`.
+- **File preview (issue #74):** a click (or Enter/Space) on a file card in the transcript opens `FilePreviewDialog`
+  (MUI dialog, full screen below 600 px): images, PDF in an iframe, CSV/TSV as a table (`parseDelimited` in
+  `src/agent/csv.ts`, 500 rows), text, JSON (indented) and Markdown as plain text (1 MB at most). The kind is the
+  gateway's `preview` (decided from the bytes), else the extension (`previewOf` in `src/agent/filePreview.ts`). The
+  Download button in the dialog is the plain download address. **Security rule: HTML and SVG are never rendered** (their
+  preview is text, source only), and file content only ever goes into the DOM as text; the preview address is
+  `…&inline=1`, which the gateway serves under nosniff, `no-store` and a sandbox CSP (API.md, *Attachments*). Pure
+  logic is unit-tested (`csv.test.ts`, `filePreview.test.ts`); render check: a mocked `/agent/api/**` with a PNG, a
+  PDF, a CSV, a JSON file and an agent HTML file, screenshots of each kind at 400 px and on `/ai-agent`, Escape closes.
 - **Mermaid diagrams:** ```` ```mermaid ```` blocks in answers render as diagrams (`MermaidDiagram`), as in the
   gateway's own UI (port of its `web/src/lib/mermaid.ts`). mermaid and DOMPurify are loaded only at the first diagram
   (dynamic import of `src/agent/mermaidLoad.ts`, separate chunks); the main bundle grew by about 10 kB for the UI code
