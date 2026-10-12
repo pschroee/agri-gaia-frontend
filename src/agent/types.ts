@@ -241,8 +241,9 @@ export type MessageSource = {
 export type Approval = {
     id: string;
     chat_id: string;
-    /** platform_write: name is "METHOD path", preview carries the JSON body. */
-    kind: 'artifact_upload' | 'internet_access' | 'platform_write';
+    /** platform_write: name is "METHOD path", preview carries the JSON body. plan: name is "Plan: <title>", size the
+     * number of steps, preview the plan (issue #70). */
+    kind: 'artifact_upload' | 'internet_access' | 'platform_write' | 'plan';
     via: 'cli' | 'mcp';
     name: string;
     size: number;

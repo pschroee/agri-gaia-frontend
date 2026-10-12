@@ -264,3 +264,12 @@ describe('startApprovalFeed', () => {
         expect(sources).toHaveLength(1);
     });
 });
+
+describe('plan approvals', () => {
+    it('counts plan approvals', () => {
+        const planApproval: Approval = { ...ap('pl'), kind: 'plan', name: 'Plan: Build image', size: 2 };
+        const s = run({ type: 'snapshot', approvals: [ap('a'), planApproval] });
+        expect(pendingCount(s)).toBe(2);
+        expect(fabBadge(pendingCount(s), false).visible).toBe(true);
+    });
+});
