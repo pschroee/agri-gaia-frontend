@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
     applyTodoArgs,
+    compactButtonLabel,
     listAsPopover,
+    POPOVER_MEDIA_QUERY,
     openBlockers,
     sortedTasks,
     taskAriaLabel,
@@ -155,8 +157,15 @@ describe('counts and order', () => {
         expect(taskButtonLabel(c, true)).toBe('2/4');
         expect(taskAriaLabel(c)).toBe('Show tasks (2 of 4 done)');
     });
-    it('switches to the sheet below 600 px', () => {
+    it('uses the popover on desktop viewports and the sheet below 600 px', () => {
+        expect(listAsPopover(1600)).toBe(true);
         expect(listAsPopover(600)).toBe(true);
         expect(listAsPopover(599)).toBe(false);
+        expect(listAsPopover(390)).toBe(false);
+        expect(POPOVER_MEDIA_QUERY).toBe('(min-width:600px)');
+    });
+    it('keeps the compact label for narrow chat areas independent of the list container', () => {
+        expect(compactButtonLabel(400)).toBe(true);
+        expect(compactButtonLabel(600)).toBe(false);
     });
 });

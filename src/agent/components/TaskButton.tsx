@@ -6,19 +6,20 @@ import { useLayoutEffect, useState } from 'react';
 
 import Badge from '@mui/material/Badge';
 import ButtonBase from '@mui/material/ButtonBase';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import Popover from '@mui/material/Popover';
 import SwipeableDrawer from '@mui/material/SwipeableDrawer';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 
-import { listAsPopover, taskAriaLabel, taskButtonLabel, taskCounts } from '../tasks';
+import { compactButtonLabel, POPOVER_MEDIA_QUERY, taskAriaLabel, taskButtonLabel, taskCounts } from '../tasks';
 import type { Task } from '../tasks';
 import TaskList from './TaskList';
 import { agentColors } from './tokens';
 
 const HOST = '[data-testid="agent-chat-header"], [data-testid="agent-panel-header"]';
 
-/** Width of the chat header the button sits in (= the chat area); 0 until measured. */
+/** Width of the chat header the button sits in (= the chat area); 0 until measured (label only). */
 function useHostWidth(el: HTMLElement | null): { width: number; panel: boolean } {
     const [state, setState] = useState({ width: 0, panel: false });
     useLayoutEffect(() => {
@@ -41,18 +42,20 @@ function useHostWidth(el: HTMLElement | null): { width: number; panel: boolean }
 /**
  * The agent's task list as a button in the chat header, left of the context ring (issue #88): "3/7 tasks" (compact
  * "3/7" where the chat area is narrow), a pulsing dot while a task is in progress, a green check when all are done.
- * Hidden without tasks. A click opens the read-only list: popover when the chat area is at least 600 px wide, else a
- * bottom sheet.
+ * Hidden without tasks. A click opens the read-only list: popover on viewports of at least 600 px (also in the
+ * context panel), else a bottom sheet.
  */
 export default function TaskButton({ tasks }: { tasks: Task[] | undefined }) {
     // state, not a ref object: the button only exists once the chat has tasks, and the measuring starts then
     const [btn, setBtn] = useState<HTMLButtonElement | null>(null);
     const [open, setOpen] = useState(false);
     const { width, panel } = useHostWidth(btn);
+    // the container follows the viewport (popover on desktop, also in the panel; sheet on mobile) ...
+    const popover = useMediaQuery(POPOVER_MEDIA_QUERY);
     const counts = taskCounts(tasks ?? []);
     if (counts.total === 0) return null;
-    const popover = listAsPopover(width);
-    const compact = !popover;
+    // ... while the label follows the width of the chat area, as before
+    const compact = compactButtonLabel(width);
     const all = counts.completed === counts.total;
     const running = counts.inProgress > 0 && !all;
     const close = () => setOpen(false);
@@ -124,7 +127,7 @@ export default function TaskButton({ tasks }: { tasks: Task[] | undefined }) {
                     transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                     slotProps={{ paper: { sx: { width: 360, maxWidth: 'calc(100vw - 24px)', mt: 0.5 } } }}
                 >
-                    <TaskList tasks={tasks ?? []} onClose={close} />
+                    <TaskList tasks={tasks ?? []} onClose={close} maxListHeight="min(440px, calc(100vh - 150px))" />
                 </Popover>
             ) : (
                 <SwipeableDrawer
