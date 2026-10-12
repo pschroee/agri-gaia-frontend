@@ -45,7 +45,7 @@ function AnswerImage({ alt, src, ctx }: { alt: string; src: string; ctx?: ImageC
             return (
                 <ImageNote
                     text={`Image not loaded${alt ? `: ${alt}` : ''} · ${s.src}`}
-                    title="Only images from the chat's sandbox are shown; other addresses are never loaded."
+                    title="Only images from this chat are shown; other addresses are never loaded."
                 />
             );
     }

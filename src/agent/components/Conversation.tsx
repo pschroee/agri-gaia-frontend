@@ -510,7 +510,7 @@ export default function Conversation({
                     sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', fontSize: 12.5 }}
                 >
                     <CircularProgress size={14} />
-                    Starting a sandbox for this chat … You can type already.
+                    Preparing this chat … You can type already.
                 </Box>
             )}
             {empty && <EmptyChat />}
@@ -552,7 +552,7 @@ export default function Conversation({
                     dense={dense}
                     pending={
                         chat?.starting || resumes.some((r) => r.start && r.state === 'running')
-                            ? 'Goes to the agent once the sandbox is ready'
+                            ? 'Goes to the agent once the chat is ready'
                             : resuming
                             ? 'Goes to the agent once the chat has resumed'
                             : 'Sending …'

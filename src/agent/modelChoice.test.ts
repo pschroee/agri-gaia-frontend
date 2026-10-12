@@ -63,7 +63,7 @@ describe('pickerState', () => {
         const s = pickerState(chat({ resuming: true, starting: true }));
         expect(s.modelDisabled).toBe(true);
         expect(s.effortDisabled).toBe(true);
-        expect(s.modelHint).toBe('Can be changed once the sandbox of the chat is ready.');
+        expect(s.modelHint).toBe('Can be changed once the chat is ready.');
     });
 
     it('locks both while the agent works, with a tooltip', () => {

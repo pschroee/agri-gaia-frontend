@@ -182,8 +182,8 @@ export default function ResumeBlock({ resume, onRetry }: { resume: ResumeView; o
             {!failed && (
                 <Typography sx={{ fontSize: 11.5, color: 'text.secondary', mt: 0.25 }}>
                     {resume.start
-                        ? 'No sandbox was free; one is being started for this chat.'
-                        : 'Loading the chat into a sandbox.'}{' '}
+                        ? 'The agent is busy; your chat is being prepared.'
+                        : 'Loading the chat.'}{' '}
                     You can type already: your message goes to the agent once it is ready.
                 </Typography>
             )}

@@ -23,8 +23,8 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** Tooltip of the internet switch: what on and off mean, and when a change takes effect. */
 export function internetHint(chat: Pick<Chat, 'internet' | 'state'>): string {
     const base = chat.internet
-        ? 'Internet access on: the sandbox can reach the web. The agent can switch it off again itself, without approval. The language model and the gateway are always reachable.'
-        : 'Internet access off: the sandbox reaches only the language model and the gateway. The agent can ask for internet; you approve it in the chat.';
+        ? 'Internet access on: the agent can reach the web. The agent can switch it off again itself, without approval. The language model and the gateway are always reachable.'
+        : 'Internet access off: the agent reaches only the language model and the gateway. The agent can ask for internet; you approve it in the chat.';
     const when = chat.state === 'dormant' ? ' The change takes effect once the chat has loaded.' : '';
     return `${base}${when}`;
 }
@@ -56,9 +56,9 @@ export function compactNowState(
     if (!chat) return { disabled: true };
     if (compacting || busy) return { disabled: true, hint: 'Compacting the context …' };
     if (chat.running) return { disabled: true, hint: 'Only possible while the agent is not working.' };
-    if (chat.starting) return { disabled: true, hint: 'The sandbox of the chat is being prepared; nothing to compact yet.' };
+    if (chat.starting) return { disabled: true, hint: 'The chat is being prepared; nothing to compact yet.' };
     if (chat.resuming) return { disabled: true, hint: 'The chat is resuming; try again in a moment.' };
-    if (chat.state === 'dormant') return { disabled: false, hint: 'Loads the chat into a sandbox, then compacts.' };
+    if (chat.state === 'dormant') return { disabled: false, hint: 'Loads the chat, then compacts.' };
     return { disabled: false, hint: 'Summarises older parts of the conversation now.' };
 }
 
@@ -83,6 +83,6 @@ export function internetApprovalText(a: Pick<Approval, 'session' | 'name' | 'via
         title: `${approvalWho(a)} asks for internet access`,
         reason: reason && reason !== '(no reason given)' ? reason : undefined,
         explain:
-            'Allowing switches on internet access for the sandbox of this chat; it stays on until the agent switches it off again or you do with the globe in the chat header. Rejecting keeps the sandbox offline.',
+            'Allowing switches on internet access for this chat; it stays on until the agent switches it off again or you do with the globe in the chat header. Rejecting keeps the agent offline.',
     };
 }

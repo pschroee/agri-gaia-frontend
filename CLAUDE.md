@@ -164,6 +164,7 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   (messages plus each tool call). Opening a chat (ChatView is keyed by chat id) and sending jump to the end. The
   decision logic is the pure `stickReducer`, unit-tested; measuring in a render check must wait for a painted frame
   (rAF, then `setTimeout`), because a measurement inside rAF runs before that frame's ResizeObserver.
+- **Plain wording (issue #78):** visible texts avoid infrastructure terms (sandbox, pool, slot, orchestrator, /workspace); see thesis #75/#78. The Status page keeps its technical terms, and so do the internal markers (`SYSTEM_HEADER`, `ATTACHMENTS_HEADER`).
 - **Idle chats are invisible (issue #31):** the gateway still lets an unused chat idle after `AGW_IDLE_TIMEOUT`
   (`state: "dormant"`), but the UI never shows it: `runStateOf` maps it to `idle` (shown nowhere, #35), there is no "resting" label, icon or
   hint and no manual "Let it rest" (suspend) button. Opening or selecting such a chat (panel, `/ai-agent`, also on page

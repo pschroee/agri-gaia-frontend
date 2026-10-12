@@ -20,7 +20,7 @@ export function newChatRequest(language?: string): CreateChatRequest {
 
 /** Message for a failed "New chat" (503: no free sandbox on a gateway without `async`). */
 export function newChatErrorText(status: number | undefined, message: string): string {
-    if (status === 503) return 'No free agent sandbox right now. Please try again in a moment.';
+    if (status === 503) return 'The agent is busy right now. Please try again in a moment.';
     if (status === 401) return 'Your agent session has ended. Sign in again, then start the chat.';
     return `Could not start a new chat: ${message}`;
 }

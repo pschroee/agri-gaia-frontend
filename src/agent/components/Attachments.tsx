@@ -355,7 +355,7 @@ export function StagedAttachments({
                     file={f}
                     kind="input"
                     download={false}
-                    where="goes to /workspace/inputs/"
+                    where="sent with your message"
                     onRemove={() => onRemove(f.name)}
                     width={STAGED_CARD_WIDTH}
                 />
@@ -400,7 +400,7 @@ export function MessageAttachments({ chatId, files, known }: { chatId?: string; 
                             file={file}
                             kind="input"
                             download
-                            where={`/workspace/inputs/${name}`}
+                            where="sent with your message"
                             width={CARD_WIDTH}
                             maxWidth="85%"
                             onOpen={chatId ? () => preview.open(file, 'input') : undefined}
