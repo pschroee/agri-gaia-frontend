@@ -21,8 +21,19 @@ import type { CommandNotice } from './commands';
 import { switchFailure } from './modelChoice';
 import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
-import { emptyQueue, expectQueued, lastSeq, queueReducer, queueRows, removeErrorText } from './queue';
-import type { QueueRow } from './queue';
+import {
+    deliveredBubbles,
+    emptyQueue,
+    expectQueued,
+    knownQueueIds,
+    lastSeq,
+    mayHaveArrived,
+    queueReducer,
+    queueRows,
+    removeErrorText,
+    sendArrived,
+} from './queue';
+import type { DeliveredBubble, QueueRow } from './queue';
 import { applyResumeStep, closeResumes, resumeOnOpen } from './resume';
 import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
@@ -66,6 +77,8 @@ export type ChatStream = {
     uploadFiles: (files: File[], onProgress?: (share: number) => void) => Promise<Artifact[]>;
     /** Queued messages (gateway entries, then the ones still being sent). */
     queue: QueueRow[];
+    /** Messages handed to the agent that wait for their stored user message (greyed bubbles at the end of the history). */
+    delivered: DeliveredBubble[];
     /** Last failure of a queue action (removing, sending now); cleared by the next one. */
     queueError?: string;
     /** Text of the answer that is being streamed right now (not yet stored). */
@@ -177,6 +190,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     // the chat and its messages have been loaded once for this view
     const [loaded, setLoaded] = useState(false);
     const [queueState, dispatchQueue] = useReducer(queueReducer, emptyQueue);
+    const queueRef = useRef(queueState);
+    queueRef.current = queueState;
     const [queueError, setQueueError] = useState<string>();
     const [resumes, setResumes] = useState<ResumeView[]>([]);
     const [pending, setPending] = useState<PendingSend>();
@@ -468,6 +483,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         async (text: string, asCommand: boolean, attachments: string[] = [], context?: PageContext) => {
             if (!chatId) return;
             const guessQueued = expectQueued(chatRef.current);
+            const mark = { afterSeq: lastSeq(messagesRef.current), queueIds: knownQueueIds(queueRef.current) };
             const key = `send-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
             const files = attachments.length ? attachments : undefined;
             if (guessQueued) dispatchQueue({ type: 'local_add', item: { key, text, attachments: files, context } });
@@ -489,7 +505,19 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     }
                 }
             } catch (e) {
-                // the input field gets the text back
+                // A lost response (network, gateway timeout) does not mean the message was lost: when the chat holds
+                // it, it is shown there and the input field stays empty; otherwise the field gets the text back.
+                if (mayHaveArrived(e instanceof AgentApiError ? e.status : undefined)) {
+                    try {
+                        if (sendArrived(await agentApi.chat(chatId), text, mark)) {
+                            dropPending();
+                            await load();
+                            return;
+                        }
+                    } catch {
+                        // cannot tell: treat as failed
+                    }
+                }
                 dropPending();
                 throw e;
             } finally {
@@ -497,7 +525,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
             }
             scheduleReload();
         },
-        [chatId, scheduleReload],
+        [chatId, load, scheduleReload],
     );
 
     const send = useCallback(
@@ -610,6 +638,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     );
 
     const queue = useMemo(() => queueRows(queueState, chat), [queueState, chat]);
+    const delivered = useMemo(() => deliveredBubbles(queueState), [queueState]);
     const liveText = useMemo(() => liveTextOf(liveState.message), [liveState.message]);
 
     const abort = useCallback(async () => {
@@ -737,6 +766,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         artifacts,
         uploadFiles,
         queue,
+        delivered,
         queueError,
         liveText,
         live: liveState.message,
