@@ -173,7 +173,7 @@ export function resumeAnchor(items: { kind: string; seq?: number }[], r: Pick<Re
  *   resumes it, so an open tab does not keep a sandbox busy.
  */
 export function resumeOnOpen(opts: {
-    chat: Pick<Chat, 'state' | 'resuming' | 'starting'> | undefined;
+    chat: Pick<Chat, 'state' | 'resuming' | 'starting' | 'trashed_at'> | undefined;
     loaded: boolean;
     streamReady: boolean;
     decided: boolean;
@@ -181,5 +181,7 @@ export function resumeOnOpen(opts: {
     const { chat, loaded, streamReady, decided } = opts;
     if (decided) return 'skip';
     if (!chat || !loaded || !streamReady) return 'wait';
+    // a chat in the trash is read only: it stays asleep until it is restored (issue #76)
+    if (chat.trashed_at) return 'skip';
     return chat.state === 'dormant' && !chat.resuming && !chat.starting ? 'resume' : 'skip';
 }

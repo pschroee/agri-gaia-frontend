@@ -59,12 +59,14 @@ export function SharedChatStreamProvider({ children }: { children: ReactNode }) 
 /**
  * The stream for a chat view: the shared one when the view shows the current chat, otherwise (no provider) its own.
  * Within the provider a view never opens a stream of its own; until the host has published its chat (same commit,
- * before paint), it renders the idle stream.
+ * before paint), it renders the idle stream. `apart`: a view of a chat that is not the current one (the trash, read
+ * only) always opens its own stream and never touches the shared one.
  */
-export function useSharedChatStream(chatId: string): ChatStream {
+export function useSharedChatStream(chatId: string, apart = false): ChatStream {
     const shared = useContext(SharedChatContext);
-    const own = useChatStream(shared ? undefined : chatId);
-    return (shared && streamFor(shared.published, chatId)) || own;
+    const useShared = !!shared && !apart;
+    const own = useChatStream(useShared ? undefined : chatId);
+    return (useShared && streamFor(shared.published, chatId)) || own;
 }
 
 /** Draft of a chat's input, kept across the move between page and panel; without the provider nothing is kept. */

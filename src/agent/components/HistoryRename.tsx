@@ -11,6 +11,7 @@ import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
+import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 
@@ -20,17 +21,20 @@ import { MAX_TITLE } from '../rename';
 export const ENTRY_MENU_CLASS = 'agent-history-menu';
 
 /**
- * "⋯" at the right of a history entry with "Rename". The field opens only after the menu has closed: opened while
- * the menu still traps the focus, it would lose the focus at once, and a blur saves.
+ * "⋯" at the right of a history entry with "Rename" and "Move to trash" (issue #76). The field opens only after the
+ * menu has closed: opened while the menu still traps the focus, it would lose the focus at once, and a blur saves.
  */
 export function HistoryEntryMenu({
     title,
     visible,
     onRename,
+    onTrash,
 }: {
     title: string;
     visible: boolean;
     onRename: () => void;
+    /** Asks for the move (the page decides whether a question comes first). */
+    onTrash: () => void;
 }) {
     const [anchor, setAnchor] = useState<HTMLElement | null>(null);
     const renameAfterClose = useRef(false);
@@ -94,6 +98,19 @@ export function HistoryEntryMenu({
                         <DriveFileRenameOutlineIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>Rename</ListItemText>
+                </MenuItem>
+                <MenuItem
+                    dense
+                    data-testid="agent-history-trash"
+                    onClick={() => {
+                        setAnchor(null);
+                        onTrash();
+                    }}
+                >
+                    <ListItemIcon>
+                        <DeleteOutlineIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Move to trash</ListItemText>
                 </MenuItem>
             </Menu>
         </>

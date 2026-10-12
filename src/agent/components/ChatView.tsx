@@ -42,6 +42,11 @@ type Props = {
     placeholder?: string;
     /** Rendered above the strips, outside the scrolling area (e.g. the chat selector). */
     header?: ReactNode;
+    /**
+     * Read only, for a chat in the trash (issue #76): no input, no queue, no subagent or chat controls, its own stream
+     * (never the shared one of the current chat).
+     */
+    readOnly?: boolean;
 };
 
 /**
@@ -50,22 +55,23 @@ type Props = {
  * transcript while the user is there; after scrolling up, a "Jump to latest" button counts the new entries.
  * While a turn runs, Stop sits in the input field and the run state in the row below it (issue #39).
  */
-export default function ChatView({ chatId, dense = false, placeholder, header }: Props) {
+export default function ChatView({ chatId, dense = false, placeholder, header, readOnly = false }: Props) {
     // the current chat's stream lives above page and panel, so it survives the move between them (issue #50)
-    const stream = useSharedChatStream(chatId);
+    const stream = useSharedChatStream(chatId, readOnly);
     const plans = usePlans(chatId, [stream.approvals, stream.socketCalls.length, !!stream.chat?.running]);
     const draft = useChatDraft(chatId);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, partials, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
     // the open chat's live state goes to the chat list and the panel header
+    // a read-only view leaves the chat lists, the header and the subagent selection alone
     const agent = useAgentOptional();
-    const updateChat = agent?.updateChat;
+    const updateChat = readOnly ? undefined : agent?.updateChat;
     useEffect(() => {
         if (chat && updateChat) updateChat(chat);
     }, [chat, updateChat]);
     // a running compaction shows in the context ring of the header
-    const setCompacting = agent?.setCompacting;
+    const setCompacting = readOnly ? undefined : agent?.setCompacting;
     const compacting = stream.compacting;
     useEffect(() => {
         if (!setCompacting) return;
@@ -90,13 +96,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
         [stream.subagentEntries, stream.subagentRuns],
     );
     const chatRunning = !!chat?.running;
-    const setOpenChatSubagents = agent?.setOpenChatSubagents;
+    const setOpenChatSubagents = readOnly ? undefined : agent?.setOpenChatSubagents;
     useEffect(() => {
         setOpenChatSubagents?.(chatId, { runs, chatRunning });
     }, [chatId, runs, chatRunning, setOpenChatSubagents]);
     useEffect(() => () => setOpenChatSubagents?.(chatId, undefined), [chatId, setOpenChatSubagents]);
-    const selectSubagent = agent?.selectSubagent;
-    const subagentId = agent?.selectedSubagent;
+    const selectSubagent = readOnly ? undefined : agent?.selectSubagent;
+    const subagentId = readOnly ? undefined : agent?.selectedSubagent;
     const subRun = subagentId ? runs.find((r) => r.runId === subagentId) : undefined;
     // a run the loaded chat does not know (gone or another chat's): back to the chat, but only once the chat is loaded
     // (a subagent picked under another chat comes with its chat, before this view has loaded anything; issue #60)
@@ -157,7 +163,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
     );
     const commands = useMemo(() => withLiveOptions(stream.commands, chat), [stream.commands, chat]);
     // just created by "New chat": the input takes the focus (and dropped files)
-    const start = freshChatFor(agent?.freshChat, chatId);
+    const start = readOnly ? undefined : freshChatFor(agent?.freshChat, chatId);
     const takeFreshChat = agent?.takeFreshChat;
     const onStartTaken = useCallback(() => takeFreshChat?.(chatId), [takeFreshChat, chatId]);
 
@@ -262,56 +268,58 @@ export default function ChatView({ chatId, dense = false, placeholder, header }:
                         </Button>
                     )}
                 </Box>
-                <Box
-                    sx={{
-                        flex: 'none',
-                        bgcolor: '#fff',
-                        ...(subRun && subStatus
-                            ? { borderTop: 1, borderColor: 'divider', px: dense ? 2 : 0, py: 1.5 }
-                            : { px: dense ? 1.5 : 0, pt: 1, pb: dense ? 1.5 : 0 }),
-                    }}
-                >
-                    {/* read-only: no input and no stop per subagent; the chat's input stays mounted (hidden), so a draft
-                        and staged files are still there after "Back to chat" */}
-                    {subRun && subStatus && <SubagentReadOnlyBar onBack={backToChat} />}
-                    <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
-                        <QueueList
-                            chat={stream.chat}
-                            rows={stream.queue}
-                            error={stream.queueError}
-                            onRemove={stream.unqueue}
-                            onSendNow={stream.sendQueueNow}
-                        />
-                        <ChatInput
-                            onSend={onSend}
-                            onUpload={stream.uploadFiles}
-                            maxFileMb={agent?.config?.artifact_max_mb}
-                            chatId={chatId}
-                            running={stream.chat?.running}
-                            runState={runState}
-                            onAbort={stream.abort}
-                            placeholder={placeholder}
-                            commands={commands}
-                            onCommand={onCommand}
-                            onCommandsOpen={stream.refreshCommands}
-                            pageContext={pageContext}
-                            start={start}
-                            onStartTaken={onStartTaken}
-                            initialText={draft.initial}
-                            onTextChange={draft.save}
-                                                    toolbar={
-                                <ModelEffortPicker
-                                    chat={stream.chat}
-                                    models={agent?.models ?? []}
-                                    dense={dense}
-                                    onModel={stream.setModel}
-                                    onEffort={stream.setEffort}
-                                    tooLargeRequest={stream.commandTooLarge}
-                                />
-                            }
-                        />
+                {!readOnly && (
+                    <Box
+                        sx={{
+                            flex: 'none',
+                            bgcolor: '#fff',
+                            ...(subRun && subStatus
+                                ? { borderTop: 1, borderColor: 'divider', px: dense ? 2 : 0, py: 1.5 }
+                                : { px: dense ? 1.5 : 0, pt: 1, pb: dense ? 1.5 : 0 }),
+                        }}
+                    >
+                        {/* read-only: no input and no stop per subagent; the chat's input stays mounted (hidden), so a draft
+                            and staged files are still there after "Back to chat" */}
+                        {subRun && subStatus && <SubagentReadOnlyBar onBack={backToChat} />}
+                        <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
+                            <QueueList
+                                chat={stream.chat}
+                                rows={stream.queue}
+                                error={stream.queueError}
+                                onRemove={stream.unqueue}
+                                onSendNow={stream.sendQueueNow}
+                            />
+                            <ChatInput
+                                onSend={onSend}
+                                onUpload={stream.uploadFiles}
+                                maxFileMb={agent?.config?.artifact_max_mb}
+                                chatId={chatId}
+                                running={stream.chat?.running}
+                                runState={runState}
+                                onAbort={stream.abort}
+                                placeholder={placeholder}
+                                commands={commands}
+                                onCommand={onCommand}
+                                onCommandsOpen={stream.refreshCommands}
+                                pageContext={pageContext}
+                                start={start}
+                                onStartTaken={onStartTaken}
+                                initialText={draft.initial}
+                                onTextChange={draft.save}
+                                                        toolbar={
+                                    <ModelEffortPicker
+                                        chat={stream.chat}
+                                        models={agent?.models ?? []}
+                                        dense={dense}
+                                        onModel={stream.setModel}
+                                        onEffort={stream.setEffort}
+                                        tooLargeRequest={stream.commandTooLarge}
+                                    />
+                                }
+                            />
+                        </Box>
                     </Box>
-                </Box>
+                )}
             </Box>
         </PlanCardRegistryProvider>
     );

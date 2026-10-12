@@ -22,6 +22,7 @@ import type {
     SendResult,
     SubagentRunSummary,
     ToolExecution,
+    TrashList,
     Variant,
 } from './types';
 
@@ -73,6 +74,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         }
         throw new AgentApiError(res.status, message, code, details);
     }
+    // 204 No Content (delete) has no body
+    if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
 }
 
@@ -225,6 +228,16 @@ export const agentApi = {
     /** Short list of a chat's subagent runs; reading it does not wake the chat (gateway issue #60). */
     subagentRuns: (id: string) =>
         request<SubagentRunSummary[]>(`chats/${enc(id)}/subagent-runs`).then((l) => (Array.isArray(l) ? l : [])),
+    /** Moves a chat to the trash: stops its work, keeps its history (issue #76). Idempotent. */
+    trashChat: (id: string) => post<Chat>(`chats/${enc(id)}/trash`),
+    /** Takes a chat back out of the trash; it does not wake up. */
+    restoreChat: (id: string) => post<Chat>(`chats/${enc(id)}/restore`),
+    /** Deletes a chat for good; the gateway answers 409 unless it is in the trash. */
+    deleteChat: (id: string) => request<void>(`chats/${enc(id)}`, { method: 'DELETE' }),
+    /** The user's chats in the trash, newest first. */
+    trash: () => request<TrashList>('trash'),
+    /** Deletes every chat of the user in the trash for good. */
+    emptyTrash: () => post<{ deleted: number }>('trash/empty'),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
     /** Platform calls of the user's chats across all chats (query from activityQuery); 404 on older gateways. */
     activity: (query: string) => request<ActivityPage>(`activity${query}`),
