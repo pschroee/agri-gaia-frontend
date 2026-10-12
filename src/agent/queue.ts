@@ -216,11 +216,14 @@ export type SubagentNote = {
 
 /**
  * The user's message in a `subagent_user` note (issue #82): the first line of the entry is the gateway's summary, the
- * rest the user's text. The name is the entry's `run_name`, else the agent named in the summary "(agent)".
+ * rest the user's text. The gateway sends both in `subagent` (`agent`, `text_head`); entries without it (older gateways)
+ * are read from the text, the name from the agent named in the summary "(agent)".
  */
 export function subagentNote(e: QueueEntry): SubagentNote {
+    if (e.subagent && typeof e.subagent.text_head === 'string')
+        return { name: e.subagent.agent?.trim() || undefined, text: queuePreview(e.subagent.text_head) };
     const [summary = '', ...rest] = (e.text ?? '').split('\n');
-    const named = e.run_name?.trim() || /subagent \S+ \(([^)]+)\)/.exec(summary)?.[1]?.trim();
+    const named = /subagent \S+ \(([^)]+)\)/.exec(summary)?.[1]?.trim();
     return { name: named || undefined, text: queuePreview(rest.join(' ')) };
 }
 

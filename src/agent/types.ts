@@ -162,8 +162,8 @@ export type QueueEntry = {
     kind: 'user' | 'system';
     note?: string;
     refs?: string[];
-    /** Note "subagent_user": name of the subagent the user wrote to (issue #82; the agent's name if missing). */
-    run_name?: string;
+    /** Note "subagent_user": readable part (issue #82); missing on entries from older gateways. */
+    subagent?: { run_id: string; agent?: string; text_head: string };
     /** Page context the user sent the message with (user entries; gateway API.md, *Page context*). */
     context?: PageContext;
 };
