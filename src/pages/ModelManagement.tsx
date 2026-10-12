@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -30,6 +31,8 @@ import ModelInferenceButton from '../components/models/ModelInferenceButton';
 import { Speed } from '@mui/icons-material';
 import DownloadIcon from '@mui/icons-material/Download';
 import { downloadBlob } from '../util';
+import { usePublishPageSelection } from '../agent/pageSelection';
+import { checkedSelection } from '../agent/pageContext';
 
 export default function ModelManagement() {
     const keycloak = useKeycloak();
@@ -40,6 +43,8 @@ export default function ModelManagement() {
     const [inferenceDialogOpen, setInferenceDialogOpen] = useState(false);
     const [selected, setSelected] = React.useState<readonly number[]>([]);
     const [connectorAvailable, setConnectorAvailable] = useState<boolean>(false);
+    // the checked models are the agent's page context
+    usePublishPageSelection(checkedSelection('model', models, selected));
 
     const fetchModels = async () => {
         httpGet(keycloak, MODELS_PATH)

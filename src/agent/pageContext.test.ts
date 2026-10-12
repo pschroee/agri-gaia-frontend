@@ -10,6 +10,7 @@ import {
     MAX_CONTEXT_NAME,
     MAX_CONTEXT_OBJECTS,
     canonicalId,
+    checkedSelection,
     cleanName,
     contextKey,
     contextLabel,
@@ -232,5 +233,42 @@ describe('context chip', () => {
         expect(isPageContext({ page: 'datasets', objects: 'x' })).toBe(false);
         expect(isPageContext('datasets')).toBe(false);
         expect(isPageContext(undefined)).toBe(false);
+    });
+});
+
+describe('checkedSelection (issue #77)', () => {
+    const models = [
+        { id: 1, name: 'a' },
+        { id: 2, name: 'b' },
+        { id: 3, name: 'c' },
+    ];
+
+    it('returns nothing when nothing is checked', () => {
+        expect(checkedSelection('model', models, [])).toEqual([]);
+    });
+
+    it('returns the checked models with kind, id and name in list order', () => {
+        expect(checkedSelection('model', models, [3, 1])).toEqual([
+            { kind: 'model', id: 1, name: 'a' },
+            { kind: 'model', id: 3, name: 'c' },
+        ]);
+    });
+
+    it('leaves out checked ids that are not in the list', () => {
+        expect(checkedSelection('model', models, [1, 9])).toEqual([{ kind: 'model', id: 1, name: 'a' }]);
+    });
+
+    it('one checked model gives a chip with its name', () => {
+        const ctx = pageContextOf('/models', checkedSelection('model', models, [2]));
+        expect(contextLabel(ctx!)).toBe('b');
+        expect(inputPlaceholder(ctx)).toBe('Ask about this model …');
+    });
+
+    it('two checked models give "2 models"', () => {
+        const ctx = pageContextOf('/models', checkedSelection('model', models, [1, 2]));
+        expect(contextLabel(ctx!)).toBe('2 models');
+        expect(contextTitle(ctx!)).toContain('a');
+        expect(contextTitle(ctx!)).toContain('b');
+        expect(wireContext(ctx!).objects?.map((o) => o.id)).toEqual(['1', '2']);
     });
 });
