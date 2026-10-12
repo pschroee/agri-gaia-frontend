@@ -464,10 +464,14 @@ describe('notes to the main agent about messages to a subagent (issue #82)', () 
     const note = (text: string, extra: Partial<QueueEntry> = {}) =>
         entry('n1', text, { kind: 'system', note: 'subagent_user', refs: ['run-1'], ...extra });
 
-    it('reads the name from run_name or from the agent in the summary, and the text after the summary', () => {
+    it('reads the note from the gateway field subagent, else the agent in the summary and the text after it', () => {
         const steered = 'The user wrote directly to subagent run-1 (worker); it receives the message after its step.';
-        expect(subagentNote(note(`${steered}\nPlease check the file.`, { run_name: 'Reviewer' }))).toEqual({
-            name: 'Reviewer',
+        const withField = note(`${steered}\nPlease check the file.`, {
+            subagent: { run_id: 'run-1', agent: 'Reviewer', text_head: 'Please check the file.' },
+        });
+        expect(subagentNote(withField)).toEqual({ name: 'Reviewer', text: 'Please check the file.' });
+        expect(subagentNote(note(`${steered}\nPlease check the file.`))).toEqual({
+            name: 'worker',
             text: 'Please check the file.',
         });
         const resumed = 'The user wrote directly to subagent run-1 (worker); it continues in a new run.';
