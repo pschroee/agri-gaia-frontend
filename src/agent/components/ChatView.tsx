@@ -33,6 +33,7 @@ import { buildTranscript, countEntries, liveParts } from '../transcript';
 import { useNow } from '../useNow';
 
 import { useChatDraft, useSharedChatStream } from '../sharedChatStream';
+import { todoTimeline } from '../tasks';
 import { PlanCardRegistryProvider } from '../planRegistry';
 import { usePlans } from '../usePlans';
 import { useStickToBottom } from '../useStickToBottom';
@@ -88,6 +89,14 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
         setCompacting(chatId, compacting);
         return () => setCompacting(chatId, undefined);
     }, [chatId, compacting, setCompacting]);
+    // the agent's task list (todo tool) goes to the task button in the header (issue #88)
+    const setTaskList = readOnly ? undefined : agent?.setTaskList;
+    const taskList = useMemo(() => todoTimeline(messages), [messages]);
+    useEffect(() => {
+        if (!setTaskList) return;
+        setTaskList(chatId, taskList);
+        return () => setTaskList(chatId, undefined);
+    }, [chatId, taskList, setTaskList]);
     const items = useMemo(
         () =>
             buildTranscript(messages, {

@@ -89,6 +89,14 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
 - Render check without backend: run `npx vite` with `VITE_AGENT_ENABLED=true` and intercept requests in Playwright
   (serve a fake `keycloak-js` module for `/node_modules/.vite/deps/keycloak-js.js`, answer `api.<base>` and
   `/agent/api/**` with JSON). No mock code lives in the repository.
+- **Task list button (issue #88, design `prototyp/entwuerfe/agent-task-list/` of the thesis repository):** `TaskButton`
+  sits left of the context ring in the chat header (panel and `/ai-agent`), only with at least one non-deleted task.
+  The list is rebuilt from the `todo` calls in the stored messages (`tasks.ts`: the last tool result's
+  `details.tasks` wins, arguments are replayed without details; running and failed calls change nothing), published by
+  `ChatView` through `setTaskList` to `AgentState.taskLists`. It opens as Popover when the chat header is at least
+  600 px wide (measured with a ResizeObserver on the header), else as bottom `SwipeableDrawer` (in the panel as wide
+  as the panel, above the 30 px footer); read-only. Render check: a chat whose messages hold a `todo` call and a
+  tool result with `details: { nextId, tasks }`.
 - **Chat layout v2 (issue #54, design `prototyp/entwuerfe/agent-chat-panel-v2.dc.html` of the thesis repository):**
   the same building blocks in the panel and on `/ai-agent`. **Panel header** 48 px (design 56): symbol, "Agent" (hidden
   during a run, the state chip takes its place), context ring with percentage, "Open in agent page", close; the panel is
