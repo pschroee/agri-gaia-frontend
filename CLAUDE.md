@@ -276,9 +276,9 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   resting on the floating button and the browser fires a mouseover without movement. Keyboard focus still opens it.
 - **Run control (issue #39, field since #54):** Stop sits in the input field, there is no status bar above it. While a
   turn runs (working or waiting for approval) the send arrow becomes Stop (`POST …/abort`, tooltip and label "Stop",
-  a spinner while stopping); with text in the field the queue arrow takes the last place and Stop sits left of it,
-  Enter queues ("Queue another message …"). The last place always fits the field's content, so a click there after
-  typing never stops the agent by mistake. Escape never stops (it only closes the slash menu). The pure
+  a spinner while stopping); with text in the field only the queue arrow stays in the field (issue #80, label
+  "Queue message (Enter)"), Enter queues ("Queue another message …"), and Stop becomes a small text button below the
+  field (`data-testid="agent-stop-inline"`, "Stop" / "Stopping …"), so no stop sits next to the arrow. Escape never stops (it only closes the slash menu). The pure
   `inputControls` in `src/agent/runState.ts` decides (unit-tested). The run state shows in the header only (issue #54;
   before, small in the row below the field). A failed stop shows as one amber line below the field with a dismiss
   cross, until the state changes. The state comes from the pure `runStateOf`: `working`, `waiting` (running with an open approval; the live
