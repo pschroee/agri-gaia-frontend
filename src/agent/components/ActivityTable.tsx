@@ -33,14 +33,13 @@ import {
     kindOf,
 } from '../activity';
 import {
-    effectOf,
     formatClock,
     isToday,
     Outcome,
     OUTCOME_LABEL,
     outcomeOf,
-    splitCall,
 } from '../format';
+import { callEffect } from '../effect';
 import type { ActivityCall } from '../types';
 import EffectChip from './EffectChip';
 import { agentColors, MONO } from './tokens';
@@ -393,8 +392,7 @@ export default function ActivityTable({
                     {rows.map((row) => {
                         const { call, chat } = row;
                         const internet = kindOf(call) === 'internet' ? internetEvent(call) : undefined;
-                        const { method, path } = splitCall(call.detail);
-                        const effect = internet ? undefined : effectOf(method, path);
+                        const effect = internet ? undefined : callEffect(call);
                         const expanded = open === call.id;
                         return (
                             <Fragment key={call.id}>
@@ -448,7 +446,7 @@ export default function ActivityTable({
                                     <TableCell sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
                                         {internet?.by === 'You' ? 'UI' : call.via}
                                     </TableCell>
-                                    <TableCell>{effect && <EffectChip effect={effect} />}</TableCell>
+                                    <TableCell data-effect={effect}>{effect && <EffectChip effect={effect} />}</TableCell>
                                     <TableCell>
                                         {internet ? (
                                             <InternetResultCell event={internet} />
