@@ -158,37 +158,37 @@ describe('state display', () => {
 describe('input controls', () => {
     it('offers the send arrow while nothing runs, with or without text', () => {
         for (const s of ['idle', 'starting', 'resuming', undefined] as const) {
-            expect(inputControls(s, false)).toEqual({ buttons: ['send'], enter: 'send', stopInline: false });
-            expect(inputControls(s, true)).toEqual({ buttons: ['send'], enter: 'send', stopInline: false });
+            expect(inputControls(s, false)).toEqual({ buttons: ['send'], enter: 'send' });
+            expect(inputControls(s, true)).toEqual({ buttons: ['send'], enter: 'send' });
         }
     });
 
     it('turns the send arrow into Stop while the agent works and the field is empty', () => {
-        expect(inputControls('working', false)).toEqual({ buttons: ['stop'], enter: 'queue', stopInline: false });
+        expect(inputControls('working', false)).toEqual({ buttons: ['stop'], enter: 'queue' });
     });
 
-    // issue #80: one button in the field while text is typed during a run
-    it('shows only the queue arrow when there is text during a run, and Stop below the field', () => {
+    // issue #80: one button in the field while text is typed during a run; no Stop below the field (issue #84)
+    it('shows only the queue arrow when there is text during a run', () => {
         const c = inputControls('working', true);
-        expect(c).toEqual({ buttons: ['queue'], enter: 'queue', stopInline: true });
+        expect(c).toEqual({ buttons: ['queue'], enter: 'queue' });
         expect(c.buttons).not.toContain('stop');
     });
 
     it('keeps Stop while waiting for an approval: the arrow alone with text, Stop as the button when empty', () => {
         expect(inputControls('waiting', false).buttons).toEqual(['stop']);
-        expect(inputControls('waiting', true)).toEqual({ buttons: ['queue'], enter: 'queue', stopInline: true });
+        expect(inputControls('waiting', true)).toEqual({ buttons: ['queue'], enter: 'queue' });
     });
 
     it('sends instead of queueing when the chat is not marked running (approval of an idle chat)', () => {
-        expect(inputControls('waiting', true, false)).toEqual({ buttons: ['send'], enter: 'send', stopInline: true });
+        expect(inputControls('waiting', true, false)).toEqual({ buttons: ['send'], enter: 'send' });
         // a resuming chat that the gateway still marks running queues
-        expect(inputControls('resuming', true, true)).toEqual({ buttons: ['queue'], enter: 'queue', stopInline: false });
+        expect(inputControls('resuming', true, true)).toEqual({ buttons: ['queue'], enter: 'queue' });
     });
 
     it('keeps the controls of a stop in progress (the turn still runs until the chat event)', () => {
         // "Stopping …" is a view state of the field; the controls stay those of the running turn
-        expect(inputControls('working', false)).toEqual({ buttons: ['stop'], enter: 'queue', stopInline: false });
-        expect(inputControls('working', true).stopInline).toBe(true);
+        expect(inputControls('working', false)).toEqual({ buttons: ['stop'], enter: 'queue' });
+        expect(inputControls('working', true).buttons).toEqual(['queue']);
     });
 
     it('words a failed stop for the line below the input', () => {
