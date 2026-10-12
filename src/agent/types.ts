@@ -255,6 +255,8 @@ export type Approval = {
     preview?: string;
     session?: string;
     tool_call_id?: string;
+    /** platform_write: class of the call (gateway issue #63; missing on older entries). */
+    effect?: 'read' | 'write' | 'compute' | 'irreversible';
 };
 
 /**
@@ -275,6 +277,8 @@ export type SocketCall = {
     tool_call_id?: string;
     /** Platform calls: round trip to the platform in ms, without the approval's wait (missing: not measured). */
     duration_ms?: number;
+    /** Platform calls: class of the call (gateway issue #63; missing on older entries). */
+    effect?: 'read' | 'write' | 'compute' | 'irreversible';
 };
 
 /** Outcome of a platform call as the gateway classifies it (GET /activity). */
