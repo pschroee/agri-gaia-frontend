@@ -206,6 +206,8 @@ export type PiMessage = {
     content?: string | ContentBlock[];
     toolCallId?: string;
     toolName?: string;
+    /** Tool result: pi's structured details (the todo tool carries the whole task list here). */
+    details?: unknown;
     isError?: boolean;
     errorMessage?: string;
     stopReason?: string;
