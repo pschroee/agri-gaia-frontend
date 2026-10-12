@@ -15,6 +15,7 @@ import BlockIcon from '@mui/icons-material/Block';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import MoveDownIcon from '@mui/icons-material/MoveDown';
 import RemoveIcon from '@mui/icons-material/Remove';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
@@ -23,6 +24,8 @@ import { backgroundStatus } from '../background';
 import type { BackgroundTask } from '../types';
 
 import { formatMs } from '../format';
+import { groupSkillLoads, groupStatus, skillLabel, skillRead } from '../skillStep';
+import type { StepGroup } from '../skillStep';
 import type { SubagentNavItem } from '../subagents';
 import type { Step, StepStatus } from '../transcript';
 import StepDetail from './StepDetail';
@@ -190,13 +193,26 @@ function StepRow({
     const [error, setError] = useState<string>();
     const controllable = s.status === 'running' && !!controls?.running.has(s.id);
     const task = controls?.background.get(s.id);
+    const skill = skillRead(s);
+    const named = skill ? skillLabel(skill) : undefined;
     return (
-        <Box component="li" data-testid="agent-step" data-step-id={s.id} data-open={open} sx={{ minWidth: 0 }}>
+        <Box
+            component="li"
+            data-testid="agent-step"
+            data-step-id={s.id}
+            data-open={open}
+            data-skill={skill?.skill}
+            sx={{ minWidth: 0 }}
+        >
             <Box
                 role="button"
                 tabIndex={0}
                 aria-expanded={open}
-                aria-label={`${open ? 'Hide' : 'Show'} details of ${s.tool}`}
+                aria-label={
+                    skill
+                        ? `${open ? 'Hide' : 'Show'} details of skill ${skill.skill}`
+                        : `${open ? 'Hide' : 'Show'} details of ${s.tool}`
+                }
                 data-testid="agent-step-row"
                 onClick={onToggle}
                 onKeyDown={(e) => {
@@ -232,18 +248,40 @@ function StepRow({
                         <StatusIcon status={s.status} />
                     </Box>
                 </Tooltip>
-                <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12, flex: 'none' }}>
-                    {s.tool}
-                </Typography>
-                {s.summary && (
-                    <Typography
-                        component="span"
-                        noWrap
-                        title={s.summary}
-                        sx={{ fontSize: 12, color: 'text.secondary', minWidth: 0 }}
-                    >
-                        {s.summary}
-                    </Typography>
+                {named && skill ? (
+                    <>
+                        <MenuBookOutlinedIcon
+                            data-testid="agent-step-skill-icon"
+                            sx={{ fontSize: 16, flex: 'none', color: 'text.secondary' }}
+                        />
+                        <Typography component="span" sx={{ fontSize: 12, fontWeight: 500, flex: 'none' }}>
+                            {named.label}
+                        </Typography>
+                        <Typography
+                            component="span"
+                            noWrap
+                            title={skill.path}
+                            sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+                        >
+                            {named.text}
+                        </Typography>
+                    </>
+                ) : (
+                    <>
+                        <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12, flex: 'none' }}>
+                            {s.tool}
+                        </Typography>
+                        {s.summary && (
+                            <Typography
+                                component="span"
+                                noWrap
+                                title={s.summary}
+                                sx={{ fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+                            >
+                                {s.summary}
+                            </Typography>
+                        )}
+                    </>
                 )}
                 {task && <BackgroundChip task={task} />}
                 <Typography
@@ -284,6 +322,116 @@ function StepRow({
             )}
             <Collapse in={open} unmountOnExit>
                 <StepDetail step={s} />
+            </Collapse>
+        </Box>
+    );
+}
+
+/**
+ * Row of a run of skill loads (issue #73): "Skills loaded" with the names; opened, one row per skill, each opening its
+ * own details. Its open state is kept under the group key like a single step's.
+ */
+function SkillGroupRow({
+    group,
+    controls,
+    openOf,
+    toggle,
+}: {
+    group: Extract<StepGroup, { type: 'skills' }>;
+    controls?: StepControls;
+    openOf: (id: string) => boolean;
+    toggle: (id: string) => void;
+}) {
+    const open = openOf(group.key);
+    const status = groupStatus(group.steps);
+    const names = group.skills.join(', ');
+    const known = group.steps.filter((s) => s.durationMs !== undefined);
+    const total = known.reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
+    return (
+        <Box
+            component="li"
+            data-testid="agent-step-skill-group"
+            data-skills={group.skills.join(',')}
+            data-open={open}
+            sx={{ minWidth: 0 }}
+        >
+            <Box
+                role="button"
+                tabIndex={0}
+                aria-expanded={open}
+                aria-label={`${open ? 'Hide' : 'Show'} details of skills ${names}`}
+                data-testid="agent-step-skill-group-row"
+                onClick={() => toggle(group.key)}
+                onKeyDown={(e) => {
+                    if (e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return;
+                    e.preventDefault();
+                    toggle(group.key);
+                }}
+                sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    minWidth: 0,
+                    cursor: 'pointer',
+                    borderRadius: 0.5,
+                    mx: -0.5,
+                    px: 0.5,
+                    '&:hover': { bgcolor: 'action.hover' },
+                    '&:focus-visible': { outline: `2px solid ${agentColors.green}`, outlineOffset: -2 },
+                }}
+            >
+                <ChevronRightIcon
+                    sx={{
+                        fontSize: 16,
+                        flex: 'none',
+                        mr: -0.5,
+                        color: 'text.secondary',
+                        transition: 'transform 150ms',
+                        transform: open ? 'rotate(90deg)' : 'none',
+                    }}
+                />
+                <Tooltip title={STATUS_LABEL[status]}>
+                    <Box sx={{ display: 'flex', flex: 'none' }}>
+                        <StatusIcon status={status} />
+                    </Box>
+                </Tooltip>
+                <MenuBookOutlinedIcon
+                    data-testid="agent-step-skill-icon"
+                    sx={{ fontSize: 16, flex: 'none', color: 'text.secondary' }}
+                />
+                <Typography component="span" sx={{ fontSize: 12, fontWeight: 500, flex: 'none' }}>
+                    Skills loaded
+                </Typography>
+                <Typography
+                    component="span"
+                    noWrap
+                    title={names}
+                    sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+                >
+                    {names}
+                </Typography>
+                {known.length > 0 && (
+                    <Typography
+                        component="span"
+                        sx={{
+                            ml: 'auto',
+                            pl: 1,
+                            flex: 'none',
+                            fontSize: 11.5,
+                            fontVariantNumeric: 'tabular-nums',
+                            color: 'text.disabled',
+                        }}
+                    >
+                        {formatMs(total)}
+                    </Typography>
+                )}
+            </Box>
+            <Collapse in={open} unmountOnExit>
+                <Box component="ul" sx={{ listStyle: 'none', m: 0, pl: 2.5, pt: 0.75, display: 'grid', rowGap: 0.75 }}>
+                    {group.steps.map((s) => (
+                        <StepRow key={s.id} s={s} controls={controls} open={openOf(s.id)} onToggle={() => toggle(s.id)} />
+                    ))}
+                </Box>
             </Collapse>
         </Box>
     );
@@ -331,9 +479,19 @@ export default function StepList({
                 data-testid="agent-steps"
                 sx={{ listStyle: 'none', m: 0, px: 1.5, pb: 1, display: 'grid', rowGap: 0.75 }}
             >
-                {steps.map((s) => (
-                    <StepRow key={s.id} s={s} controls={controls} open={openOf(s.id)} onToggle={() => toggle(s.id)} />
-                ))}
+                {groupSkillLoads(steps).map((g) =>
+                    g.type === 'step' ? (
+                        <StepRow
+                            key={g.step.id}
+                            s={g.step}
+                            controls={controls}
+                            open={openOf(g.step.id)}
+                            onToggle={() => toggle(g.step.id)}
+                        />
+                    ) : (
+                        <SkillGroupRow key={g.key} group={g} controls={controls} openOf={openOf} toggle={toggle} />
+                    ),
+                )}
             </Box>
         </Box>
     );

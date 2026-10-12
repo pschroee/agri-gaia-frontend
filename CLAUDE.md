@@ -592,6 +592,12 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   `innerHeight - clientHeight` (a horizontal scrollbar); hover the close button 500 ms before clicking it.
  `npm test` runs Vitest (`vitest.config.ts`, files `src/**/*.test.ts`, node environment). The
   config is separate from `vite.config.ts`, so `npm run build` is unaffected; `tsc` type-checks the test files too.
+- **Skill reads (issue #73):** a `read` of `/opt/agw/skills/<name>/SKILL.md` shows as "Skill loaded" with the name, any
+  other file of a skill as "Skill <name>" with "read <file>" (`skillRead`, `skillLabel` in `src/agent/skillStep.ts`,
+  unit-tested). Two or more consecutive loads in one list form a group "Skills loaded" with the names, opened per skill;
+  the group's open state is keyed `stepOpenKey('skills:' + firstStepId)`. Only the tool `read` counts, decided by its
+  arguments (`path`, else `file_path`): `bash cat …`, `grep`, `ls` on the same path stay ordinary steps. The gateway's
+  own UI shows the same as a card with `BookOpenIcon`, without grouping. Details (path, content) are unchanged.
 - **Write `package-lock.json` with the npm of the image** (`node:20-alpine`, npm 10.8.2), not with a newer local
   npm: `docker run --rm -v "$PWD":/app -w /app node:20-alpine npm install --package-lock-only`. A lock from npm 11
   left out peer dependencies (`@testing-library/dom` …) that npm 10 requires, and `npm ci` in the Docker build failed
