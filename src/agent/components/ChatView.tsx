@@ -97,6 +97,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
         setTaskList(chatId, taskList);
         return () => setTaskList(chatId, undefined);
     }, [chatId, taskList, setTaskList]);
+    // the chat's plans go to the plan button in the header the same way (issue #138)
+    const setPlanList = readOnly ? undefined : agent?.setPlanList;
+    useEffect(() => {
+        if (!setPlanList) return;
+        setPlanList(chatId, plans);
+        return () => setPlanList(chatId, undefined);
+    }, [chatId, plans, setPlanList]);
     const items = useMemo(
         () =>
             buildTranscript(messages, {
