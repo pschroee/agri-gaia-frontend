@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -22,6 +23,7 @@ import AddEdgeDeviceDialog from '../components/edge/AddEdgeDeviceDialog';
 import EdgeDeviceList from '../components/edge/List';
 
 import IEdgeDevice from '../types/IEdgeDevice';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import { EDGE_DEVICES_PATH, TAGS_PATH } from '../endpoints';
 import NoDataYet from '../components/common/NoDataYet';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -51,6 +53,9 @@ export default function EdgeManagement() {
                 setInitialLoadCompleted(true);
             });
     };
+
+    // the agent changed an edge device: show the new list without leaving the page (the 5 s interval stays)
+    useReloadOnPlatformChange('edge-devices', fetchEdgeDevices);
 
     const fetchTags = async () => {
         httpGet(keycloak, TAGS_PATH)

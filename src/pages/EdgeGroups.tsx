@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -22,6 +23,7 @@ import AddEdgeGroupDialog from '../components/edge-groups/AddEdgeGroupDialog';
 import EdgeGroupList from '../components/edge-groups/List';
 
 import IEdgeGroup from '../types/IEdgeGroup';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import { EDGE_GROUPS_PATH, TAGS_PATH } from '../endpoints';
 import NoDataYet from '../components/common/NoDataYet';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -47,6 +49,9 @@ export default function EdgeGroups() {
             })
             .finally(() => setEdgeGroupsAreLoading(false));
     };
+
+    // the agent changed an edge group: show the new list without leaving the page
+    useReloadOnPlatformChange('edge-groups', fetchEdgeGroups);
 
     const fetchTags = async () => {
         httpGet(keycloak, TAGS_PATH)

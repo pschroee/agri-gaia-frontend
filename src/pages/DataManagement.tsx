@@ -35,6 +35,7 @@ import AgrovocSearchbar from '../components/common/AgrovocSearchbar';
 import React from 'react';
 import { downloadBlob } from '../util';
 import DatasetInferenceDialog from '../components/datamanagement/DatasetInferenceDialog';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import { usePublishPageSelection } from '../agent/pageSelection';
 import { datasetFromQuery } from '../agent/platformLinks';
 
@@ -103,6 +104,9 @@ export default function DataManagement() {
                 console.error(error);
             });
     };
+
+    // the agent renamed, created or deleted a dataset: show the new list without leaving the page
+    useReloadOnPlatformChange('datasets', fetchDatasets);
 
     /*
     const fetchClasses = async () => {

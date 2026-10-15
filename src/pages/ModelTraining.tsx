@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -31,6 +32,7 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import Box from '@mui/material/Box';
 import IDataset from '../types/IDataset';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import { downloadBlob } from '../util';
 import CodeEditor from '@uiw/react-textarea-code-editor';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -223,6 +225,13 @@ export default function ModelTraining() {
                 setErrorMsg(`Fetching datasets: ${error.message}`);
             });
     };
+
+    // the agent started or removed a training container, or changed a dataset the dropdown shows: reload both
+    // lists without leaving the page (the 5 s interval stays)
+    useReloadOnPlatformChange(['training', 'datasets'], () => {
+        fetchDatasets();
+        fetchTrainContainers();
+    });
 
     const buildTrainContainer = async (config: Record<string, any>) => {
         await httpPost(
