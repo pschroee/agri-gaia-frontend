@@ -22,6 +22,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import PublicIcon from '@mui/icons-material/Public';
 import PublicOffIcon from '@mui/icons-material/PublicOff';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import SearchIcon from '@mui/icons-material/Search';
 
 import {
     ActivityRow,
@@ -31,7 +32,9 @@ import {
     InternetEvent,
     internetOf,
     InternetTone,
+    isSystemRead,
     kindOf,
+    viaLabel,
 } from '../activity';
 import {
     formatClock,
@@ -133,8 +136,32 @@ function InternetCallCell({ call, event }: { call: ActivityRow['call']; event: I
     );
 }
 
-/** Details of an internet entry: its time line (request, approval, result) and who acted. */
-function InternetLog({ row }: { row: ActivityRow }) {
+/**
+ * The gateway's own read for the summary of an approval (gateway issue L2/#119): the system read the platform, the
+ * agent did not. What was read is the delivered detail.
+ */
+function SystemReadCell({ call }: { call: ActivityRow['call'] }) {
+    return (
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }} data-testid="activity-summary-read">
+            <SearchIcon sx={{ fontSize: 18, color: 'text.secondary', mt: '1px', flex: 'none' }} />
+            <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ fontSize: 14 }}>Read for an approval summary</Typography>
+                <Typography
+                    sx={{
+                        fontFamily: MONO,
+                        fontSize: '12.5px !important',
+                        color: 'text.secondary',
+                        overflowWrap: 'anywhere',
+                    }}
+                >
+                    {call.detail}
+                </Typography>
+            </Box>
+        </Box>
+    );
+}
+
+/** Details of an internet entry: its time line (request, approval, result) and who acted. */function InternetLog({ row }: { row: ActivityRow }) {
     const { call, chat } = row;
     const event = internetEvent(call);
     const i = internetOf(call);
@@ -203,7 +230,7 @@ function InternetLog({ row }: { row: ActivityRow }) {
                 <dd>
                     {i.origin === 'user'
                         ? 'You, with the internet switch'
-                        : `${event.by === 'Subagent' ? 'A subagent' : 'The agent'} · ${call.via.toUpperCase()}`}
+                        : `${event.by === 'Subagent' ? 'A subagent' : 'The agent'} · ${viaLabel(call.via)}`}
                 </dd>
                 {event.reason && (
                     <>
@@ -319,7 +346,7 @@ function CallLog({ row, sent }: { row: ActivityRow; sent?: LlmLoad }) {
                 <dd>{chat.title || chat.id}</dd>
                 <dt>Connection</dt>
                 <dd>
-                    {call.via.toUpperCase()}
+                    {viaLabel(call.via)}
                     {chat.model && ` · model ${chat.model}`}
                 </dd>
                 <dt>Duration</dt>
@@ -393,7 +420,8 @@ export default function ActivityTable({
                     {rows.map((row) => {
                         const { call, chat } = row;
                         const internet = kindOf(call) === 'internet' ? internetEvent(call) : undefined;
-                        const effect = internet ? undefined : callEffect(call);
+                        const systemRead = isSystemRead(call);
+                        const effect = internet || systemRead ? undefined : callEffect(call);
                         const expanded = open === call.id;
                         return (
                             <Fragment key={call.id}>
@@ -440,6 +468,10 @@ export default function ActivityTable({
                                         <TableCell sx={{ minWidth: 160 }} data-testid="activity-internet">
                                             <InternetCallCell call={call} event={internet} />
                                         </TableCell>
+                                    ) : systemRead ? (
+                                        <TableCell sx={{ minWidth: 160 }}>
+                                            <SystemReadCell call={call} />
+                                        </TableCell>
                                     ) : (
                                         <TableCell
                                             sx={{
@@ -452,8 +484,8 @@ export default function ActivityTable({
                                             {call.detail}
                                         </TableCell>
                                     )}
-                                    <TableCell sx={{ textTransform: 'uppercase', color: 'text.secondary' }}>
-                                        {internet?.by === 'You' ? 'UI' : call.via}
+                                    <TableCell sx={{ color: 'text.secondary' }}>
+                                        {viaLabel(internet?.by === 'You' ? 'user' : call.via)}
                                     </TableCell>
                                     <TableCell data-effect={effect}>{effect && <EffectChip effect={effect} />}</TableCell>
                                     <TableCell>

@@ -42,12 +42,18 @@ export class AgentApiError extends Error {
     readonly code?: string;
     /** Machine-readable details, e.g. ContextTooLarge with code "context_too_large". */
     readonly details?: unknown;
-    constructor(status: number, message: string, code?: string, details?: unknown) {
+    /**
+     * 409 summary_changed (gateway issue L2/#119): the approval with the newly read summary and the one as proposed.
+     * It stays pending, so the card shows both and the next click decides.
+     */
+    readonly approval?: Approval;
+    constructor(status: number, message: string, code?: string, details?: unknown, approval?: Approval) {
         super(message);
         this.name = 'AgentApiError';
         this.status = status;
         this.code = code;
         this.details = details;
+        this.approval = approval;
     }
 }
 
@@ -66,15 +72,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         let message = `${res.status} ${res.statusText}`;
         let code: string | undefined;
         let details: unknown;
+        let approval: Approval | undefined;
         try {
-            const body = (await res.json()) as { error?: string; code?: string; details?: unknown };
+            const body = (await res.json()) as { error?: string; code?: string; details?: unknown; approval?: Approval };
             if (body?.error) message = body.error;
             code = body?.code;
             details = body?.details;
+            approval = body?.approval;
         } catch {
             // response without JSON body
         }
-        throw new AgentApiError(res.status, message, code, details);
+        throw new AgentApiError(res.status, message, code, details, approval);
     }
     // 204 No Content (delete) has no body
     if (res.status === 204) return undefined as T;

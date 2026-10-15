@@ -17,9 +17,16 @@ import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
 import type { Plan } from '../plan';
-import { summaryParts } from '../plan';
+import { summaryChanged, summaryParts } from '../plan';
 import { useShownPlanCards } from '../planRegistry';
-import PlanCard, { PlanApprovalItem, PlanReference, SummaryDetails, Technical } from './PlanCard';
+import PlanCard, {
+    ChangedAlert,
+    PlanApprovalItem,
+    PlanReference,
+    ProposedSummary,
+    SummaryDetails,
+    Technical,
+} from './PlanCard';
 import { agentColors, blockSx, MONO } from './tokens';
 
 function describe(a: Approval): { title: string; subject: string; body?: string } {
@@ -246,6 +253,14 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                         {body}
                     </Box>
                 )
+            )}
+            {summaryChanged(approval) && (
+                <>
+                    <ChangedAlert />
+                    {approval.summary_proposed && (
+                        <ProposedSummary summary={approval.summary_proposed} testId="agent-approval-proposed" />
+                    )}
+                </>
             )}
             <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>

@@ -91,6 +91,24 @@ export function mergePages(prev: ActivityPage, next: ActivityPage): ActivityPage
 /** Kind of an entry; a gateway before issue #37 sends none, and all its entries are platform calls. */
 export const kindOf = (c: ActivityCall): ActivityKind => c.kind ?? 'platform';
 
+/**
+ * How the table names who made a call (gateway issue L2/#119): the gateway's own reads and the user's switches are not
+ * the agent. Bindings stay in the gateway's capitals (CLI, MCP, API); `orchestrator` reads "System" and `user` "UI" —
+ * no infrastructure term in the interface (issue #78).
+ */
+export function viaLabel(via: string): string {
+    const v = via.trim().toLowerCase();
+    if (v === 'orchestrator') return 'System';
+    if (v === 'user') return 'UI';
+    return via.toUpperCase();
+}
+
+/**
+ * The gateway's own read for the summary of an approval (gateway issue L2/#119): op `summary_read`, via
+ * `orchestrator`. It is an entry of the system, not a call of the agent, and it never counts in the figures.
+ */
+export const isSystemRead = (c: ActivityCall): boolean => c.op === 'summary_read';
+
 /** One platform call of the agent with its chat and the other calls of the same tool call, or one internet entry. */
 export type ActivityRow = { call: ActivityCall; chat: ActivityChat; log: ActivityCall[] };
 
@@ -252,11 +270,16 @@ export function internetEvent(c: ActivityCall): InternetEvent {
 
 /** Footer of the table: how many platform calls of the period and how many internet switches are shown. */
 export function shownText(rows: ActivityRow[], total: number | undefined, kind: KindFilter, outcome: string): string {
-    const platform = rows.filter((r) => kindOf(r.call) === 'platform').length;
-    const internet = rows.length - platform;
+    // The gateway's own summary reads (issue L2/#119) are rows of the platform kind but no calls of the agent: they
+    // stay out of the count that matches the figures and are named separately.
+    const system = rows.filter((r) => isSystemRead(r.call)).length;
+    const platform = rows.filter((r) => kindOf(r.call) === 'platform' && !isSystemRead(r.call)).length;
+    const internet = rows.length - platform - system;
     const switches = `${internet} internet ${internet === 1 ? 'switch' : 'switches'}`;
+    const reads = `${system} read${system === 1 ? '' : 's'} by the system`;
     if (kind === 'internet') return `Shows ${switches}.`;
     if (outcome) return `Shows ${platform} ${platform === 1 ? 'call' : 'calls'} with this result.`;
     const calls = `Shows ${platform} of ${total ?? platform} platform ${(total ?? platform) === 1 ? 'call' : 'calls'}`;
-    return internet > 0 ? `${calls} and ${switches}.` : `${calls}.`;
+    const rest = [internet > 0 ? switches : '', system > 0 ? reads : ''].filter(Boolean);
+    return rest.length > 0 ? `${calls} and ${rest.join(' and ')}.` : `${calls}.`;
 }

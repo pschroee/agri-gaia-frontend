@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { attachHint } from './files';
 import { formatMs } from './format';
+import { viaLabel } from './activity';
 import { backgroundStatus } from './background';
 import { newChatErrorText } from './newChat';
 import { RUN_STATE_HINT } from './runState';
@@ -48,5 +49,11 @@ describe('visible agent UI texts', () => {
         expect(internetHint({ internet: true, state: 'dormant' })).not.toMatch(INFRA);
         expect(internetHint({ internet: false, state: 'active' })).not.toMatch(INFRA);
         expect(attachHint(10)).not.toMatch(INFRA);
+    });
+
+    it('the activity names the gateway without an infrastructure term', () => {
+        // issue L2/#119: the gateway's own reads show up as "System", not as "orchestrator".
+        expect(viaLabel('orchestrator')).not.toMatch(INFRA);
+        expect(viaLabel('user')).not.toMatch(INFRA);
     });
 });

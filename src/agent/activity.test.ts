@@ -12,10 +12,12 @@ import {
     formatDuration,
     internetEvent,
     internetOf,
+    isSystemRead,
     kindOf,
     mergePages,
     periodSince,
     shownText,
+    viaLabel,
 } from './activity';
 import type { ActivityCall, ActivityPage } from './types';
 
@@ -253,5 +255,47 @@ describe('activityChatName', () => {
     it('shows the title, or "Untitled chat" without one', () => {
         expect(activityChatName({ title: 'Schweine' })).toBe('Schweine');
         expect(activityChatName({ title: '  ' })).toBe('Untitled chat');
+    });
+});
+
+describe('viaLabel', () => {
+    it('names the gateway "System" and the user "UI", bindings in capitals', () => {
+        expect(viaLabel('orchestrator')).toBe('System');
+        expect(viaLabel('user')).toBe('UI');
+        expect(viaLabel('cli')).toBe('CLI');
+        expect(viaLabel('mcp')).toBe('MCP');
+        expect(viaLabel('api')).toBe('API');
+        expect(viaLabel('')).toBe('');
+    });
+});
+
+describe('isSystemRead', () => {
+    it('knows the gateway\'s own reads for approval summaries', () => {
+        expect(isSystemRead(call(1, 'a', { op: 'summary_read', via: 'orchestrator' }))).toBe(true);
+        expect(isSystemRead(call(2, 'a'))).toBe(false);
+        expect(isSystemRead(call(3, 'a', { op: 'internet' }))).toBe(false);
+    });
+
+    it('keeps a summary read out of the figures and out of the tool-call log', () => {
+        const p = page([call(1, 'a', { op: 'summary_read', via: 'orchestrator', detail: 'for approval 12345678 (proposed): GET /datasets/16' })]);
+        const rows = activityRows(p, 'platform');
+        expect(rows).toHaveLength(1);
+        expect(isSystemRead(rows[0].call)).toBe(true);
+        expect(rows[0].log).toHaveLength(1);
+    });
+});
+
+describe('shownText with the gateway\'s own reads', () => {
+    it('counts the system\'s reads apart from the calls of the agent', () => {
+        const reads = [
+            call(1, 'a'),
+            call(2, 'a', { op: 'summary_read', via: 'orchestrator' }),
+            call(3, 'a', { op: 'summary_read', via: 'orchestrator' }),
+        ];
+        const rows = activityRows(page(reads), 'platform');
+        expect(shownText(rows, 1, 'platform', '')).toBe('Shows 1 of 1 platform call and 2 reads by the system.');
+        expect(shownText(rows, 1, 'all', '')).toBe('Shows 1 of 1 platform call and 2 reads by the system.');
+        // An outcome filter is about the agent's calls.
+        expect(shownText(rows, 1, 'platform', 'ok')).toBe('Shows 1 call with this result.');
     });
 });
