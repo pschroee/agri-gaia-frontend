@@ -10,6 +10,7 @@ import { RunsCache, ensureChatRuns, runsCacheReducer, selectionFor } from './cha
 import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
 import { PanelState, panelReducer, panelShown } from './panelCarry';
+import type { Plan } from './plan';
 import type { SubagentRun } from './subagents';
 import type { Task } from './tasks';
 import type { Approval, Chat, Config, Me, Model, TrashList } from './types';
@@ -77,6 +78,9 @@ type AgentState = {
     /** The agent's task list of the chats the open views see, by chat id (for the task button in the header; issue #88). */
     taskLists: Record<string, Task[]>;
     setTaskList: (chatId: string, tasks: Task[] | undefined) => void;
+    /** The plans of the chats the open views see, by chat id (for the plan button in the header; issue #138). */
+    planLists: Record<string, Plan[]>;
+    setPlanList: (chatId: string, plans: Plan[] | undefined) => void;
     /** The context panel is open on platform pages (the user's choice, or a chat carried from /ai-agent). */
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
@@ -146,6 +150,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     );
     const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
     const [taskLists, setTaskListsState] = useState<Record<string, Task[]>>({});
+    const [planLists, setPlanListsState] = useState<Record<string, Plan[]>>({});
     const [creatingChat, setCreatingChat] = useState(false);
     const [newChatError, setNewChatError] = useState<string>();
     const [freshChat, setFreshChat] = useState<FreshChat>();
@@ -381,6 +386,19 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
+    const setPlanList = useCallback((chatId: string, plans: Plan[] | undefined) => {
+        setPlanListsState((m) => {
+            if (!plans) {
+                if (!(chatId in m)) return m;
+                const next = { ...m };
+                delete next[chatId];
+                return next;
+            }
+            if (m[chatId] && JSON.stringify(m[chatId]) === JSON.stringify(plans)) return m;
+            return { ...m, [chatId]: plans };
+        });
+    }, []);
+
     const setPanelOpen = useCallback((open: boolean) => dispatchPanel({ type: 'set', open }), []);
     const hasChat = !!selectedChatId;
     const noteRoute = useCallback(
@@ -426,6 +444,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setCompacting,
             taskLists,
             setTaskList,
+            planLists,
+            setPlanList,
             panelOpen,
             setPanelOpen,
             noteRoute,
@@ -465,6 +485,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setCompacting,
             taskLists,
             setTaskList,
+            planLists,
+            setPlanList,
             panelOpen,
             setPanelOpen,
             noteRoute,

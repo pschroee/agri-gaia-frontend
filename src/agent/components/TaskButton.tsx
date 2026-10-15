@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useLayoutEffect, useState } from 'react';
+import { useState } from 'react';
 
 import Badge from '@mui/material/Badge';
 import ButtonBase from '@mui/material/ButtonBase';
@@ -14,30 +14,9 @@ import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 
 import { compactButtonLabel, panelPopoverGeometry, POPOVER_MEDIA_QUERY, taskAriaLabel, taskButtonLabel, taskCounts } from '../tasks';
 import type { Task } from '../tasks';
+import { HEADER_HOST, useHostWidth } from '../useHostWidth';
 import TaskList from './TaskList';
 import { agentColors } from './tokens';
-
-const HOST = '[data-testid="agent-chat-header"], [data-testid="agent-panel-header"]';
-
-/** Width of the chat header the button sits in (= the chat area); 0 until measured (label only). */
-function useHostWidth(el: HTMLElement | null): { width: number; panel: boolean } {
-    const [state, setState] = useState({ width: 0, panel: false });
-    useLayoutEffect(() => {
-        const host = el?.closest<HTMLElement>(HOST);
-        if (!host) return;
-        const measure = () =>
-            setState((s) => {
-                const width = Math.round(host.getBoundingClientRect().width);
-                const panel = host.dataset.testid === 'agent-panel-header';
-                return s.width === width && s.panel === panel ? s : { width, panel };
-            });
-        measure();
-        const ro = new ResizeObserver(measure);
-        ro.observe(host);
-        return () => ro.disconnect();
-    }, [el]);
-    return state;
-}
 
 /**
  * The agent's task list as a button in the chat header, left of the context ring (issue #88): "3/7 tasks" (compact
@@ -61,7 +40,7 @@ export default function TaskButton({ tasks }: { tasks: Task[] | undefined }) {
     const close = () => setOpen(false);
     // in the panel the popover spans the panel header's width right below it (read when rendered, so a resize that
     // changes `width` or re-renders the button follows; Popover itself re-positions on window resize)
-    const header = panel && popover && open ? btn?.closest<HTMLElement>(HOST) : null;
+    const header = panel && popover && open ? btn?.closest<HTMLElement>(HEADER_HOST) : null;
     const geo = header ? panelPopoverGeometry(header.getBoundingClientRect()) : null;
     return (
         <>
