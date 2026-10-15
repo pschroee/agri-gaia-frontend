@@ -7,7 +7,7 @@
 // is components/PlanCard.tsx.
 
 import { AGENT_BASE } from './login';
-import type { TranscriptItem } from './transcript';
+import type { AgentPart, Step, TranscriptItem } from './transcript';
 import type { Approval } from './types';
 import { answerSteps } from './answer';
 
@@ -189,29 +189,64 @@ export async function fetchPlans(chatId: string): Promise<Plan[]> {
     return (await res.json()) as Plan[];
 }
 
+/** The step whose ID or call ID is `callId` (the plan's tool_call_id); undefined when the answer has none. */
+function stepOf(parts: AgentPart[], callId: string): Step | undefined {
+    return answerSteps(parts).find((s) => s.id === callId || s.callId === callId);
+}
+
 /**
- * Places the plans of a chat: under the answer whose tool steps contain the plan's tool call (a step's id, or its
+ * A plan and the place it was proposed at (L8): the step of the `propose_plan` call. `afterCallId` is that step's
+ * ID (a subagent's step carries the call ID apart from it); missing for a plan without a tool call (gateway F28) —
+ * it then stays in `rest`, before the running answer, as before.
+ */
+export type PlacedPlan = Plan & { afterCallId?: string };
+
+/**
+ * Places the plans of a chat: with the answer whose tool steps contain the plan's tool call (a step's id, or its
  * call ID for a subagent's step), the rest in `rest`. mainOnly: only plans of the main session (not of subagents).
  */
 export function placePlans(
     items: TranscriptItem[],
     plans: Plan[],
     mainOnly: boolean,
-): { byItem: Map<string, Plan[]>; rest: Plan[] } {
-    const byItem = new Map<string, Plan[]>();
-    const rest: Plan[] = [];
+): { byItem: Map<string, PlacedPlan[]>; rest: PlacedPlan[] } {
+    const byItem = new Map<string, PlacedPlan[]>();
+    const rest: PlacedPlan[] = [];
     const mainSessions = ['', 'main'];
     for (const p of plans) {
         if (mainOnly && p.session !== undefined && !mainSessions.includes(p.session)) continue;
-        const owner = p.tool_call_id
-            ? items.find(
-                  (it) =>
-                      it.kind === 'agent' &&
-                      answerSteps(it.parts).some((s) => s.id === p.tool_call_id || s.callId === p.tool_call_id),
-              )
+        const id = p.tool_call_id;
+        const owner = id
+            ? items.find((it) => it.kind === 'agent' && stepOf(it.parts, id) !== undefined)
             : undefined;
-        if (owner) byItem.set(owner.key, [...(byItem.get(owner.key) ?? []), p]);
-        else rest.push(p);
+        const step = owner && owner.kind === 'agent' && id ? stepOf(owner.parts, id) : undefined;
+        const placed: PlacedPlan = step ? { ...p, afterCallId: step.callId ?? step.id } : { ...p };
+        if (owner) byItem.set(owner.key, [...(byItem.get(owner.key) ?? []), placed]);
+        else rest.push(placed);
     }
     return { byItem, rest };
+}
+
+/**
+ * Places the plans of one answer at the part they belong to (L8): the index of the part each plan goes right after
+ * (the part holding its step), and the plans without such a part — they stay under the whole answer, as before.
+ */
+export function plansByPart(
+    parts: AgentPart[],
+    plans: PlacedPlan[],
+): { byPart: Map<number, PlacedPlan[]>; rest: PlacedPlan[] } {
+    const byPart = new Map<number, PlacedPlan[]>();
+    const rest: PlacedPlan[] = [];
+    for (const p of plans) {
+        const after = p.afterCallId;
+        const i =
+            after === undefined
+                ? -1
+                : parts.findIndex(
+                      (part) => part.type === 'steps' && part.steps.some((s) => s.id === after || s.callId === after),
+                  );
+        if (i < 0) rest.push(p);
+        else byPart.set(i, [...(byPart.get(i) ?? []), p]);
+    }
+    return { byPart, rest };
 }
