@@ -18,11 +18,11 @@ import { answerSteps } from '../answer';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
 import { outputsByStepPart, placeOutputs } from '../files';
-import { placePlans } from '../plan';
-import type { Plan } from '../plan';
+import { placePlans, plansByPart } from '../plan';
+import type { PlacedPlan, Plan } from '../plan';
 import type { CommandNotice } from '../commands';
 import type { SubagentNavItem } from '../subagents';
-import type { Artifact } from '../types';
+import type { Approval, Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
 import { liveParts } from '../transcript';
@@ -112,7 +112,9 @@ export function UserBubble({
  * One answer of the agent: its parts in the order they happened, live as they arrive (issue #57, as before #54): text
  * as Markdown, each thinking block as one collapsed "Thinking · 3 s", each run of tool calls as a step list with its
  * controls, and right after it the file message with the files those calls sent (issue #62; nothing of them inside the
- * step list). Under the answer the subagents it started as a card (#54) and a file message for files placed by time.
+ * step list). A plan of this answer sits right after the part with its `propose_plan` call (issue #138), the plans of
+ * other answers stay under the whole answer. Under the answer the subagents it started as a card (#54) and a file
+ * message for files placed by time.
  */
 export function AgentBlock({
     item,
@@ -123,6 +125,9 @@ export function AgentBlock({
     controls,
     results,
     filesChatId,
+    plans,
+    approvals,
+    onDecide,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
@@ -137,9 +142,25 @@ export function AgentBlock({
     results?: Artifact[];
     /** Chat whose files the file messages download (defaults to chatId; the subagent view has no chatId). */
     filesChatId?: string;
+    /** Plans of this answer (issue #138): each one after the part of its call, the rest under the answer. */
+    plans?: PlacedPlan[];
+    /** Approvals the plan cards show (issue #70); the subagent view renders its cards itself. */
+    approvals?: Approval[];
+    onDecide?: (approval: Approval, approve: boolean) => Promise<void>;
 }) {
     const fileChatId = filesChatId ?? chatId;
     const placed = useMemo(() => outputsByStepPart(item.parts, results), [item.parts, results]);
+    // where in the answer each plan goes (issue #138): after the part holding its call
+    const placedPlans = useMemo(() => plansByPart(item.parts, plans ?? []), [item.parts, plans]);
+    const planCard = (p: PlacedPlan) => (
+        <PlanCard
+            key={p.id}
+            plan={p}
+            approval={approvals?.find((a) => a.id === p.approval_id)}
+            onDecide={onDecide}
+            dense={dense}
+        />
+    );
     const subagents = controls?.subagents;
     const runs = useMemo(() => {
         if (!subagents) return [];
@@ -159,26 +180,30 @@ export function AgentBlock({
             sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, fontSize: dense ? 14 : 14.5, lineHeight: 1.6 }}
         >
             {item.parts.map((p, i) => {
+                // plans proposed in this part come right after it (issue #138)
+                const cards = placedPlans.byPart.get(i)?.map(planCard);
                 if (p.type === 'text')
                     return (
-                        <Box key={i} data-testid="agent-answer-text" sx={{ minWidth: 0 }}>
-                            <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} streaming={live} />
-                        </Box>
+                        <Fragment key={i}>
+                            <Box data-testid="agent-answer-text" sx={{ minWidth: 0 }}>
+                                <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} streaming={live} />
+                            </Box>
+                            {cards}
+                        </Fragment>
                     );
                 if (p.type === 'thinking')
                     return (
-                        <ThinkingBlock
-                            key={p.id}
-                            part={p}
-                            open={thinking.open[p.id]}
-                            onOpenChange={thinking.onOpenChange}
-                        />
+                        <Fragment key={p.id}>
+                            <ThinkingBlock part={p} open={thinking.open[p.id]} onOpenChange={thinking.onOpenChange} />
+                            {cards}
+                        </Fragment>
                     );
                 const files = placed.byPart.get(i);
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
                         {files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
+                        {cards}
                     </Fragment>
                 );
             })}
@@ -190,6 +215,8 @@ export function AgentBlock({
             )}
             {runs.length > 0 && subagents && <SubagentCard items={runs} onOpen={subagents.onOpen} />}
             {placed.rest.length > 0 && <AgentFileMessage chatId={fileChatId} artifacts={placed.rest} />}
+            {/* a plan whose call is not among the parts of this answer stays under the whole answer (as before #138) */}
+            {placedPlans.rest.map(planCard)}
         </Box>
     );
 }
@@ -328,7 +355,10 @@ export default function Conversation({
     dense?: boolean;
     /** Runs per `subagent` call, listed as a card under the answer and opened on click (issue #48). */
     subagents?: StepControls['subagents'];
-    /** The chat's plans (issue #70): a card under the answer of their tool call, the rest before the live answer. */
+    /**
+     * The chat's plans (issue #70): a card in the answer of their tool call, at the place of that call (issue #138);
+     * plans without a call stay before the running answer, as before.
+     */
     plans?: Plan[];
 }) {
     const { chat, live, resumes, pending } = stream;
@@ -371,7 +401,9 @@ export default function Conversation({
         [shown, liveItem, stream.artifacts],
     );
     const placedPlans = useMemo(() => placePlans(shown, plans ?? [], true), [shown, plans]);
-    const planCards = (list: Plan[]) =>
+    // the cards of the plans without an answer (no tool call, gateway F28): they stay before the running answer, as
+    // before issue #138; the plans of an answer are rendered inside it, at the place of their call
+    const planCards = (list: PlacedPlan[]) =>
         list.map((p) => (
             <PlanCard
                 key={p.id}
@@ -444,6 +476,9 @@ export default function Conversation({
             live={isLive}
             controls={controls}
             results={placed.byItem.get(it.key)}
+            plans={placedPlans.byItem.get(it.key)}
+            approvals={stream.approvals}
+            onDecide={stream.decide}
         />
     );
     const empty =
@@ -495,7 +530,6 @@ export default function Conversation({
                     ) : (
                         answer(it, mergeLive && i === shown.length - 1)
                     )}
-                    {it.kind === 'agent' && planCards(placedPlans.byItem.get(it.key) ?? [])}
                     {resumesPlaced.after.get(i)?.map((r) => (
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
                     ))}
