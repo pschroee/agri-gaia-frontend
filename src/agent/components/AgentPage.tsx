@@ -30,6 +30,7 @@ import { GroupNote } from './ChatSelector';
 import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename';
 import { TrashBanner, TrashDialogs, TrashEntryButton, TrashSnackbar, TrashView } from './TrashView';
 import { ChatTokens, ContextMeter } from './ContextMeter';
+import PlanButton from './PlanButton';
 import TaskButton from './TaskButton';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
@@ -272,7 +273,7 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
 
 /** Head of the open chat: title, run state while something happens, internet switch, context ring and tokens. */
 function ChatHeader() {
-    const { chats, selectedChatId, compacting, taskLists } = useAgent();
+    const { chats, selectedChatId, compacting, taskLists, planLists } = useAgent();
     const sub = useSubagentNav();
     const chat = chats.find((c) => c.id === selectedChatId);
     if (!chat) return null;
@@ -333,6 +334,7 @@ function ChatHeader() {
                 <RunStateChip state={state} since={runSince(chat)} framed />
                 <InternetToggle chat={chat} />
                 <TaskButton tasks={taskLists[chat.id]} />
+                <PlanButton plans={planLists[chat.id]} />
                 <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
                 <ChatTokens chat={chat} />
             </Box>

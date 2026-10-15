@@ -21,6 +21,7 @@ import { isRunning, runSince, runStateOf, runStateText } from '../runState';
 import ChatSelector from './ChatSelector';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
+import PlanButton from './PlanButton';
 import TaskButton from './TaskButton';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
@@ -39,7 +40,7 @@ const headerButtonSx = { width: 36, height: 36, flex: 'none', color: 'rgba(0, 0,
  * content makes room for it (PageContainer).
  */
 export default function AgentContextPanel() {
-    const { status, panelOpen, setPanelOpen, selectedChatId, selectChat, chatsLoaded, chats, compacting, taskLists } = useAgent();
+    const { status, panelOpen, setPanelOpen, selectedChatId, selectChat, chatsLoaded, chats, compacting, taskLists, planLists } = useAgent();
     const navigate = useNavigate();
     const section = sectionOf(useLocation().pathname);
     // live through updateChat of the open ChatView
@@ -102,6 +103,7 @@ export default function AgentContextPanel() {
                     {selected && (
                         <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                             <TaskButton tasks={taskLists[selected.id]} />
+                            <PlanButton plans={planLists[selected.id]} />
                             <Box sx={{ px: '6px', display: 'inline-flex' }}>
                                 <ContextMeter chat={selected} compacting={compacting[selected.id]} />
                             </Box>
