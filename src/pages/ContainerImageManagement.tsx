@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -23,6 +24,7 @@ import ContainerImageDeployDialog from '../components/containers-images/Containe
 import ContainerImagesList from '../components/containers-images/List';
 
 import IContainerImage from '../types/IContainerImage';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import { CONTAINER_IMAGES_PATH } from '../endpoints';
 import NoDataYet from '../components/common/NoDataYet';
 import Loading from '../components/common/Loading';
@@ -62,6 +64,9 @@ export default function ContainerManagement() {
                 });
         }
     };
+
+    // the agent built or removed a container image: show the new list without leaving the page
+    useReloadOnPlatformChange('images', fetchContainerImages);
 
     useEffect(() => {
         fetchContainerImages();

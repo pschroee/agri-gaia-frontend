@@ -21,6 +21,7 @@ import type { CommandNotice } from './commands';
 import { switchFailure } from './modelChoice';
 import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
+import { reportPlatformCall } from './platformChanges';
 import {
     deliveredBubbles,
     emptyQueue,
@@ -405,9 +406,14 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         if (a?.name) setArtifacts((l) => mergeArtifacts(l, [a]));
                         break;
                     }
-                    case 'socket_call':
-                        setSocketCalls((l) => upsert(l, ev.data as SocketCall, (c) => c.id));
+                    case 'socket_call': {
+                        const c = ev.data as SocketCall;
+                        setSocketCalls((l) => upsert(l, c, (x) => x.id));
+                        // a successful write of the agent: the open platform pages load their data again
+                        // (issue #139). Only here, not when the stored socket_calls are loaded: those are old.
+                        reportPlatformCall(c);
                         break;
+                    }
                     case 'queue': {
                         const q = ev.data as QueueEvent;
                         dispatchQueue({ type: 'event', event: q, lastSeq: lastSeq(messagesRef.current) });

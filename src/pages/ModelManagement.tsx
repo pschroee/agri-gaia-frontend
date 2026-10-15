@@ -33,6 +33,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { downloadBlob } from '../util';
 import { usePublishPageSelection } from '../agent/pageSelection';
 import { checkedSelection } from '../agent/pageContext';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 
 export default function ModelManagement() {
     const keycloak = useKeycloak();
@@ -57,6 +58,9 @@ export default function ModelManagement() {
                 console.error(error);
             });
     };
+
+    // the agent changed a model: show the new list without leaving the page
+    useReloadOnPlatformChange('models', fetchModels);
 
     const fetchConnectorInformation = () => {
         httpGet(keycloak, NETWORK_PATH + '/info')
