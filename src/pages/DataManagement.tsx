@@ -10,7 +10,8 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { httpGet, httpPatch } from '../api';
 import useKeycloak from '../contexts/KeycloakContext';
 
@@ -35,9 +36,11 @@ import React from 'react';
 import { downloadBlob } from '../util';
 import DatasetInferenceDialog from '../components/datamanagement/DatasetInferenceDialog';
 import { usePublishPageSelection } from '../agent/pageSelection';
+import { datasetFromQuery } from '../agent/platformLinks';
 
 export default function DataManagement() {
     const keycloak = useKeycloak();
+    const [searchParams] = useSearchParams();
 
     const [datasets, setDatasets] = useState<Array<IDataset>>([]);
     const [username, setUsername] = useState<string | undefined>(undefined);
@@ -51,6 +54,19 @@ export default function DataManagement() {
     usePublishPageSelection(
         datasets.filter((d) => selected.includes(d.id)).map((d) => ({ kind: 'dataset', id: d.id, name: d.name })),
     );
+
+    // A link the agent wrote as /data?dataset=<id> selects that dataset once the list is loaded (issue #118, DL1.4).
+    // The parameter stays in the address; the selection is applied once per parameter value, so a choice the user
+    // makes afterwards stays even when the list refreshes.
+    const appliedDatasetParam = useRef<string | null>(null);
+    useEffect(() => {
+        const param = searchParams.get('dataset') ?? '';
+        if (!param || appliedDatasetParam.current === param) return;
+        const id = datasetFromQuery(searchParams.toString(), datasets.map((d) => d.id));
+        if (id === undefined) return;
+        appliedDatasetParam.current = param;
+        setSelected([id]);
+    }, [datasets, searchParams]);
 
     useEffect(() => {
         fetchConnectorInformation();
