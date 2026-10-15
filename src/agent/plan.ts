@@ -8,6 +8,7 @@
 
 import { AGENT_BASE } from './login';
 import type { TranscriptItem } from './transcript';
+import type { Approval } from './types';
 import { answerSteps } from './answer';
 
 export type PlanState =
@@ -26,6 +27,11 @@ export type PlanStep = {
      * proposed (gateway issue #72): first line the action, then one detail per line. Missing on older plans.
      */
     summary?: string;
+    /**
+     * The same summary as it was proposed (gateway issue L2/#119): set when the re-read at the moment of the approval
+     * found another platform state. The step shows it as "As proposed".
+     */
+    summary_proposed?: string;
     /** The agent's note on the step: not verified by the gateway (gateway issue #72). */
     agent_note?: string;
     /** The same note from a gateway before #72. */
@@ -88,6 +94,15 @@ export const agentNote = (step: PlanStep): string => (step.agent_note ?? step.de
 
 /** "1 step", "2 steps". */
 export const stepCount = (n: number): string => (n === 1 ? '1 step' : `${n} steps`);
+
+/**
+ * Did the platform change behind the summary since it was proposed (gateway issue L2/#119)? Then the card shows the
+ * new summary with a hint and the old one as "As proposed", and the next click decides. Only a pending approval can
+ * be in that state: the gateway keeps the mark until the decision, and a gateway before L2 never sets it.
+ */
+export function summaryChanged(a: Pick<Approval, 'state' | 'summary_changed_at'>): boolean {
+    return a.state === 'pending' && !!a.summary_changed_at;
+}
 
 /** A summary written by the gateway: the action (first line) and its details. */
 export type SummaryParts = { head: string; details: string[] };

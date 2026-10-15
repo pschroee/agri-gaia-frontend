@@ -274,6 +274,13 @@ export type Approval = {
      * agent (gateway issue #72). First line the action, then one detail per line; missing on older entries.
      */
     summary?: string;
+    /**
+     * The same summary as it was proposed, and when a click on "Approve" found another platform state (gateway issue
+     * L2/#119). The card shows the new summary with a hint and this one as "As proposed"; missing while nothing
+     * changed. Only a pending approval can carry them.
+     */
+    summary_proposed?: string;
+    summary_changed_at?: string;
 };
 
 /**

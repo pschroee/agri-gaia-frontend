@@ -16,9 +16,11 @@ import {
     stepMain,
     stepStatus,
     stepTechnical,
+    summaryChanged,
     summaryParts,
 } from './plan';
 import type { Step, TranscriptItem } from './transcript';
+import type { Approval } from './types';
 
 const step = (over: Partial<PlanStep> = {}): PlanStep => ({
     idx: 1,
@@ -166,5 +168,20 @@ describe('gateway summaries (gateway issue #72)', () => {
         expect(summaryParts('A\n\nB')).toEqual({ head: 'A', details: ['B'] });
         expect(stepCount(1)).toBe('1 step');
         expect(stepCount(2)).toBe('2 steps');
+    });
+});
+
+describe('summaryChanged', () => {
+    const approval = (over: Partial<Approval>) =>
+        ({ state: 'pending', ...over }) as Pick<Approval, 'state' | 'summary_changed_at'>;
+
+    it('marks a pending approval whose platform state changed', () => {
+        expect(summaryChanged(approval({ summary_changed_at: '2026-10-13T10:00:00Z' }))).toBe(true);
+    });
+
+    it('is false without a change and for a decided approval', () => {
+        expect(summaryChanged(approval({}))).toBe(false);
+        expect(summaryChanged(approval({ summary_changed_at: '2026-10-13T10:00:00Z', state: 'rejected' }))).toBe(false);
+        expect(summaryChanged(approval({ summary_changed_at: '2026-10-13T10:00:00Z', state: 'approved' }))).toBe(false);
     });
 });

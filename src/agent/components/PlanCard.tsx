@@ -10,6 +10,7 @@
 import { ReactElement, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
@@ -27,6 +28,7 @@ import {
     stepMain,
     stepStatus,
     stepTechnical,
+    summaryChanged,
     STEP_LABEL,
     summaryParts,
     Plan,
@@ -129,6 +131,38 @@ export function SummaryDetails({ details }: { details: string[] }) {
     );
 }
 
+/**
+ * Hint that the platform changed between the proposal and the click (gateway issue L2/#119). The approval stays open
+ * and shows the new summary; the next click decides.
+ */
+export const CHANGED_TEXT =
+    'Changed since it was proposed: the platform now shows other values. Check the summary and approve again.';
+
+export function ChangedAlert() {
+    return (
+        <Alert severity="info" data-testid="agent-approval-changed" sx={{ mt: 1, fontSize: 12.5 }}>
+            {CHANGED_TEXT}
+        </Alert>
+    );
+}
+
+/** The summary as it was proposed (gateway issue L2/#119), collapsed like the technical details. */
+export function ProposedSummary({ summary, testId }: { summary: string; testId?: string }) {
+    const parts = summaryParts(summary);
+    if (!parts) return null;
+    return (
+        <Box component="details" data-testid={testId} sx={{ mt: 0.5 }}>
+            <Box component="summary" sx={{ fontSize: 12, cursor: 'pointer', color: agentColors.muted }}>
+                As proposed
+            </Box>
+            <Box sx={{ mt: 0.5, pl: 1, borderLeft: `2px solid ${agentColors.outline}`, minWidth: 0 }}>
+                <Typography sx={{ fontSize: 12.5, fontWeight: 500, overflowWrap: 'anywhere' }}>{parts.head}</Typography>
+                <SummaryDetails details={parts.details} />
+            </Box>
+        </Box>
+    );
+}
+
 /** Approve and change buttons; both answer the plan's approval (change rejects it). */
 function Decision({ onDecide }: { onDecide: (approve: boolean) => Promise<void> }) {
     const [busy, setBusy] = useState(false);
@@ -198,6 +232,9 @@ function StepItem({ step }: { step: PlanStep }) {
                         {main.head}
                     </Typography>
                     <SummaryDetails details={main.details} />
+                    {step.summary_proposed && (
+                        <ProposedSummary summary={step.summary_proposed} testId="agent-plan-step-proposed" />
+                    )}
                     {note && <AgentText label="Agent's note – not verified" text={note} testId="agent-plan-step-note" />}
                     <Technical text={stepTechnical(step)} testId="agent-plan-step-technical" />
                 </Box>
@@ -256,6 +293,14 @@ export default function PlanCard({
                 ))}
             </Box>
 
+            {canDecide && approval && summaryChanged(approval) && (
+                <>
+                    <ChangedAlert />
+                    {approval.summary_proposed && (
+                        <ProposedSummary summary={approval.summary_proposed} testId="agent-approval-proposed" />
+                    )}
+                </>
+            )}
             {canDecide && approval && onDecide && <Decision onDecide={(approve) => onDecide(approval, approve)} />}
         </Box>
     );

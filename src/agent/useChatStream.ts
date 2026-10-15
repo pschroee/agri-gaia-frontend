@@ -743,8 +743,20 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const runningTools = useMemo(() => controllableTools(running), [running]);
 
     const decide = useCallback(async (approval: Approval, approve: boolean) => {
-        const a = await agentApi.decide(approval.id, approve);
-        setApprovals((l) => upsert(l, a, (x) => x.id));
+        try {
+            const a = await agentApi.decide(approval.id, approve);
+            setApprovals((l) => upsert(l, a, (x) => x.id));
+        } catch (e) {
+            // The platform changed since the approval was proposed (gateway issue L2/#119): the gateway keeps the
+            // approval open and answers with the newly read summary next to the one as proposed. The card shows both
+            // and the next click decides — nothing to report as an error.
+            if (e instanceof AgentApiError && e.status === 409 && e.code === 'summary_changed' && e.approval) {
+                const a = e.approval;
+                setApprovals((l) => upsert(l, a, (x) => x.id));
+                return;
+            }
+            throw e;
+        }
     }, []);
 
     const sendSubagentMessage = useCallback(
