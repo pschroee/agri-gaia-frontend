@@ -105,6 +105,37 @@ describe('bare URLs (autolink)', () => {
     it('never makes a link of a Markdown link with another scheme', () => {
         expect(inlineTokens('[click](javascript:alert(1))').some((t) => t.t === 'link')).toBe(false);
     });
+
+    it('keeps one level of balanced brackets in a Markdown link whole (issue #118)', () => {
+        expect(inlineTokens('[Poker](https://en.wikipedia.org/wiki/Poker_(card_game))')).toEqual([
+            { t: 'link', label: 'Poker', href: 'https://en.wikipedia.org/wiki/Poker_(card_game)' },
+        ]);
+        expect(inlineTokens('[a](https://x.org/a_(b)).')).toEqual([
+            { t: 'link', label: 'a', href: 'https://x.org/a_(b)' },
+            text('.'),
+        ]);
+    });
+
+    it('does not follow a second level of brackets, it leaves the whole thing text', () => {
+        expect(inlineTokens('[a](/data(a(b)))')).toEqual([text('[a](/data(a(b)))')]);
+    });
+
+    it('makes a link to a platform page of this origin internal', () => {
+        expect(inlineTokens('[MNIST](/data?dataset=5)')).toEqual([
+            { t: 'link', label: 'MNIST', href: '/data?dataset=5', internal: true },
+        ]);
+        expect(inlineTokens('[My model](/models/12)')).toEqual([
+            { t: 'link', label: 'My model', href: '/models/12', internal: true },
+        ]);
+    });
+
+    it('keeps the label as text when the target is not a platform page', () => {
+        expect(inlineTokens('[x](/agent/api)')).toEqual([text('x')]);
+        expect(inlineTokens('[x](/ai-agent)')).toEqual([text('x')]);
+        expect(inlineTokens('[x](/unknown)')).toEqual([text('x')]);
+        expect(inlineTokens('[x](//evil.org/y)')).toEqual([text('x')]);
+        expect(inlineTokens('[x](mailto:a@b.org)')).toEqual([text('x')]);
+    });
 });
 
 describe('emphasis', () => {

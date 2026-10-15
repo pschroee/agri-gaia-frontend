@@ -5,12 +5,16 @@
 // Inline forms of a line of an agent answer (Markdown.tsx renders them): code, bold, italic, Markdown links and
 // bare http(s) URLs (GFM autolink literals, issue #61 of the thesis repository). Pure, so it can be unit-tested.
 
+import { platformPath } from './platformLinks';
+
 export type InlineToken =
     | { t: 'text'; s: string }
     | { t: 'code'; s: string }
     | { t: 'bold'; s: string }
     | { t: 'italic'; s: string }
-    | { t: 'link'; label: string; href: string; auto?: boolean };
+    // `auto` marks a bare URL; `internal` a link to a platform page of this origin (issue #118), which
+    // Markdown.tsx renders as a router link in the same tab.
+    | { t: 'link'; label: string; href: string; auto?: boolean; internal?: boolean };
 
 /** Only these schemes become links; anything else stays text. */
 export const isWebUrl = (href: string) => /^https?:\/\/[^\s/?#]+/i.test(href);
@@ -43,9 +47,10 @@ const count = (s: string, c: string) => s.split(c).length - 1;
 
 // code | bold | italic | link | <autolink> | bare URL. Underscores inside a word (snake_case, Card_counting in a URL)
 // do not start or end emphasis, as in CommonMark. A bare URL starts after a non-word character only (not in
-// the middle of "xhttps://…" or a path); backticks and angle brackets end it, as whitespace does.
+// the middle of "xhttps://…" or a path); backticks and angle brackets end it, as whitespace does. The link target
+// keeps one level of balanced brackets, as GFM has it (issue #118, DL1.6), so "…/wiki/Poker_(card_game)" stays whole.
 const INLINE =
-    /(`[^`]+`)|(\*\*[^*]+\*\*|(?<!\w)__[^_]+__(?!\w))|(\*[^*\s][^*]*\*|(?<!\w)_[^_\s][^_]*_(?!\w))|(\[[^\]]+\]\([^)\s]+\))|(<https?:\/\/[^\s<>`]+>)|((?<![\w/@.])https?:\/\/[^\s<>`]+)/gi;
+    /(`[^`]+`)|(\*\*[^*]+\*\*|(?<!\w)__[^_]+__(?!\w))|(\*[^*\s][^*]*\*|(?<!\w)_[^_\s][^_]*_(?!\w))|(\[[^\]]+\]\((?:[^()\s]|\([^()\s]*\))+\))|(<https?:\/\/[^\s<>`]+>)|((?<![\w/@.])https?:\/\/[^\s<>`]+)/gi;
 
 export function inlineTokens(text: string): InlineToken[] {
     const out: InlineToken[] = [];
@@ -84,9 +89,13 @@ export function inlineTokens(text: string): InlineToken[] {
             if (isWebUrl(url)) out.push({ t: 'link', label: url, href: url, auto: true });
             else push(s);
         } else {
-            const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(s);
+            const lm = /^\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)$/.exec(s);
             const href = lm?.[2] ?? '';
+            const platform = href ? platformPath(href) : undefined;
+            // Issue #118: a link to a platform page of this origin stays a link (internal, Markdown.tsx routes it in
+            // the same tab); a foreign scheme or an unknown path leaves only the label as text.
             if (lm && isWebUrl(href)) out.push({ t: 'link', label: lm[1], href });
+            else if (lm && platform) out.push({ t: 'link', label: lm[1], href: platform, internal: true });
             else push(lm?.[1] ?? s);
         }
         last = end;

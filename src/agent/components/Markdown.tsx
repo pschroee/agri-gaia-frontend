@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import { ReactNode } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import Link from '@mui/material/Link';
@@ -99,6 +100,15 @@ function inlineText(text: string, keyBase: string): ReactNode[] {
             case 'italic':
                 return <em key={k}>{inlineText(tok.s, k)}</em>;
             case 'link':
+                // Issue #118: a link to a platform page of this origin is a router link, so it opens in the same tab
+                // without a reload and the chat panel stays open. Everything else keeps opening in a new tab.
+                if (tok.internal) {
+                    return (
+                        <Link key={k} component={RouterLink} to={tok.href}>
+                            {tok.label}
+                        </Link>
+                    );
+                }
                 // A bare URL breaks anywhere, so a long address wraps in the 400 px panel instead of overflowing.
                 return (
                     <Link
