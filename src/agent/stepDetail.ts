@@ -4,7 +4,7 @@
 
 // Details of a tool step, opened below its row in the step list (issue #58): what the agent actually ran and what came
 // back. Pure mapping from a transcript step to blocks the component renders; it shows only what the gateway delivered
-// (secrets stay redacted as they arrive).
+// (secrets the gateway redacts arrive redacted; secrets the user wrote into a command are redacted here, F23).
 
 import { formatBytes } from './files';
 import { approvalEffect, callEffect } from './effect';
@@ -74,6 +74,55 @@ export function clipText(
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
+
+/**
+ * Parts of a key that mark its value as a secret: the gateway's list (`internal/platform/platform.go`, `secretKeys`,
+ * the connector's password, API and edge keys, tokens). The step detail shows the text of a call, which the gateway
+ * does not see as a body and so does not redact (F23, issue L6/#123).
+ */
+export const SECRET_KEYS = [
+    'password',
+    'passwd',
+    'secret',
+    'token',
+    'api_key',
+    'apikey',
+    'edge_key',
+    'private_key',
+    'credential',
+];
+
+/** What stands in place of a redacted value; the same mark the gateway writes (issue L6/#123). */
+export const REDACTED = '[redacted]';
+
+/** Does the key guard a secret? Case-insensitive, and `-` counts as `_` (like the gateway's `isSecretKey`). */
+export function isSecretKey(key: string): boolean {
+    const k = key.toLowerCase().replace(/-/g, '_');
+    return SECRET_KEYS.some((s) => k.includes(s));
+}
+
+/**
+ * Replaces the values of secret-looking keys in a text with `[redacted]`: in JSON (`"password": "…"`) and in
+ * `key=value` and `key: value` pairs (`--token=…`, `api_key: …`), in the command and in the bodies of platform
+ * calls alike (F23, decision DL6.7). The redaction happens when the block is built, so the copy button copies what
+ * stands on screen. Everything else stays as the agent wrote it.
+ */
+export function redactSecrets(text: string): string {
+    if (!text) return text;
+    return (
+        text
+            // JSON: a quoted value behind a quoted key
+            .replace(/("([^"]*)"\s*:\s*)("(?:[^"\\]|\\.)*")/g, (m, head: string, key: string) =>
+                isSecretKey(key) ? head + JSON.stringify(REDACTED) : m,
+            )
+            // key=value and key: value outside quotes (a flag too, and a key with dashes like --edge-key); the
+            // lookbehind keeps JSON keys to the rule above
+            .replace(
+                /(?<!")(-{0,2}[A-Za-z0-9_][A-Za-z0-9_-]*)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;&|)"']+)/g,
+                (m, key: string, sep: string) => (isSecretKey(key) ? key + sep + REDACTED : m),
+            )
+    );
+}
 
 /** JSON value as indented text; text that is JSON gets indented, other text stays as it is. */
 export function prettyJson(v: unknown): string {
@@ -253,6 +302,11 @@ export function platformRequests(step: Step, named: PlatformRequest[]): Platform
         usedNamed.add(i);
         return named[i];
     };
+    // The body as it goes on screen: secrets the user wrote into the call are redacted (F23, issue L6/#123).
+    const bodyOf = (a: Approval | undefined, written: string | undefined): string | undefined => {
+        const text = (a && approvalBody(a)) ?? written;
+        return text === undefined ? undefined : redactSecrets(text);
+    };
     const calls: SocketCall[] = step.platformCalls ?? [];
     const out: PlatformRequest[] = calls.map((c) => {
         const { method, path } = splitCall(c.detail);
@@ -262,8 +316,8 @@ export function platformRequests(step: Step, named: PlatformRequest[]): Platform
         return {
             method: method || undefined,
             path: path || undefined,
-            query: n?.query,
-            body: (approval && approvalBody(approval)) ?? n?.body,
+            query: n?.query?.map(redactSecrets),
+            body: bodyOf(approval, n?.body),
             status: st.text,
             tone: st.tone,
             durationMs: c.duration_ms,
@@ -277,7 +331,8 @@ export function platformRequests(step: Step, named: PlatformRequest[]): Platform
         const approval = takeApproval(r.method, r.path);
         out.push({
             ...r,
-            body: (approval && approvalBody(approval)) ?? r.body,
+            query: r.query?.map(redactSecrets),
+            body: bodyOf(approval, r.body),
             effect: (approval && approvalEffect(approval)) ?? effectOf(r.method, r.path ?? ''),
             // no status: the gateway logged no call; a pending approval says so in its own line
             approval,
@@ -384,7 +439,9 @@ function bashDetail(step: Step, args: Obj): StepDetail {
 
     const blocks: DetailBlock[] = [];
     if (fields.length) blocks.push({ type: 'fields', fields });
-    blocks.push({ type: 'code', label: 'Command', text: command, copy: true });
+    // The command as the user reads it: a secret it carries is redacted (F23, issue L6/#123); what ran stays in
+    // pi's session, which is the record.
+    blocks.push({ type: 'code', label: 'Command', text: redactSecrets(command), copy: true });
     const named = /(^|[\s/;&|(])agw-platform\b/.test(command) ? platformCallsInCommand(command) : [];
     const reqs = platformRequests(
         step,
@@ -512,7 +569,7 @@ function mcpPlatformDetail(step: Step, name: string, args: Obj | undefined): Ste
     );
     // a named tool (platform.list_datasets …) also shows its own arguments
     if (name !== 'mcp_platform_request' && args && Object.keys(args).length)
-        blocks.push({ type: 'code', label: 'Arguments', text: prettyJson(args), copy: true, clip: true });
+        blocks.push({ type: 'code', label: 'Arguments', text: redactSecrets(prettyJson(args)), copy: true, clip: true });
     const out = outputBlock(step, 'Response', formatResponse);
     if (out) blocks.push(out);
     blocks.push(...otherApprovals(step, reqs));
@@ -531,7 +588,7 @@ export function stepDetail(step: Step): StepDetail {
     const dur = formatMs(step.durationMs);
     if (dur) blocks.push({ type: 'fields', fields: [{ label: 'Duration', value: dur }] });
     if (args !== undefined && !(obj && Object.keys(obj).length === 0))
-        blocks.push({ type: 'code', label: 'Arguments', text: prettyJson(args), copy: true, clip: true });
+        blocks.push({ type: 'code', label: 'Arguments', text: redactSecrets(prettyJson(args)), copy: true, clip: true });
     const out = outputBlock(step, 'Result');
     if (out) blocks.push(out);
     blocks.push(...otherApprovals(step, []));
