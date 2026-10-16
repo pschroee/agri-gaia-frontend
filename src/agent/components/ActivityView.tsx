@@ -3,11 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Link from '@mui/material/Link';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import ToggleButton from '@mui/material/ToggleButton';
@@ -16,6 +18,7 @@ import Typography from '@mui/material/Typography';
 
 import {
     activityFigures,
+    activityParams,
     activityQuery,
     activityRows,
     formatDuration,
@@ -85,7 +88,13 @@ const LEGEND: { effect: Effect; text: string }[] = [
  * cover the platform calls of the whole period (never the internet switches), the table the pages loaded so far.
  */
 export default function ActivityView({ refreshKey }: { refreshKey: number }) {
-    const [period, setPeriod] = useState<Period>('7d');
+    const [search] = useSearchParams();
+    // A link from a step detail carries the chat and the tool call of one step (issue L6/#123). It is read once when
+    // the view opens; "Show all" drops it here — the URL keeps it, so a reload shows the same entry again.
+    const [focus, setFocus] = useState(() => activityParams(search.toString()));
+    // The linked call lies where the step ran, which may be outside the default period; the link looks for one entry,
+    // so it starts at all of them.
+    const [period, setPeriod] = useState<Period>(() => (focus.call || focus.chat ? 'all' : '7d'));
     const [kind, setKind] = useState<KindFilter>('all');
     const [outcome, setOutcome] = useState<ActivityOutcome | ''>('');
     const [page, setPage] = useState<ActivityPage>();
@@ -103,7 +112,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         setError(undefined);
         try {
             const [p, approvals] = await Promise.all([
-                agentApi.activity(activityQuery({ period, kind, outcome })),
+                agentApi.activity(activityQuery({ period, kind, outcome, chat: focus.chat, call: focus.call })),
                 agentApi.pendingApprovals().catch(() => [] as Approval[]),
             ]);
             if (gen !== generation.current) return;
@@ -118,7 +127,7 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         } finally {
             if (gen === generation.current) setLoading(false);
         }
-    }, [period, kind, outcome]);
+    }, [period, kind, outcome, focus]);
 
     useEffect(() => {
         void load();
@@ -129,7 +138,9 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
         const gen = generation.current;
         setLoadingMore(true);
         try {
-            const next = await agentApi.activity(activityQuery({ period, kind, outcome, before: page.next_before }));
+            const next = await agentApi.activity(
+                activityQuery({ period, kind, outcome, chat: focus.chat, call: focus.call, before: page.next_before }),
+            );
             if (gen === generation.current) setPage((prev) => (prev ? mergePages(prev, next) : next));
         } catch (e) {
             if (gen === generation.current) setError(e instanceof Error ? e.message : String(e));
@@ -154,6 +165,24 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
 
     return (
         <Box data-testid="agent-activity" sx={{ display: 'grid', gap: 3 }}>
+            {(focus.call || focus.chat) && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                    <Typography data-testid="agent-activity-focus" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                        {focus.call
+                            ? 'Opened from a step: shows the platform calls of this step.'
+                            : 'Opened from a step: shows the platform calls of this chat.'}
+                    </Typography>
+                    <Link
+                        component="button"
+                        type="button"
+                        underline="hover"
+                        onClick={() => setFocus({})}
+                        sx={{ fontSize: 12, color: agentColors.green }}
+                    >
+                        Show all
+                    </Link>
+                </Box>
+            )}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                 <ToggleButtonGroup
                     size="small"
@@ -240,8 +269,11 @@ export default function ActivityView({ refreshKey }: { refreshKey: number }) {
             {page && (
                 <ActivityTable
                     rows={rows}
+                    focus={focus}
                     emptyText={
-                        outcome
+                        focus.call
+                            ? 'This step made no call the activity logs. Older entries of it may have been deleted with their chat.'
+                            : outcome
                             ? `No platform calls with this result ${when}.`
                             : kind === 'internet'
                             ? `No internet switches ${when}.`

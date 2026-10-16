@@ -62,7 +62,17 @@ export function periodSince(period: Period, now = new Date()): Date | undefined 
 
 /** Query string of GET /activity ("?since=…&limit=100"); the time goes as RFC 3339 in UTC without milliseconds. */
 export function activityQuery(
-    opts: { period: Period; kind?: KindFilter; outcome?: ActivityOutcome | ''; before?: number; limit?: number },
+    opts: {
+        period: Period;
+        kind?: KindFilter;
+        outcome?: ActivityOutcome | '';
+        /** One chat (the link from a step detail, issue L6/#123). */
+        chat?: string;
+        /** One tool call: only the calls it produced (same link). */
+        call?: string;
+        before?: number;
+        limit?: number;
+    },
     now = new Date(),
 ): string {
     const q = new URLSearchParams();
@@ -72,9 +82,43 @@ export function activityQuery(
     const since = periodSince(opts.period, now);
     if (since) q.set('since', since.toISOString().replace(/\.\d{3}Z$/, 'Z'));
     if (opts.outcome) q.set('outcome', opts.outcome);
+    if (opts.chat) q.set('chat', opts.chat);
+    if (opts.call) q.set('call', opts.call);
     if (opts.before) q.set('before', String(opts.before));
     q.set('limit', String(opts.limit ?? PAGE_SIZE));
     return `?${q.toString()}`;
+}
+
+/**
+ * Where a step detail links to its own entries in the activity (issue L6/#123, F6). A tool call id is unique, so the
+ * call alone finds the entry; the chat narrows it. The tool call decides which row the view opens.
+ */
+export function activityLinkOf(chatId: string, callId?: string): string {
+    const q = new URLSearchParams({ tab: 'activity' });
+    if (chatId) q.set('chat', chatId);
+    if (callId) q.set('call', callId);
+    return `/ai-agent?${q.toString()}`;
+}
+
+/**
+ * A tool call id the gateway accepts as `?call=` (its `validToolCallID`): at most 256 bytes, no control characters.
+ * The step detail links with the id as pi gave it; a hand-made link with anything else is dropped here instead of
+ * making the gateway answer 400.
+ */
+function usableCallId(id: string): boolean {
+    // eslint-disable-next-line no-control-regex
+    return id.length > 0 && id.length <= 256 && !/[\u0000- \u007f]/.test(id);
+}
+
+/**
+ * The filter a link into the activity carries (issue L6/#123): the chat and/or the tool call of one step. Anything
+ * unusable is left out, so a hand-made link shows the plain activity instead of an error.
+ */
+export function activityParams(search: string): { chat?: string; call?: string } {
+    const q = new URLSearchParams(search);
+    const chat = (q.get('chat') ?? '').trim();
+    const call = (q.get('call') ?? '').trim();
+    return { chat: chat || undefined, call: usableCallId(call) ? call : undefined };
 }
 
 /** Appends the next page: calls without duplicates, chats merged, summary and cursor of the newer page. */

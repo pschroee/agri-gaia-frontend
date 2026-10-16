@@ -14,6 +14,7 @@ import Typography from '@mui/material/Typography';
 import CheckIcon from '@mui/icons-material/Check';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 
+import { activityLinkOf } from '../activity';
 import { copyText } from '../clipboard';
 import { formatClock, formatMs } from '../format';
 import { clipText, stepDetail } from '../stepDetail';
@@ -207,7 +208,8 @@ function ApprovalLine({ approval, standalone }: { approval: Approval; standalone
             ) : approval.kind === 'platform_write' ? (
                 <Link
                     component={RouterLink}
-                    to="/ai-agent?tab=activity"
+                    // Straight to the entries of this call: the activity opens the row of the tool call (issue L6/#123).
+                    to={activityLinkOf(approval.chat_id, approval.tool_call_id)}
                     underline="hover"
                     sx={{ fontSize: 12, color: agentColors.green }}
                 >
