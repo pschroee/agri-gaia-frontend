@@ -59,8 +59,10 @@ export type WatchJob = {
     stopped_by?: 'user' | 'agent';
 };
 
-/** Job states of the gateway. */
+/** Job states of the gateway (`internal/store/watch.go`: JobRunning, JobDone, JobFailed). */
 export const JOB_RUNNING = 'running';
+export const JOB_DONE = 'done';
+export const JOB_FAILED = 'failed';
 
 /** The SSE event "job": a job's new state, with what changed. */
 export type JobEvent = {
@@ -82,7 +84,7 @@ export async function fetchJobs(chatId: string): Promise<WatchJob[]> {
 }
 
 /** The job a tool call started; undefined when none matches. */
-export function jobByToolCall(jobs: WatchJob[], toolCallId: string | undefined): WatchJob | undefined {
+export function jobByToolCall(jobs: readonly WatchJob[], toolCallId: string | undefined): WatchJob | undefined {
     if (!toolCallId) return undefined;
     return jobs.find((j) => j.tool_call_id === toolCallId);
 }

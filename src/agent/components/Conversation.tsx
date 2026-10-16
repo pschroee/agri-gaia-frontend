@@ -17,6 +17,7 @@ import TerminalIcon from '@mui/icons-material/Terminal';
 import { answerSteps } from '../answer';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
+import { deploymentCardsIn } from '../deploymentCard';
 import { outputsByStepPart, placeOutputs } from '../files';
 import { placePlans, plansByPart, pendingIdsOf } from '../plan';
 import type { PlacedPlan, Plan } from '../plan';
@@ -37,6 +38,7 @@ import { compactionReason, formatTokens } from '../usage';
 import { AgentFileMessage, MessageAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
+import DeploymentCard from './DeploymentCard';
 import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
 import type { StepControls } from './StepList';
@@ -256,10 +258,20 @@ export function AgentBlock({
                         </Fragment>
                     );
                 const files = placed.byPart.get(i);
+                // the state of an edge deployment starts behind the group of calls that reported it (edge D-E4)
+                const deployments = deploymentCardsIn(p.steps, planEnv?.jobs ?? []);
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
                         {notebookRuns(p.steps)}
+                        {deployments.map((d) => (
+                            <DeploymentCard
+                                key={d.key}
+                                data={d.data}
+                                job={d.job}
+                                layout={dense ? 'panel' : 'page'}
+                            />
+                        ))}
                         {files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
                         {cards}
                     </Fragment>
