@@ -23,9 +23,7 @@ import {
     attachHint,
     canSend,
     checkSizes,
-    emptyStaged,
     pastedFiles,
-    stagedReducer,
     uploadErrorText,
 } from '../files';
 import type { FreshChat } from '../newChat';
@@ -34,6 +32,7 @@ import { abortErrorText, inputControls, isRunning } from '../runState';
 import type { RunState } from '../runState';
 import { sendTipIdle, sendTipReducer } from '../sendTooltip';
 import { useFileDrop } from '../useFileDrop';
+import { useStagedAttachments } from '../sharedChatStream';
 import { useSlashCommands } from '../useSlashCommands';
 import { useAgentDropTarget } from './AgentDropZone';
 import SlashCommandMenu, { optionId } from './SlashCommandMenu';
@@ -46,9 +45,10 @@ type Props = {
     onSend: (text: string, attachments: string[], context?: PageContext) => Promise<void>;
     /**
      * Uploads files for the agent (button, drag and drop, paste); without it the field takes no files. Called with one
-     * file at a time and a progress callback (share sent so far, 0 to 1).
+     * file at a time, a progress callback (share sent so far, 0 to 1) and the signal that cancels the request when the
+     * user clicks the cross on the tile (issue L4/#121).
      */
-    onUpload?: (files: File[], onProgress?: (share: number) => void) => Promise<Artifact[]>;
+    onUpload?: (files: File[], onProgress?: (share: number) => void, signal?: AbortSignal) => Promise<Artifact[]>;
     /** Size limit per file in MB (gateway config), checked before uploading. */
     maxFileMb?: number;
     /** Chat of the field, for thumbnails of staged images. */
@@ -117,7 +117,10 @@ export default function ChatInput({
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
     const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
-    const [staged, dispatchStaged] = useReducer(stagedReducer, emptyStaged);
+    // Attachments, uploads in flight and the last failure. In the shared store, not in this component: moving
+    // from /ai-agent into the panel remounts the field, and what the user attached must not be lost (issue L4/#121).
+    const attachments = useStagedAttachments(chatId);
+    const { state: staged, dispatch: dispatchStaged } = attachments;
     // key of the selection the user removed with the chip's cross, for the next message only; a new selection
     // shows the chip again
     const [dismissedContext, setDismissedContext] = useState<string>();
@@ -145,7 +148,8 @@ export default function ChatInput({
         if (justSlash && onCommand) onCommandsOpen?.();
     }, [justSlash, onCommand, onCommandsOpen]);
 
-    // one request per file, so each tile shows its own progress ("Uploading 71%", issue #54)
+    // one request per file, so each tile shows its own progress ("Uploading 71%", issue #54); its own controller,
+    // so the cross on the tile can abort it (issue L4/#121)
     const upload = async (files: File[]) => {
         if (!onUpload || files.length === 0) return;
         const { ok, error: tooBig } = checkSizes(files, maxFileMb);
@@ -157,15 +161,21 @@ export default function ChatInput({
                     type: 'upload_start',
                     upload: { id, name: file.name, size: file.size, content_type: file.type || undefined },
                 });
+                const signal = attachments.beginUpload(id);
                 try {
-                    const stored = await onUpload([file], (share) =>
-                        dispatchStaged({ type: 'upload_progress', id, progress: share }),
+                    const stored = await onUpload(
+                        [file],
+                        (share) => dispatchStaged({ type: 'upload_progress', id, progress: share }),
+                        signal,
                     );
                     dispatchStaged({ type: 'upload_done', id, files: stored });
                     // the size note stays visible next to the uploaded files
                     if (tooBig) dispatchStaged({ type: 'refused', error: tooBig });
                 } catch (e) {
+                    // After a cancel the tile is gone and the reducer ignores this report; another failure shows.
                     dispatchStaged({ type: 'upload_failed', id, error: uploadErrorText(e, maxFileMb) });
+                } finally {
+                    attachments.endUpload(id);
                 }
             }),
         );
@@ -388,7 +398,8 @@ export default function ChatInput({
                     chatId={chatId}
                     files={staged.files}
                     uploads={staged.uploads}
-                    onRemove={(name) => dispatchStaged({ type: 'remove', name })}
+                    onRemove={attachments.remove}
+                    onCancel={attachments.cancel}
                 />
                 <InputBase
                     multiline

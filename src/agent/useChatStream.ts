@@ -15,7 +15,7 @@ import {
     toolActionErrorText,
     upsertBackground,
 } from './background';
-import { mergeArtifacts } from './files';
+import { mergeArtifacts, removeArtifact } from './files';
 import { commandErrorText, commandProblem, commandResultText, isBuiltinCommand } from './commands';
 import type { CommandNotice } from './commands';
 import { switchFailure } from './modelChoice';
@@ -46,6 +46,7 @@ import type { Compacting } from './usage';
 import type {
     Approval,
     Artifact,
+    ArtifactKind,
     BackgroundEvent,
     BackgroundTask,
     Chat,
@@ -71,11 +72,10 @@ export type ChatStream = {
     executions: ToolExecution[];
     /** Inputs and outputs of the chat (from the chat, uploads and the SSE event "artifact"). */
     artifacts: Artifact[];
-    /**
-     * Uploads files for the agent; returns the stored inputs. Throws AgentApiError. With onProgress, one file at a
-     * time with its share sent so far.
-     */
-    uploadFiles: (files: File[], onProgress?: (share: number) => void) => Promise<Artifact[]>;
+    /** Uploads files for the agent; returns the stored inputs. Throws AgentApiError. With onProgress, one file at a
+     * time with its share sent so far; `signal` cancels the request (issue L4/#121). The other view drops a card the
+     * user took back with the SSE event `artifact_removed`. */
+    uploadFiles: (files: File[], onProgress?: (share: number) => void, signal?: AbortSignal) => Promise<Artifact[]>;
     /** Queued messages (gateway entries, then the ones still being sent). */
     queue: QueueRow[];
     /** Messages handed to the agent that wait for their stored user message (greyed bubbles at the end of the history). */
@@ -406,6 +406,13 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         if (a?.name) setArtifacts((l) => mergeArtifacts(l, [a]));
                         break;
                     }
+                    case 'artifact_removed': {
+                        // an input the user took back before sending it (issue L4/#121); another view may have
+                        // taken it back, and this one drops its card as well
+                        const r = ev.data as { kind?: ArtifactKind; name?: string };
+                        if (r?.name) setArtifacts((l) => removeArtifact(l, r.kind ?? 'input', r.name as string));
+                        break;
+                    }
                     case 'socket_call': {
                         const c = ev.data as SocketCall;
                         setSocketCalls((l) => upsert(l, c, (x) => x.id));
@@ -540,11 +547,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     );
 
     const uploadFiles = useCallback(
-        async (files: File[], onProgress?: (share: number) => void) => {
+        async (files: File[], onProgress?: (share: number) => void, signal?: AbortSignal) => {
             if (!chatId || files.length === 0) return [];
             const list =
                 onProgress && files.length === 1 && typeof XMLHttpRequest !== 'undefined'
-                    ? await agentApi.uploadFile(chatId, files[0], onProgress)
+                    ? await agentApi.uploadFile(chatId, files[0], onProgress, signal)
                     : await agentApi.uploadFiles(chatId, files);
             const stored = Array.isArray(list) ? list : [];
             setArtifacts((l) => mergeArtifacts(l, stored));

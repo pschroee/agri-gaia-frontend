@@ -150,6 +150,13 @@ with the English labels of `variantLabel`), plus defaults from `GET /config`. Ev
   the queue arrow follows it (as #39). The input shows **no run state** any more (decision: the state stays in the
   header; `StatePlace` has no `input`). Placeholder "Message Agent … (/ for commands)", "Ask about this dataset …" with
   a selection, "Queue another message …" while queueing. Pasting files (a screenshot) attaches them (`pastedFiles`).
+  Attachments (issue L4/#121): every card carries the cross, a file that is still uploading too — it aborts the
+  request (`AbortSignal` into `uploadFile`, the reducer action `upload_cancel` drops the tile and a staged file of
+  the same name, and `DELETE chats/{id}/inputs/{name}` deletes what arrived anyway; late reports of the cancelled
+  request find no tile and change nothing). The cross on an uploaded file takes it back the same way; the gateway's
+  409 `already_sent` (the file went with an earlier message) is ignored, other failures show below the field. The
+  state lives per chat in `StagedStore` (`sharedChat.ts`) beside the draft, not in the component, so moving from
+  `/ai-agent` into the panel keeps the staged files and the uploads in flight; `useStagedAttachments` wires it up.
   Render check: mock as below plus a fake `XMLHttpRequest` subclass for `…/files` (progress held until released), a
   fake `EventSource`, clipboard permissions; compare the transcript's `clientHeight` with the `ki-agents` build (panel
   567 → 572 px, `/ai-agent` 462 → 480 px at 1440 × 900).

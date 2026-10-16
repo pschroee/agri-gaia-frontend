@@ -149,21 +149,34 @@ export const agentApi = {
     /**
      * Uploads one file and reports the share sent so far (0 to 1) for its tile (issue #54). fetch cannot report
      * upload progress, so this goes through XMLHttpRequest; errors are the same AgentApiError as `request`'s.
+     * `signal` cancels the upload (the cross on the tile, gateway issue L4/#121): the request is aborted and the
+     * promise rejects with code "cancelled".
      */
-    uploadFile: (id: string, file: File, onProgress: (share: number) => void) =>
+    uploadFile: (id: string, file: File, onProgress: (share: number) => void, signal?: AbortSignal) =>
         new Promise<Artifact[]>((resolve, reject) => {
+            if (signal?.aborted) {
+                reject(new AgentApiError(0, 'Upload cancelled', 'cancelled'));
+                return;
+            }
             const form = new FormData();
             form.append('file', file, file.name);
             const xhr = new XMLHttpRequest();
+            // the listener goes away with the request, so the signal does not pile up controllers
+            const onAbort = () => xhr.abort();
+            signal?.addEventListener('abort', onAbort);
+            const done = <T,>(f: (v: T) => void) => (v: T) => {
+                signal?.removeEventListener('abort', onAbort);
+                f(v);
+            };
             xhr.open('POST', `${API}/chats/${enc(id)}/files`);
             xhr.withCredentials = true;
             xhr.setRequestHeader('Accept', 'application/json');
             xhr.upload.onprogress = (e) => {
                 if (e.lengthComputable && e.total > 0) onProgress(e.loaded / e.total);
             };
-            xhr.onerror = () => reject(new AgentApiError(0, 'Network error'));
-            xhr.onabort = () => reject(new AgentApiError(0, 'Upload aborted'));
-            xhr.onload = () => {
+            xhr.onerror = done(() => reject(new AgentApiError(0, 'Network error')));
+            xhr.onabort = done(() => reject(new AgentApiError(0, 'Upload cancelled', 'cancelled')));
+            xhr.onload = done(() => {
                 let body: unknown;
                 try {
                     body = JSON.parse(xhr.responseText);
@@ -179,9 +192,16 @@ export const agentApi = {
                 reject(
                     new AgentApiError(xhr.status, b.error || `${xhr.status} ${xhr.statusText}`, b.code, b.details),
                 );
-            };
+            });
             xhr.send(form);
         }),
+    /**
+     * Takes back an input that was not sent with a message (gateway issue L4/#121): row, file and the mirror in the
+     * sandbox go away, so the agent does not see a file the user discarded. 404 for an unknown name, 409
+     * code "already_sent" for a file that went with a message (that one belongs to the history).
+     */
+    removeInput: (id: string, name: string) =>
+        request<void>(`chats/${enc(id)}/inputs/${enc(name)}`, { method: 'DELETE' }),
     /** Slash commands: the gateway's built-in ones and pi's (extensions, prompt templates, skills). */
     commands: (id: string) => request<Command[]>(`chats/${enc(id)}/commands`),
     /**
