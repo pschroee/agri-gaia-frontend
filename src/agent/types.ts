@@ -409,6 +409,11 @@ export type Artifact = {
     tool_call_id?: string;
     /** How the file can be previewed, decided by the gateway from its bytes (issue #74); absent for older artifacts. */
     preview?: 'image' | 'pdf' | 'table' | 'text' | 'none';
+    /**
+     * Inputs only (gateway issue L4/#121): when the file went with a message; absent while it is only staged in the
+     * field and can still be taken back (DELETE chats/{id}/inputs/{name}).
+     */
+    sent_at?: string;
 };
 
 export type ArtifactKind = 'input' | 'output';
@@ -717,6 +722,8 @@ export type ServerEvent =
     | { kind: 'chat'; data: Chat }
     | { kind: 'approval'; data: Approval }
     | { kind: 'artifact'; data: Artifact }
+    /** An input the user took back before sending it (gateway issue L4/#121); other views drop their card. */
+    | { kind: 'artifact_removed'; data: { kind: ArtifactKind; name: string } }
     | { kind: 'socket_call'; data: SocketCall }
     | { kind: 'tool_execution'; data: ToolExecution }
     | { kind: 'queue'; data: QueueEvent }

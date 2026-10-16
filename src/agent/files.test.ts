@@ -2,9 +2,10 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeEach } from 'vitest';
 
 import {
+    alreadySent,
     artifactApprovalView,
     attachHint,
     canSend,
@@ -22,6 +23,8 @@ import {
     placeOutputs,
     previewKind,
     READABLE_FORMATS,
+    removeArtifact,
+    removeErrorText,
     splitAttachments,
     splitFileName,
     stagedReducer,
@@ -30,7 +33,7 @@ import {
     uploadErrorText,
     withAttachments,
 } from './files';
-import { AgentApiError } from './api';
+import { AgentApiError, agentApi } from './api';
 import { emptyQueue, queueReducer, queueRows } from './queue';
 import { buildTranscript } from './transcript';
 import type { Artifact, StoredMessage } from './types';
@@ -204,6 +207,154 @@ describe('stagedReducer', () => {
         const s = stagedReducer(emptyStaged, { type: 'refused', error: 'Too large' });
         expect(s).toEqual({ files: [], uploads: [], error: 'Too large' });
         expect(canSend('  ', s)).toBe(false);
+    });
+});
+
+// Issue L4/#121: the cross on a tile that is still uploading.
+describe('cancelling an upload', () => {
+    const start = (id: string, name = `${id}.csv`) =>
+        ({ type: 'upload_start', upload: { id, name, size: 100 } }) as const;
+
+    it('takes the tile away without an error and lets sending through again', () => {
+        let s = stagedReducer(emptyStaged, start('u1', 'a.csv'));
+        s = stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 0.4 });
+        expect(canSend('', s)).toBe(false);
+        s = stagedReducer(s, { type: 'upload_cancel', id: 'u1' });
+        expect(s.uploads).toEqual([]);
+        expect(s.error).toBeUndefined();
+        expect(canSend('text', s)).toBe(true);
+        // an unknown id changes nothing
+        expect(stagedReducer(s, { type: 'upload_cancel', id: 'x' })).toBe(s);
+    });
+
+    it('takes a staged file of the same name with it (the gateway deleted that input)', () => {
+        let s = stagedReducer(emptyStaged, start('u1', 'a.csv'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv'), art('b.png')] });
+        s = stagedReducer(s, start('u2', 'a.csv'));
+        s = stagedReducer(s, { type: 'upload_cancel', id: 'u2' });
+        expect(s.files.map((f) => f.name)).toEqual(['b.png']);
+    });
+
+    it('ignores what the cancelled request reports afterwards', () => {
+        let s = stagedReducer(emptyStaged, start('u1'));
+        s = stagedReducer(s, { type: 'upload_cancel', id: 'u1' });
+        expect(stagedReducer(s, { type: 'upload_progress', id: 'u1', progress: 0.9 })).toBe(s);
+        expect(stagedReducer(s, { type: 'upload_done', id: 'u1', files: [art('a.csv')] })).toBe(s);
+        expect(stagedReducer(s, { type: 'upload_failed', id: 'u1', error: 'Upload cancelled' })).toBe(s);
+        // a second, current upload of another file is unaffected
+        s = stagedReducer(s, start('u2', 'b.csv'));
+        s = stagedReducer(s, { type: 'upload_done', id: 'u2', files: [art('b.csv')] });
+        expect(s.files.map((f) => f.name)).toEqual(['b.csv']);
+    });
+});
+
+describe('removeArtifact / alreadySent / removeErrorText', () => {
+    it('drops one artifact by kind and name', () => {
+        const list = [art('a.csv'), art('b.csv'), art('a.csv', { kind: 'output' })];
+        const left = removeArtifact(list, 'input', 'a.csv');
+        expect(left.map((a) => `${a.kind}/${a.name}`)).toEqual(['input/b.csv', 'output/a.csv']);
+        expect(removeArtifact(list, 'input', 'gone.csv')).toEqual(list);
+    });
+
+    it('recognises the already_sent answer of the gateway', () => {
+        expect(alreadySent(new AgentApiError(409, 'input already sent', 'already_sent'))).toBe(true);
+        expect(alreadySent(new AgentApiError(404, 'not found'))).toBe(false);
+        expect(alreadySent(undefined)).toBe(false);
+        expect(removeErrorText(new AgentApiError(500, 'boom'), 'a.csv')).toBe('Could not remove a.csv: boom');
+    });
+});
+
+// The upload goes through XMLHttpRequest (progress, issue #54), so a cancelled one can be aborted.
+class FakeXHR {
+    static last?: FakeXHR;
+    upload: { onprogress?: (e: { lengthComputable: boolean; loaded: number; total: number }) => void } = {};
+    status = 0;
+    statusText = 'ERR';
+    responseText = '';
+    aborted = false;
+    sent = false;
+    onload?: () => void;
+    onerror?: () => void;
+    onabort?: () => void;
+    open() {
+        /* the fake ignores both: nothing to prepare */
+    }
+    setRequestHeader() {
+        /* the fake ignores both: nothing to prepare */
+    }
+    send() {
+        this.sent = true;
+        FakeXHR.last = this;
+    }
+    abort() {
+        this.aborted = true;
+        this.onabort?.();
+    }
+    /** Answers as the gateway would (status 201 and the stored artifacts). */
+    answer(status: number, body: unknown) {
+        this.status = status;
+        this.responseText = JSON.stringify(body);
+        this.onload?.();
+    }
+}
+
+const withFakeXHR = async <T>(run: () => Promise<T>): Promise<T> => {
+    const saved = (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest;
+    (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = FakeXHR;
+    try {
+        return await run();
+    } finally {
+        (globalThis as { XMLHttpRequest?: unknown }).XMLHttpRequest = saved;
+    }
+};
+
+describe('uploadFile with a signal', () => {
+    beforeEach(() => {
+        FakeXHR.last = undefined;
+    });
+
+    const file = () => new Blob(['x,y\n']) as unknown as File;
+    const noProgress = () => undefined;
+
+    it('aborts the request when the signal fires and rejects as cancelled', async () => {
+        await withFakeXHR(async () => {
+            const ctrl = new AbortController();
+            const p = agentApi.uploadFile('c1', file(), noProgress, ctrl.signal);
+            expect(FakeXHR.last?.sent).toBe(true);
+            ctrl.abort();
+            await expect(p).rejects.toMatchObject({ code: 'cancelled' });
+            expect(FakeXHR.last?.aborted).toBe(true);
+        });
+    });
+
+    it('refuses at once when the signal is already aborted, without a request', async () => {
+        await withFakeXHR(async () => {
+            const ctrl = new AbortController();
+            ctrl.abort();
+            await expect(agentApi.uploadFile('c1', file(), noProgress, ctrl.signal)).rejects.toMatchObject({
+                code: 'cancelled',
+            });
+            expect(FakeXHR.last).toBeUndefined();
+        });
+    });
+
+    it('reports the stored files and 100 % as before when nothing cancels it', async () => {
+        await withFakeXHR(async () => {
+            const shares: number[] = [];
+            const ctrl = new AbortController();
+            const p = agentApi.uploadFile('c1', file(), (s) => shares.push(s), ctrl.signal);
+            FakeXHR.last?.answer(201, [art('a.csv')]);
+            await expect(p).resolves.toEqual([art('a.csv')]);
+            expect(shares).toEqual([1]);
+        });
+    });
+
+    it('reports a plain failure as before', async () => {
+        await withFakeXHR(async () => {
+            const p = agentApi.uploadFile('c1', file(), noProgress);
+            FakeXHR.last?.answer(413, { error: 'a.csv is larger than 50 MB' });
+            await expect(p).rejects.toMatchObject({ status: 413, message: 'a.csv is larger than 50 MB' });
+        });
     });
 });
 

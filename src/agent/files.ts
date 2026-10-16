@@ -7,7 +7,7 @@
 // as a fixed block (API.md, "Attachments to messages"), which the transcript splits off again.
 // Pure logic, used by ChatInput, useChatStream and Conversation.
 
-import type { Approval, Artifact } from './types';
+import type { Approval, Artifact, ArtifactKind } from './types';
 
 /** Head of the attachments block the gateway appends to a user message (internal/chat/manager.go). */
 export const ATTACHMENTS_HEADER = '[Attachments in /workspace/inputs/]';
@@ -80,6 +80,19 @@ export function uploadErrorText(e: unknown, maxMb: number | undefined): string {
 }
 
 /**
+ * The gateway's 409 code "already_sent" (issue L4/#121): the input went with a message and stays with the history.
+ * Taking it back from the field is then still fine, only the file stays for the agent.
+ */
+export function alreadySent(e: unknown): boolean {
+    return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'already_sent';
+}
+
+/** Text of a "take back" that failed; the file's name goes first, so the line names what is still with the agent. */
+export function removeErrorText(e: unknown, name: string): string {
+    return `Could not remove ${name}: ${e instanceof Error ? e.message : String(e)}`;
+}
+
+/**
  * Size check before uploading: files above the gateway's limit per file (artifact_max_mb) are left out and named
  * with their size. Without a known limit everything goes; the gateway checks again. Empty files are allowed.
  */
@@ -115,8 +128,16 @@ export type StagedAction =
     /** Uploaded: replaces staged files of the same name (the gateway overwrites the input as well). */
     | { type: 'upload_done'; id: string; files: Artifact[] }
     | { type: 'upload_failed'; id: string; error: string }
+    /**
+     * The user cancelled an upload (issue L4/#121): the tile goes, and so does a staged file of the same name (the
+     * upload was to replace it, and the input of that name is gone in the gateway as well). Late reports of the
+     * request (progress, done, failed) find no tile any more and change nothing.
+     */
+    | { type: 'upload_cancel'; id: string }
     /** Files refused before uploading (size check); the others go on. */
     | { type: 'refused'; error: string }
+    /** A remove or a cancel that failed in the gateway; shown below the field. */
+    | { type: 'error'; error: string }
     | { type: 'remove'; name: string }
     /** Sent: the attachments went with the message. */
     | { type: 'clear' }
@@ -146,10 +167,26 @@ export function stagedReducer(state: StagedState, action: StagedAction): StagedS
             };
         }
         case 'upload_done':
+            // A tile that is no longer there (cancelled meanwhile): the answer arrives too late and is ignored — the
+            // gateway deletes the file that did arrive (DELETE …/inputs/{name}, issue L4/#121).
+            if (!state.uploads.some((u) => u.id === action.id)) return state;
             return { ...state, uploads: without(state.uploads, action.id), files: mergeByName(state.files, action.files) };
         case 'upload_failed':
+            if (!state.uploads.some((u) => u.id === action.id)) return state;
             return { ...state, uploads: without(state.uploads, action.id), error: action.error };
+        case 'upload_cancel': {
+            const u = state.uploads.find((x) => x.id === action.id);
+            if (!u) return state;
+            return {
+                ...state,
+                uploads: without(state.uploads, action.id),
+                files: state.files.filter((f) => f.name !== u.name),
+                error: undefined,
+            };
+        }
         case 'refused':
+            return { ...state, error: action.error };
+        case 'error':
             return { ...state, error: action.error };
         case 'remove':
             return { ...state, files: state.files.filter((f) => f.name !== action.name), error: undefined };
@@ -206,6 +243,11 @@ export function mergeArtifacts(list: Artifact[], add: Artifact[]): Artifact[] {
     const key = (a: Artifact) => `${a.kind}/${a.name}`;
     const keys = new Set(add.map(key));
     return [...list.filter((a) => !keys.has(key(a))), ...add];
+}
+
+/** Takes one artifact out of the list (SSE event "artifact_removed", issue L4/#121). */
+export function removeArtifact(list: Artifact[], kind: ArtifactKind, name: string): Artifact[] {
+    return list.filter((a) => a.kind !== kind || a.name !== name);
 }
 
 /**
