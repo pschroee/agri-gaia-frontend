@@ -45,6 +45,40 @@ export function isAbortedAnswer(msg: Pick<PiMessage, 'stopReason' | 'errorMessag
 }
 
 /**
+ * Why a turn was aborted, as the gateway records it (`chat_turns.abort_reason`, issue #120). The keys are the
+ * gateway's; the texts are the ones the interface shows.
+ */
+export type AbortReason = 'user' | 'trash' | 'time_limit' | 'turn_limit' | 'subagent_limit';
+
+/**
+ * Label of a stopped step or run (issue #120, F9, DL3.7): the reason decides, so "stopped by you" stands only when
+ * the user really stopped. Without a reason (rows from before this change, subagent runs without `stopped_by`) it
+ * says just "stopped" — nothing the data does not carry.
+ */
+export function abortLabel(reason?: string): string {
+    switch (reason) {
+        case 'user':
+            return 'stopped by you';
+        case 'trash':
+            return 'stopped (moved to trash)';
+        case 'time_limit':
+            return 'stopped (time limit)';
+        case 'turn_limit':
+            return 'stopped (limit of turns without you)';
+        case 'subagent_limit':
+            return 'stopped (subagent limit)';
+        default:
+            return 'stopped';
+    }
+}
+
+/** The same for the closing line under an aborted answer ("Stopped by you" …), first letter capitalised. */
+export function abortLineText(reason?: string): string {
+    const label = abortLabel(reason);
+    return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+/**
  * Status of a stored tool call. `result` is pi's tool result (missing while it runs or when it never ended);
  * `answerAborted`: the answer that requested the call was aborted.
  */
@@ -89,6 +123,12 @@ export type Step = {
     approvals?: Approval[];
     /** Output so far of a running call (pi's tool_execution_update, live only). */
     partial?: string;
+    /**
+     * Why the call was stopped (issue #120): the reason of the turn for an `aborted` step, or `subagent_limit` for a
+     * subagent's step whose run the gateway ended. Missing where nothing recorded a reason — the label then says just
+     * "stopped" instead of claiming the user did it.
+     */
+    abortReason?: string;
 };
 
 /** Thinking of the model. id identifies the block across live and stored message (for its open state). */
@@ -116,7 +156,7 @@ export type TranscriptItem =
     | { kind: 'user'; key: string; seq?: number; at?: string; text: string; files?: string[]; context?: PageContext }
     /** note: a background task's end, parsed for the compact line (gateway type "background"). */
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }
-    /** stopped: the answer was aborted by the user (shown muted, not as an error). */
+    /** stopped: the answer was aborted (shown muted, not as an error); abortReason: why (issue #120). */
     | {
           kind: 'agent';
           key: string;
@@ -126,6 +166,9 @@ export type TranscriptItem =
           parts: AgentPart[];
           error?: string;
           stopped?: boolean;
+          /** Reason of the aborted turn ("user", "trash", "time_limit", "turn_limit", "subagent_limit"); missing on
+           *  rows from before issue #120, and for a subagent's run ended by the limit (see SubagentRun.stoppedBy). */
+          abortReason?: string;
           usage?: AnswerUsage;
       }
     | {
@@ -311,7 +354,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
     // stored messages of each agent block, for its tokens
     const answerRows = new Map<Extract<TranscriptItem, { kind: 'agent' }>, StoredMessage[]>();
 
-    const stepFor = (id: string, name: string, args: unknown, answerAborted: boolean): Step => {
+    const stepFor = (id: string, name: string, args: unknown, answerAborted: boolean, abortReason?: string): Step => {
         const res = results.get(id);
         const status = stepStatus(res, {
             blocked: blocked.has(id),
@@ -333,6 +376,8 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
             platformCalls: platformByCall.get(id),
             approvals: approvalsByCall.get(id),
             partial: !res && status === 'running' ? ctx.partials?.[id] : undefined,
+            // only an aborted step has a reason to show (issue #120)
+            abortReason: status === 'aborted' ? abortReason : undefined,
         };
     };
 
@@ -428,12 +473,15 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                 const durationMs = thinkingDuration(ctx.thinkingTimes?.[id]);
                 cur.parts.push({ type: 'thinking', id, text: b.thinking, durationMs });
             } else if (b.type === 'toolCall') {
-                pushStep(cur.parts, stepFor(b.id, b.name, b.arguments, aborted));
+                pushStep(cur.parts, stepFor(b.id, b.name, b.arguments, aborted, m.abort_reason));
             }
         });
-        // an answer the user stopped is no error: a muted note instead of "Error: This operation was aborted"
-        if (aborted) agent.stopped = true;
-        else if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
+        // an answer that was stopped is no error: a muted note instead of "Error: This operation was aborted".
+        // The reason (issue #120) names who or what stopped it; without one it says just "Stopped".
+        if (aborted) {
+            agent.stopped = true;
+            agent.abortReason = m.abort_reason;
+        } else if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
     }
     for (const [item, rows] of answerRows) item.usage = answerUsage(rows);
     return items;

@@ -234,6 +234,11 @@ export type StoredMessage = {
     origin?: 'user' | 'system' | 'mixed';
     /** Parts of a user message in order (gateway notes and user text); set with origin system or mixed. */
     sources?: MessageSource[];
+    /**
+     * Why the turn this message belongs to was aborted (gateway issue #120), on every message of that turn. Missing
+     * on rows from before this change and for turns that were not aborted (see AbortReason in transcript.ts).
+     */
+    abort_reason?: 'user' | 'trash' | 'time_limit' | 'turn_limit' | 'subagent_limit';
 };
 
 /** Part of a user message: a note of the gateway (type background, sandbox, language) or user text. */
@@ -539,6 +544,11 @@ export type SubagentRunMeta = {
     parent_run_id?: string;
     /** The run this one continues (a resume or restart after a message, issue #81); set by the gateway only. */
     continues_run_id?: string;
+    /**
+     * Who stopped the run (gateway issue #120): "user" over the stop route, "limit" when the orchestrator ended it
+     * because too many subagents ran at the same time. Missing: not stopped, or no reason recorded.
+     */
+    stopped_by?: string;
     started_at?: string;
     ended_at?: string;
     updated_at: string;
@@ -566,6 +576,8 @@ export type SubagentRunSummary = {
     continues_run_id?: string;
     /** Whether the user can write to the run now (issue #82). */
     message_state?: SubagentMessageState;
+    /** Who stopped the run (gateway issue #120): "user" or "limit". The history tells "stopped" from "ended" by it. */
+    stopped_by?: string;
 };
 
 /** Model call recorded at the LLM proxy (subset); main: the main session's answer, otherwise subagent or compaction. */

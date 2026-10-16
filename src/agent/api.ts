@@ -22,6 +22,7 @@ import type {
     SendResult,
     SubagentMessage,
     SubagentMessageMode,
+    SubagentRunMeta,
     SubagentRunSummary,
     ToolExecution,
     TrashList,
@@ -275,6 +276,13 @@ export const agentApi = {
             `chats/${enc(id)}/subagent-runs/${enc(run)}/messages`,
             { text },
         ),
+    /**
+     * Stops one running subagent without stopping the chat (gateway issue #120). 202 with the run, which carries
+     * `stopped_by: "user"` and goes out over SSE as well. 404 foreign, unknown or unsafe run; 409 with `code`
+     * `not_running`, `chat_in_trash` or `subagents_unavailable` (or the code pi-subagents answered with).
+     */
+    stopSubagent: (id: string, run: string) =>
+        post<{ run: SubagentRunMeta }>(`chats/${enc(id)}/subagent-runs/${enc(run)}/stop`),
     /** Moves a chat to the trash: stops its work, keeps its history (issue #76). Idempotent. */
     trashChat: (id: string) => post<Chat>(`chats/${enc(id)}/trash`),
     /** Takes a chat back out of the trash; it does not wake up. */
