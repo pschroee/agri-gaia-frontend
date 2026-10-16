@@ -1,0 +1,267 @@
+// @vitest-environment jsdom
+// SPDX-FileCopyrightText: 2026 Philipp Schröer
+//
+// SPDX-License-Identifier: MIT
+
+// Smoke tests of the plan card (A-E4): the chip and the controls per state, the confirmation before a cancel, the
+// stop button of a running job, the embedded approval of a step the plan does not cover and the log as plain text.
+// The wording itself is checked in planText.test.ts; here the card only has to put it together.
+
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import type { WatchJob } from '../jobs';
+import type { Plan, PlanStep } from '../plan';
+import type { Approval } from '../types';
+import PlanCard from './PlanCard';
+
+afterEach(cleanup);
+
+const step = (over: Partial<PlanStep> = {}): PlanStep => ({
+    idx: 1,
+    method: 'POST',
+    path: '/datasets',
+    effect: 'write',
+    covered: true,
+    state: 'open',
+    ...over,
+});
+
+const plan = (over: Partial<Plan> = {}): Plan =>
+    ({
+        id: 'p1',
+        chat_id: 'c1',
+        via: 'cli',
+        state: 'approved',
+        mode: 'autonomous',
+        created_at: '2026-10-16T12:00:00.000Z',
+        decided_at: '2026-10-16T12:00:30.000Z',
+        budget: { max_duration_s: 7200, max_llm_cost: 1.5, max_auto_turns: 20 },
+        usage: { llm_cost: 0.42, auto_turns: 3, compute_used: 1, compute_max: 3 },
+        steps: [
+            step({ idx: 1, state: 'done' }),
+            step({ idx: 2, state: 'running', started_at: '2026-10-16T12:00:00.000Z' }),
+        ],
+        ...over,
+    } as Plan);
+
+const job = (over: Partial<WatchJob> = {}): WatchJob => ({
+    id: 'j1',
+    chat_id: 'c1',
+    kind: 'training',
+    state: 'running',
+    ...over,
+});
+
+const approval = (over: Partial<Approval> = {}): Approval =>
+    ({
+        id: 'a1',
+        chat_id: 'c1',
+        kind: 'platform_write',
+        via: 'cli',
+        name: 'POST /models',
+        size: 1,
+        sha256: '',
+        content_type: 'application/json',
+        state: 'pending',
+        created_at: '2026-10-16T12:00:00.000Z',
+        ...over,
+    } as Approval);
+
+describe('the state chip and the controls per state (L1)', () => {
+    it('a running plan can be paused and cancelled, but not resumed', () => {
+        render(<PlanCard plan={plan()} onControl={vi.fn()} />);
+        expect(screen.getByTestId('agent-plan-chip').textContent).toBe('Running');
+        expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
+    });
+
+    it('a paused plan can be resumed, a budget pause only cancelled', () => {
+        const { unmount } = render(
+            <PlanCard plan={plan({ state: 'paused', pause_reason: 'user' })} onControl={vi.fn()} />,
+        );
+        expect(screen.getByRole('button', { name: 'Resume' })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+        unmount();
+
+        render(<PlanCard plan={plan({ state: 'paused', pause_reason: 'budget_turns' })} onControl={vi.fn()} />);
+        expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+        expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
+    });
+
+    it('an ended plan carries no controls at all', () => {
+        for (const state of ['completed', 'failed', 'cancelled'] as const) {
+            const { unmount } = render(
+                <PlanCard plan={plan({ state, ended_at: '2026-10-16T12:41:00.000Z' })} onControl={vi.fn()} />,
+            );
+            expect(screen.queryByRole('button', { name: 'Pause' })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
+            expect(screen.queryByRole('button', { name: 'Cancel plan' })).toBeNull();
+            unmount();
+        }
+    });
+
+    it('the panel draws the controls as named icon buttons', () => {
+        render(<PlanCard plan={plan()} layout="panel" onControl={vi.fn()} />);
+        expect(screen.getByRole('button', { name: 'Pause plan' })).toBeTruthy();
+        expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
+    });
+
+    it('a step waiting for the user reads as "Needs input"', () => {
+        const p = plan({ steps: [step({ idx: 1, parked_approval: 'a1' })] });
+        render(<PlanCard plan={p} pending={new Set(['a1'])} onControl={vi.fn()} />);
+        expect(screen.getByTestId('agent-plan-chip').textContent).toBe('Needs input');
+    });
+});
+
+describe('the cancel dialog', () => {
+    it('asks first and calls cancel only after the confirmation', async () => {
+        const onControl = vi.fn(async () => undefined);
+        render(<PlanCard plan={plan()} onControl={onControl} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }));
+
+        const dialog = await screen.findByRole('dialog');
+        expect(within(dialog).getByText('Cancel plan?')).toBeTruthy();
+        expect(onControl).not.toHaveBeenCalled();
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel plan' }));
+        await screen.findByTestId('agent-plan-card');
+        expect(onControl).toHaveBeenCalledWith('cancel', undefined);
+    });
+
+    it('"Keep running" leaves the plan alone', async () => {
+        const onControl = vi.fn(async () => undefined);
+        render(<PlanCard plan={plan()} onControl={onControl} />);
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel plan' }));
+        const dialog = await screen.findByRole('dialog');
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Keep running' }));
+        expect(onControl).not.toHaveBeenCalled();
+    });
+});
+
+describe('the progress of a step (D2.4, D4.6)', () => {
+    it('shows the percent, the platform line and the time left', () => {
+        render(
+            <PlanCard
+                plan={plan({
+                    steps: [
+                        step({
+                            idx: 1,
+                            state: 'running',
+                            started_at: new Date(Date.now() - 60_000).toISOString(),
+                            progress: 48,
+                            progress_msg: 'Epoch 5/10 · loss 0.142',
+                        }),
+                    ],
+                })}
+                onControl={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('48 %')).toBeTruthy();
+        expect(screen.getByText(/Epoch 5\/10 · loss 0.142/)).toBeTruthy();
+        expect(screen.getByText(/Runtime 1 min · time left unknown/)).toBeTruthy();
+    });
+
+    it('stops the job only while it runs, and only for a step that observes one (D2.9)', () => {
+        const p = plan({ steps: [step({ idx: 1, state: 'waiting', watch_job: 'j1' })] });
+        const { unmount } = render(
+            <PlanCard plan={p} jobs={[job({ id: 'j1', state: 'running' })]} onControl={vi.fn()} />,
+        );
+        expect(screen.getByTestId('agent-plan-stop-job')).toBeTruthy();
+        unmount();
+
+        render(<PlanCard plan={p} jobs={[job({ id: 'j1', state: 'done' })]} onControl={vi.fn()} />);
+        expect(screen.queryByTestId('agent-plan-stop-job')).toBeNull();
+    });
+
+    it('the stop button reports the step it belongs to', async () => {
+        const onControl = vi.fn(async () => undefined);
+        render(
+            <PlanCard
+                plan={plan({ steps: [step({ idx: 3, state: 'waiting', watch_job: 'j1' })] })}
+                jobs={[job({ id: 'j1', state: 'running' })]}
+                onControl={onControl}
+            />,
+        );
+        fireEvent.click(screen.getByTestId('agent-plan-stop-job'));
+        await screen.findByTestId('agent-plan-card');
+        expect(onControl).toHaveBeenCalledWith('stop', 3);
+    });
+});
+
+describe('the log tail', () => {
+    it('shows the lines of the job as plain text, never as markup', () => {
+        render(
+            <PlanCard
+                plan={plan({ steps: [step({ idx: 1, state: 'waiting', watch_job: 'j1' })] })}
+                jobs={[job({ id: 'j1', state: 'running', log_tail: 'epoch 1\n<b>bold</b>' })]}
+                onControl={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId('agent-plan-log-toggle'));
+        const log = screen.getByTestId('agent-plan-log');
+        expect(log.textContent).toContain('<b>bold</b>');
+        expect(log.querySelector('b')).toBeNull();
+    });
+});
+
+describe('the embedded approval of a step the plan does not cover (D2.8)', () => {
+    const parked = plan({ steps: [step({ idx: 4, covered: false, effect: 'irreversible', parked_approval: 'a1' })] });
+
+    it('is shown and calls back with the step approval', async () => {
+        const onDecide = vi.fn(async () => undefined);
+        render(
+            <PlanCard
+                plan={parked}
+                approvals={[approval()]}
+                pending={new Set(['a1'])}
+                onDecide={onDecide}
+                onControl={vi.fn()}
+            />,
+        );
+        fireEvent.click(screen.getByTestId('agent-plan-step-approve'));
+        await screen.findByTestId('agent-plan-card');
+        expect(onDecide).toHaveBeenCalledWith(expect.objectContaining({ id: 'a1' }), true);
+    });
+
+    it('without a pending approval of that step there is no embedded approval', () => {
+        render(<PlanCard plan={parked} approvals={[approval({ state: 'approved' })]} onControl={vi.fn()} />);
+        expect(screen.queryByTestId('agent-plan-step-approval')).toBeNull();
+    });
+});
+
+describe('the created objects (L4)', () => {
+    it('links every object to its platform page', () => {
+        render(
+            <PlanCard
+                plan={plan({
+                    state: 'completed',
+                    ended_at: '2026-10-16T12:41:00.000Z',
+                    steps: [
+                        step({
+                            idx: 1,
+                            state: 'done',
+                            outputs: [
+                                { resource: 'dataset', id: '7' },
+                                { resource: 'model', id: '12' },
+                            ],
+                        }),
+                    ],
+                })}
+                onControl={vi.fn()}
+            />,
+        );
+        const links = within(screen.getByTestId('agent-plan-created')).getAllByRole('link');
+        expect(links.map((l) => l.getAttribute('href'))).toEqual(['/data?dataset=7', '/models/12']);
+    });
+});
+
+describe('the card as a group', () => {
+    it('is announced with its number of steps and its state (accessibility)', () => {
+        render(<PlanCard plan={plan({ state: 'paused', pause_reason: 'login' })} onControl={vi.fn()} />);
+        const card = screen.getByTestId('agent-plan-card');
+        expect(card.getAttribute('aria-label')).toBe('Plan, 2 steps: Paused');
+        expect(card.getAttribute('data-plan-state')).toBe('paused');
+    });
+});
