@@ -28,6 +28,8 @@ import type { Chat } from '../types';
 import { useChatSubagentGroups } from '../useChatSubagentGroups';
 import { useSubagentNav } from '../useSubagentNav';
 import { useRenameChat } from '../useRenameChat';
+import { activePlan, pendingIdsOf } from '../plan';
+import { scrollToPlanCard } from '../planRegistry';
 import { useTrashActions } from '../useTrash';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
@@ -37,6 +39,7 @@ import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename
 import { TrashBanner, TrashDialogs, TrashEntryButton, TrashSnackbar, TrashView } from './TrashView';
 import { ChatTokens, ContextMeter } from './ContextMeter';
 import PlanButton from './PlanButton';
+import PlanIndicator from './PlanIndicator';
 import TaskButton from './TaskButton';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
@@ -350,11 +353,13 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
 
 /** Head of the open chat: title, run state while something happens, internet switch, context ring and tokens. */
 function ChatHeader() {
-    const { chats, selectedChatId, compacting, taskLists, planLists } = useAgent();
+    const { chats, selectedChatId, compacting, taskLists, planLists, pendingApprovals } = useAgent();
     const sub = useSubagentNav();
     const chat = chats.find((c) => c.id === selectedChatId);
     if (!chat) return null;
     const state = runStateOf(chat);
+    // the plan the chat runs (A-E4): a compact display, the controls live in the card (D4.2)
+    const shownPlan = activePlan(planLists[chat.id] ?? [], Date.now());
     return (
         <Box
             data-testid="agent-chat-header"
@@ -410,6 +415,12 @@ function ChatHeader() {
                 {/* the same chip as in the panel header, only while something happens (issue #35) */}
                 <RunStateChip state={state} since={runSince(chat)} framed />
                 <InternetToggle chat={chat} />
+                <PlanIndicator
+                    plan={shownPlan}
+                    variant="page"
+                    pending={pendingIdsOf(pendingApprovals)}
+                    onShow={() => shownPlan && scrollToPlanCard(shownPlan.id)}
+                />
                 <TaskButton tasks={taskLists[chat.id]} />
                 <PlanButton plans={planLists[chat.id]} />
                 <ContextMeter chat={chat} compacting={compacting[chat.id]} label />

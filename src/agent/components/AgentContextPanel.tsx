@@ -17,12 +17,15 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { useAgent } from '../AgentContext';
 import { expandToAgentPage } from '../expand';
 import { sectionOf } from '../format';
+import { activePlan, pendingIdsOf } from '../plan';
+import { scrollToPlanCard } from '../planRegistry';
 import { isRunning, runSince, runStateOf, runStateText } from '../runState';
 import ChatSelector from './ChatSelector';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
 import PlanButton from './PlanButton';
 import TaskButton from './TaskButton';
+import PlanIndicator from './PlanIndicator';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
 import SignInNotice from './SignInNotice';
@@ -40,12 +43,28 @@ const headerButtonSx = { width: 36, height: 36, flex: 'none', color: 'rgba(0, 0,
  * content makes room for it (PageContainer).
  */
 export default function AgentContextPanel() {
-    const { status, panelOpen, setPanelOpen, selectedChatId, selectChat, chatsLoaded, chats, compacting, taskLists, planLists } = useAgent();
+    const {
+        status,
+        panelOpen,
+        setPanelOpen,
+        selectedChatId,
+        selectChat,
+        chatsLoaded,
+        chats,
+        compacting,
+        taskLists,
+        planLists,
+        pendingApprovals,
+    } = useAgent();
     const navigate = useNavigate();
     const section = sectionOf(useLocation().pathname);
     // live through updateChat of the open ChatView
     const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
     const selectedState = runStateOf(selected);
+    // the plan the header shows: an autonomous plan that runs, waits or ended a moment ago (D4.2)
+    const plans = selected ? planLists[selected.id] ?? [] : [];
+    const shownPlan = activePlan(plans, Date.now());
+    const pendingIds = pendingIdsOf(pendingApprovals);
 
     return (
         <Drawer
@@ -81,10 +100,7 @@ export default function AgentContextPanel() {
                         borderColor: 'divider',
                     }}
                 >
-                    <AutoAwesomeIcon
-                        aria-label="Agent"
-                        sx={{ fontSize: 24, color: agentColors.green, flex: 'none' }}
-                    />
+                    <AutoAwesomeIcon aria-label="Agent" sx={{ fontSize: 24, color: agentColors.green, flex: 'none' }} />
                     {/* during a run the "Agent" label gives its room to the state chip with the timer */}
                     {!(selectedState && isRunning(selectedState)) && (
                         <Typography
@@ -96,12 +112,22 @@ export default function AgentContextPanel() {
                     {/* the chip is the part of the header that gives way on long runs; the close button always stays */}
                     {/* only while something happens (issue #35): no chip for a ready chat */}
                     {runStateText(selectedState, 'header') && (
-                        <Box data-testid="agent-panel-state" sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}>
+                        <Box
+                            data-testid="agent-panel-state"
+                            sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}
+                        >
                             <RunStateChip state={selectedState} since={runSince(selected)} framed />
                         </Box>
                     )}
                     {selected && (
                         <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                            {/* the plan the chat runs (A-E4): a compact display, the controls live in the card (D4.2) */}
+                            <PlanIndicator
+                                plan={shownPlan}
+                                variant="panel"
+                                pending={pendingIds}
+                                onShow={() => shownPlan && scrollToPlanCard(shownPlan.id)}
+                            />
                             <TaskButton tasks={taskLists[selected.id]} />
                             <PlanButton plans={planLists[selected.id]} />
                             <Box sx={{ px: '6px', display: 'inline-flex' }}>
@@ -159,12 +185,7 @@ export default function AgentContextPanel() {
                 ) : (
                     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
                         {selectedChatId ? (
-                            <ChatView
-                                key={selectedChatId}
-                                chatId={selectedChatId}
-                                dense
-                                header={<ChatSelector />}
-                            />
+                            <ChatView key={selectedChatId} chatId={selectedChatId} dense header={<ChatSelector />} />
                         ) : (
                             <Box sx={{ p: 2, display: 'grid', gap: 1.5 }}>
                                 <ChatSelector />
