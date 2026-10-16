@@ -15,6 +15,7 @@ import type {
     SubagentMessageMode,
     SubagentMessageState,
     SubagentRunMeta,
+    SubagentRunSummary,
     ToolExecution,
 } from './types';
 
@@ -43,6 +44,12 @@ export type SubagentRun = {
     latest?: string;
     /** Whether the user can write to the run now (issue #82); missing from older gateways. */
     messageState?: SubagentMessageState;
+    /**
+     * Who stopped the run (issue #120): "user" over the stop route, "limit" when the gateway ended it because too
+     * many subagents ran at the same time. Missing: not stopped, or no reason recorded. A thread takes it from its
+     * newest run, like its state.
+     */
+    stoppedBy?: string;
 };
 
 /** The runs of a thread (the run itself and its continuations); a single run is its own thread. */
@@ -132,6 +139,7 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
             r.continues = m.continues_run_id || undefined;
             r.piRunId = m.pi_run_id || undefined;
             r.messageState = m.message_state || undefined;
+            r.stoppedBy = m.stopped_by || undefined;
             if (started && started < r.start) r.start = started;
             if (ended > r.end) r.end = ended;
         } else if (started) {
@@ -143,6 +151,7 @@ export function groupRuns(entries: SubagentEntry[], meta: SubagentRunMeta[] = []
                 continues: m.continues_run_id || undefined,
                 piRunId: m.pi_run_id || undefined,
                 messageState: m.message_state || undefined,
+                stoppedBy: m.stopped_by || undefined,
                 entries: [],
                 start: started,
                 end: Math.max(started, ended),
@@ -201,6 +210,7 @@ export function foldContinuations(runs: SubagentRun[]): SubagentRun[] {
                 latest: newest.runId,
                 piRunId: newest.piRunId,
                 messageState: newest.messageState,
+                stoppedBy: newest.stoppedBy,
                 state: newest.state,
                 end: Math.max(...all.map((r) => r.end)),
                 toolCalls: entries.filter((e) => e.kind === 'tool_call').length,
@@ -214,9 +224,15 @@ export type RunStatus = 'running' | 'idle' | 'done' | 'failed' | 'stopped';
 /** Without news for this long, a run without a state counts as quiet while the chat works. */
 export const RUN_IDLE_MS = 90_000;
 
-const RUNNING_STATES = new Set(['running', 'queued', 'pending', 'starting', 'active', 'waiting', 'paused']);
+// "stopping" belongs here: pi-subagents reports it between a stop and the end of the run, and while it stands the
+// run is still winding down — the UI keeps showing its state chip and the stop control (issue #120, halt note of
+// the plan: pi-subagents reports a state the list did not know).
+const RUNNING_STATES = new Set(['running', 'queued', 'pending', 'starting', 'active', 'waiting', 'paused', 'stopping']);
 const DONE_STATES = new Set(['complete', 'completed', 'done', 'succeeded', 'success']);
 const FAILED_STATES = new Set(['failed', 'error', 'errored']);
+
+/** Whether pi-subagents reports the run as still in flight (running …); "stopping" counts as in flight (issue #120). */
+export const isRunningState = (state?: string): boolean => RUNNING_STATES.has((state ?? '').toLowerCase());
 
 /**
  * Status of a run. Authoritative is pi-subagents' state; only without it is it estimated: ends with a text answer →
@@ -247,6 +263,15 @@ export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
     failed: 'failed',
     stopped: 'ended without answer',
 };
+
+/**
+ * UI state of a stop of one run, held by the chat stream (issue #120). "stopping": the gateway took the stop and the
+ * run has not left its in-flight state; "error": the stop was refused, the text says why. Nothing else is stored.
+ */
+export type StopState = 'idle' | 'stopping' | 'error';
+
+/** Whether the run still runs or is quiet: only then is there something to stop (issue #120). */
+export const canStopRun = (s: RunStatus): boolean => s === 'running' || s === 'idle';
 
 /** Short run ID: six characters, "#n" for parallel children kept. */
 export function shortRunId(runId: string): string {
@@ -349,7 +374,8 @@ export type RunItem =
     | { type: 'task'; key: string; text: string }
     /** Later tasks: the main agent's messages to the subagent, never shown as a message of the user (issue #81). */
     | { type: 'note'; key: string; text: string }
-    | { type: 'text'; key: string; text: string }
+    /** imageKey: ID of the answer (`response_id`), to fetch its display images (issue #120, F16). */
+    | { type: 'text'; key: string; text: string; imageKey?: string }
     | { type: 'steps'; key: string; steps: Step[] }
     /** A message the user wrote, from the gateway's record. */
     | { type: 'message'; key: string; message: SubagentMessage }
@@ -361,9 +387,13 @@ export type RunItem =
  * result belongs to its call by ID, otherwise to the oldest open call of the same name. Open calls run while the run
  * runs, otherwise they did not finish. `messages` (the user's, from the gateway) are placed by their time before the
  * entry that follows them.
+ *
+ * Was the run stopped (`stoppedBy`), its still open steps were cut short by that stop, not merely left unfinished
+ * (issue #120, L1): they read "stopped by you" or "stopped (subagent limit)" like the rest of the interface. Without
+ * a recorded reason they keep saying "not finished".
  */
 export function runItems(
-    run: Pick<SubagentRun, 'entries'>,
+    run: Pick<SubagentRun, 'entries' | 'stoppedBy'>,
     live: boolean,
     executions: ToolExecution[] = [],
     messages: SubagentMessage[] = [],
@@ -397,7 +427,8 @@ export function runItems(
             const first = tasks++ === 0;
             if (p.text?.trim()) items.push({ type: first ? 'task' : 'note', key: e.entry_id, text: p.text });
         } else if (e.kind === 'text') {
-            if (p.text?.trim()) items.push({ type: 'text', key: e.entry_id, text: p.text });
+            // the answer's response ID is the key of its display images (issue #120, F16)
+            if (p.text?.trim()) items.push({ type: 'text', key: e.entry_id, text: p.text, imageKey: e.response_id });
         } else if (e.kind === 'tool_call') {
             const execs = p.id ? execsByCall.get(p.id) : undefined;
             const step: Step = {
@@ -428,6 +459,14 @@ export function runItems(
         }
     }
     flush(Infinity);
+    // steps still open when the run ended were cut short by the stop that ended it (issue #120, L1)
+    if (!live && run.stoppedBy) {
+        const reason = runStoppedReason(run.stoppedBy);
+        for (const o of open) {
+            o.step.status = 'aborted';
+            o.step.abortReason = reason;
+        }
+    }
     return items;
 }
 
@@ -448,6 +487,12 @@ export type SubagentNavItem = {
     runId: string;
     title: string;
     status: RunStatus;
+    /** The run a message and a stop address: the newest of the thread (issue #81/#120); missing: the run itself. */
+    latest?: string;
+    /** Who stopped the run (issue #120): "user" or "limit"; missing: not stopped (or no reason recorded). */
+    stoppedBy?: string;
+    /** A stop of this run is on its way (issue #120); only the open chat knows it, other chats never do. */
+    stopping?: boolean;
 };
 
 /** Runs live while they run or are quiet in a working chat. */
@@ -459,21 +504,88 @@ export const isLiveStatus = (s: RunStatus) => s === 'running' || s === 'idle';
  */
 export function subagentNav(
     runs: SubagentRun[],
-    { chatRunning, now }: { chatRunning: boolean; now: number },
+    { chatRunning, now, stopping }: { chatRunning: boolean; now: number; stopping?: ReadonlySet<string> },
 ): SubagentNavItem[] {
     return runs.map((r) => {
         const named = !!ownLabel(r) || !!meaningfulLine(r.task);
+        const latest = latestRunId(r);
         return {
             runId: r.runId,
             title: named ? runTitle(r) : `${r.agent || 'Subagent'} · ${shortRunId(r.runId)}`,
             status: runStatus(r, { chatRunning, now }),
+            latest: r.latest,
+            stoppedBy: r.stoppedBy,
+            // a stop is addressed to the newest run of the thread (issue #120)
+            stopping: stopping?.has(latest) || undefined,
         };
     });
+}
+
+/**
+ * Run metadata from one line of a chat's short list (issue #120, L5): refreshing a single chat's runs after a refused
+ * stop, where the full chat would load everything. Only the fields the short list has; the rest stays empty and
+ * mergeRunMeta keeps what is already known.
+ */
+export function metaOfSummary(s: SubagentRunSummary): SubagentRunMeta {
+    return {
+        chat_id: '',
+        run_id: s.run_id,
+        agent: s.agent,
+        label: s.label,
+        state: s.state,
+        stopped_by: s.stopped_by,
+        continues_run_id: s.continues_run_id,
+        started_at: s.started_at,
+        ended_at: s.ended_at,
+        updated_at: '',
+    };
 }
 
 /** Short state of a sub-entry: running, quiet, done, failed, ended. */
 export function subagentStateText(s: RunStatus): string {
     return s === 'stopped' ? 'ended' : RUN_STATUS_LABEL[s];
+}
+
+/**
+ * Text of a run's state (issue #120, DL3.7/DL3.4): an ended run that was stopped names who stopped it — "stopped by
+ * you" in a card or the head of its view, just "stopped" in the narrow history and the chat selector (`compact`),
+ * where the title needs the room. A run the gateway ended because of the subagent limit says so. Without `stoppedBy`
+ * (and for every other state) it reads as before: "ended", "running", "done" …
+ */
+export function runStatusLabel(status: RunStatus, stoppedBy?: string, compact = false): string {
+    if (status === 'stopped' && stoppedBy) {
+        if (compact) return 'stopped';
+        return stoppedBy === 'limit' ? 'stopped (subagent limit)' : 'stopped by you';
+    }
+    return subagentStateText(status);
+}
+
+/**
+ * The reason a stopped run shows as its closing line (issue #120, L2): "user" for the user's stop, "subagent_limit"
+ * for the gateway's limit; without `stoppedBy` there is no line (nothing is claimed).
+ */
+export function runStoppedReason(stoppedBy?: string): string | undefined {
+    if (!stoppedBy) return undefined;
+    return stoppedBy === 'limit' ? 'subagent_limit' : 'user';
+}
+
+/**
+ * Text under a failed stop (issue #120): the gateway's `code` decides, the rest is the fallback. The wording says
+ * what happened, not which service answered (no infrastructure terms in the interface).
+ */
+export function subagentStopErrorText(o: { code?: string; status?: number }): string {
+    switch (o.code) {
+        case 'not_running':
+            return 'Could not stop the subagent: it already ended';
+        case 'chat_in_trash':
+            return 'Could not stop the subagent: this chat is in the trash.';
+        case 'subagents_unavailable':
+            return 'Could not stop the subagent: subagents are not available in this chat right now.';
+        default:
+            return o.status === 404
+                ? 'Could not stop the subagent: it is no longer available.'
+                : 'Could not stop the subagent.';
+    }
 }
 
 /** The user's choice to open or close a chat's group of subagents, and the default it was made against. */
@@ -515,7 +627,7 @@ export type SubagentItem =
  * record), only those addressed to the run's thread.
  */
 export function runTranscript(
-    run: Pick<SubagentRun, 'entries' | 'runId' | 'members'>,
+    run: Pick<SubagentRun, 'entries' | 'runId' | 'members' | 'stoppedBy'>,
     live: boolean,
     executions?: ToolExecution[],
     messages: SubagentMessage[] = [],
@@ -538,7 +650,9 @@ export function runTranscript(
             continue;
         }
         const part: AgentPart =
-            it.type === 'text' ? { type: 'text', text: it.text } : { type: 'steps', steps: it.steps };
+            it.type === 'text'
+                ? { type: 'text', text: it.text, imageKey: it.imageKey }
+                : { type: 'steps', steps: it.steps };
         if (!agent) {
             agent = { kind: 'agent', key: `${run.runId}:${it.key}`, parts: [] };
             out.push(agent);

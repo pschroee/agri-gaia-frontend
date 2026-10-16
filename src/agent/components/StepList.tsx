@@ -26,7 +26,8 @@ import type { BackgroundTask } from '../types';
 import { formatMs } from '../format';
 import { groupSkillLoads, groupStatus, skillLabel, skillRead } from '../skillStep';
 import type { StepGroup } from '../skillStep';
-import type { SubagentNavItem } from '../subagents';
+import type { StopState, SubagentNavItem } from '../subagents';
+import { abortLabel } from '../transcript';
 import type { Step, StepStatus } from '../transcript';
 import StepDetail from './StepDetail';
 import { agentColors, blockSx, MONO } from './tokens';
@@ -38,8 +39,20 @@ const STATUS_LABEL: Record<StepStatus, string> = {
     waiting: 'needs approval',
     blocked: 'blocked',
     stopped: 'not finished',
-    aborted: 'stopped by you',
+    // the reason decides what a stopped step says (issue #120, abortLabel); this is the wording without one
+    aborted: 'stopped',
 };
+
+/**
+ * What a step row shows on its right: the duration while it runs or is done, otherwise what its state means. A step
+ * that was stopped names the reason (issue #120, F9): "stopped by you" only when the user stopped, else the limit or
+ * the trash, and just "stopped" when nothing recorded a reason.
+ */
+function statusText(s: Step): string {
+    if (s.status === 'done' || s.status === 'running') return formatMs(s.durationMs) ?? '';
+    if (s.status === 'aborted') return abortLabel(s.abortReason);
+    return STATUS_LABEL[s.status];
+}
 
 function StatusIcon({ status }: { status: StepStatus }) {
     const sx = { fontSize: 16 };
@@ -77,7 +90,17 @@ export type StepControls = {
     /** Background task per tool call that started it. */
     background: Map<string, BackgroundTask>;
     /** The runs each `subagent` call started, listed in a card below the answer and opened on click (#48, #54). */
-    subagents?: { byCall: Map<string, SubagentNavItem[]>; onOpen: (runId: string) => void };
+    subagents?: {
+        byCall: Map<string, SubagentNavItem[]>;
+        onOpen: (runId: string) => void;
+        /** Stop control of the card (issue #120); missing where there is nothing to stop (read-only views). */
+        stop?: {
+            onStop: (runId: string) => void;
+            stateOf: (runId: string) => StopState;
+            errorOf: (runId: string) => string | undefined;
+            dismissError: (runId: string) => void;
+        };
+    };
 };
 
 /**
@@ -243,7 +266,7 @@ function StepRow({
                         transform: open ? 'rotate(90deg)' : 'none',
                     }}
                 />
-                <Tooltip title={STATUS_LABEL[s.status]}>
+                <Tooltip title={statusText(s)}>
                     <Box sx={{ display: 'flex', flex: 'none' }}>
                         <StatusIcon status={s.status} />
                     </Box>
@@ -276,7 +299,9 @@ function StepRow({
                                 component="span"
                                 noWrap
                                 title={s.summary}
-                                sx={{ fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+                                // minWidth 24: the reason of a stopped step needs its room, the command gives way
+                                // with an ellipsis instead of vanishing (issue #120)
+                                sx={{ fontSize: 12, color: 'text.secondary', minWidth: 24 }}
                             >
                                 {s.summary}
                             </Typography>
@@ -286,6 +311,8 @@ function StepRow({
                 {task && <BackgroundChip task={task} />}
                 <Typography
                     component="span"
+                    noWrap
+                    title={statusText(s)}
                     sx={{
                         ml: 'auto',
                         pl: 1,
@@ -300,9 +327,7 @@ function StepRow({
                                 : 'text.disabled',
                     }}
                 >
-                    {s.status === 'done' || s.status === 'running'
-                        ? formatMs(s.durationMs) ?? ''
-                        : STATUS_LABEL[s.status]}
+                    {statusText(s)}
                 </Typography>
                 {controllable && controls && (
                     // the controls act on the command; they do not open its details

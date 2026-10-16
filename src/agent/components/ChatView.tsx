@@ -127,10 +127,12 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
         [stream.subagentEntries, stream.subagentRuns],
     );
     const chatRunning = !!chat?.running;
+    // issue #120: the runs a stop is on its way for; the subagent lists of the panel and the history show "stopping …"
+    const stopping = stream.subagentStopping;
     const setOpenChatSubagents = readOnly ? undefined : agent?.setOpenChatSubagents;
     useEffect(() => {
-        setOpenChatSubagents?.(chatId, { runs, chatRunning });
-    }, [chatId, runs, chatRunning, setOpenChatSubagents]);
+        setOpenChatSubagents?.(chatId, { runs, chatRunning, stopping });
+    }, [chatId, runs, chatRunning, stopping, setOpenChatSubagents]);
     useEffect(() => () => setOpenChatSubagents?.(chatId, undefined), [chatId, setOpenChatSubagents]);
     const selectSubagent = readOnly ? undefined : agent?.selectSubagent;
     const subagentId = readOnly ? undefined : agent?.selectedSubagent;
@@ -146,15 +148,36 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
     const subStatus = subRun ? runStatus(subRun, { chatRunning, now }) : undefined;
     const subagentLinks = useMemo(() => {
         if (!runs.length || !selectSubagent) return undefined;
-        const nav = new Map(subagentNav(runs, { chatRunning, now }).map((n) => [n.runId, n]));
+        const nav = new Map(subagentNav(runs, { chatRunning, now, stopping }).map((n) => [n.runId, n]));
         const byCall = new Map<string, SubagentNavItem[]>();
         for (const [call, ids] of Object.entries(runsByCall(messages, runs)))
             byCall.set(
                 call,
                 ids.map((id) => nav.get(id)).filter((n): n is SubagentNavItem => !!n),
             );
-        return { byCall, onOpen: (runId: string) => selectSubagent(runId) };
-    }, [runs, messages, chatRunning, now, selectSubagent]);
+        return {
+            byCall,
+            onOpen: (runId: string) => selectSubagent(runId),
+            // the stop control of the card (issue #120); a read-only view never gets here (it has no selectSubagent)
+            stop: {
+                onStop: stream.stopSubagent,
+                stateOf: stream.subagentStopState,
+                errorOf: stream.subagentStopError,
+                dismissError: stream.clearSubagentStopError,
+            },
+        };
+    }, [
+        runs,
+        messages,
+        chatRunning,
+        now,
+        stopping,
+        selectSubagent,
+        stream.stopSubagent,
+        stream.subagentStopState,
+        stream.subagentStopError,
+        stream.clearSubagentStopError,
+    ]);
     const liveCount = useMemo(() => {
         const parts = liveParts(live);
         return parts.length ? countEntries([{ kind: 'agent', key: 'live', parts }]) : 0;
@@ -290,6 +313,10 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                                     onDecide={stream.decide}
                                     messages={subMessages}
                                     onResend={onResend}
+                                    onStop={stream.stopSubagent}
+                                    stopStateOf={stream.subagentStopState}
+                                    stopErrorOf={stream.subagentStopError}
+                                    onDismissStopError={stream.clearSubagentStopError}
                                 />
                             ) : (
                                 <Conversation

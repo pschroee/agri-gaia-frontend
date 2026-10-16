@@ -4,8 +4,9 @@
 
 // Looking into a subagent, read-only (issue #48): its sub-entry under the chat, the breadcrumb that replaces the chat's
 // title, the transcript in the chat's own components and the footer that replaces the input (frame since issue #54).
-import { Fragment, MouseEvent, useCallback, useMemo, useState } from 'react';
+import { Fragment, MouseEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import Button from '@mui/material/Button';
@@ -16,12 +17,23 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 
-import { deliveryText, isLiveStatus, runTranscript, subagentStateText } from '../subagents';
-import type { RunStatus, SubagentItem, SubagentNavItem, SubagentRun } from '../subagents';
+import {
+    canStopRun,
+    deliveryText,
+    isLiveStatus,
+    latestRunId,
+    runStatusLabel,
+    runStoppedReason,
+    runTitle,
+    runTranscript,
+} from '../subagents';
+import type { RunStatus, StopState, SubagentItem, SubagentNavItem, SubagentRun } from '../subagents';
 import { outputsByCall } from '../files';
 import { placePlans } from '../plan';
 import type { Plan } from '../plan';
+import { abortLineText } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { Approval, Artifact, SubagentMessage, SubagentMessageMode, ToolExecution } from '../types';
 import { AgentBlock, UserBubble } from './Conversation';
@@ -41,7 +53,8 @@ export function SubagentEntryContent({ item }: { item: SubagentNavItem }) {
         <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, width: '100%' }}>
             <SubagentIcon size={15} />
             <EllipsisText text={item.title} sx={{ flex: 1 }} />
-            <SubagentState status={item.status} compact />
+            {/* issue #120: a stopped run says "stopped" here, and "stopping …" while the stop is on its way */}
+            <SubagentState status={item.status} stoppedBy={item.stoppedBy} stopping={item.stopping} compact />
         </Box>
     );
 }
@@ -170,18 +183,75 @@ export function SubagentBreadcrumb({
     );
 }
 
-/** Head of a subagent's view: its state as a chip ("done", "running") and "Subagent log". */
-function SubagentLogHead({ status }: { status: RunStatus }) {
-    const color = STATE_COLOR[status];
+/**
+ * Head of a subagent's view: its state as a chip ("done", "running") and "Subagent log", plus the stop control while
+ * the run goes on (issue #120). The line sticks to the top of the log so the control stays reachable under a long log
+ * (issue #120, L7), and the chip is the live region of the view: it goes from "running" over "stopping …" to
+ * "stopped by you" without the user looking anywhere else.
+ */
+function SubagentLogHead({
+    status,
+    stoppedBy,
+    stopping,
+    dense,
+    title,
+    onStop,
+}: {
+    status: RunStatus;
+    /** Who stopped the run (issue #120); a known stop replaces the dot with the stop sign. */
+    stoppedBy?: string;
+    /** A stop of this run is on its way (issue #120). */
+    stopping?: boolean;
+    /** Panel layout: the log scroller has its own side padding. */
+    dense?: boolean;
+    /** Title of the run, for the accessible name of the stop control. */
+    title?: string;
+    onStop?: () => void;
+}) {
+    const stopped = status === 'stopped' && !!stoppedBy && !stopping;
+    const color = stopping || stopped ? 'text.secondary' : STATE_COLOR[status];
+    const label = stopping ? 'stopping …' : runStatusLabel(status, stoppedBy);
+    // Focus of the stop control (design, issue #120): it stays on the locked control while the stop is on its way;
+    // when the control disappears with the run it stopped, the state chip takes the focus over instead of the body.
+    const showStop = !!onStop && canStopRun(status);
+    const chip = useRef<HTMLElement | null>(null);
+    const chipHadFocus = useRef(false);
+    useEffect(() => {
+        if (!chipHadFocus.current || showStop) return;
+        chip.current?.focus();
+        chipHadFocus.current = false;
+    });
     return (
         <Box
             data-testid="agent-subagent-head"
-            sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 12, color: 'text.secondary', minWidth: 0 }}
+            sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                fontSize: 12,
+                color: 'text.secondary',
+                minWidth: 0,
+                // sticky: a long log must not scroll the stop control away (issue #120, L7)
+                position: 'sticky',
+                top: 0,
+                zIndex: 1,
+                bgcolor: 'background.paper',
+                py: 1,
+                minHeight: 47,
+                borderBottom: 1,
+                borderColor: 'divider',
+                mx: dense ? -2 : 0,
+                px: dense ? 2 : 0,
+            }}
         >
             <Box
                 component="span"
+                ref={chip}
+                tabIndex={-1}
+                role="status"
+                aria-live="polite"
                 data-testid="agent-subagent-status"
-                data-status={status}
+                data-status={stopping ? 'stopping' : status}
                 sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -189,21 +259,46 @@ function SubagentLogHead({ status }: { status: RunStatus }) {
                     height: 24,
                     px: '10px',
                     borderRadius: '12px',
-                    bgcolor: alpha(color, 0.1),
+                    bgcolor: stopping ? 'action.selected' : alpha(STATE_COLOR[status], 0.1),
                     color,
                     fontWeight: 500,
                     flex: 'none',
                     whiteSpace: 'nowrap',
                 }}
             >
-                {isLiveStatus(status) ? (
-                    <CircularProgress size={10} thickness={5} sx={{ color }} />
+                {stopping || isLiveStatus(status) ? (
+                    <CircularProgress size={10} thickness={5} color="inherit" sx={{ color }} />
+                ) : stopped ? (
+                    <StopCircleOutlinedIcon aria-hidden sx={{ fontSize: 14, color }} />
                 ) : (
                     <Box component="span" sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: color }} />
                 )}
-                {subagentStateText(status)}
+                {label}
             </Box>
-            <span>Subagent log</span>
+            <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                Subagent log
+            </Box>
+            {showStop && (
+                // the span is the tooltip's anchor: a disabled button alone would not show one
+                <Tooltip title="Stop this subagent">
+                    <span>
+                        <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            startIcon={<StopCircleOutlinedIcon />}
+                            disabled={!!stopping}
+                            onFocus={() => (chipHadFocus.current = true)}
+                            onClick={onStop}
+                            aria-label={title ? `Stop subagent ${title}` : 'Stop subagent'}
+                            data-testid="agent-subagent-stop"
+                            sx={{ flex: 'none', textTransform: 'none' }}
+                        >
+                            Stop
+                        </Button>
+                    </span>
+                </Tooltip>
+            )}
         </Box>
     );
 }
@@ -312,6 +407,10 @@ export function SubagentTranscript({
     onDecide,
     messages = [],
     onResend,
+    onStop,
+    stopStateOf,
+    stopErrorOf,
+    onDismissStopError,
 }: {
     run: SubagentRun;
     status: RunStatus;
@@ -329,8 +428,20 @@ export function SubagentTranscript({
     messages?: SubagentMessage[];
     /** "Send again" of a failed message: puts its text into the field. */
     onResend?: (text: string) => void;
+    /** Stops this run (issue #120); the ID is the newest run of the thread, like a message (issue #81). */
+    onStop?: (runId: string) => void;
+    /** UI state of a stop of that run (issue #120). */
+    stopStateOf?: (runId: string) => StopState;
+    /** Text of the refused stop of that run (issue #120). */
+    stopErrorOf?: (runId: string) => string | undefined;
+    /** Takes that text away (issue #120). */
+    onDismissStopError?: (runId: string) => void;
 }) {
     const live = isLiveStatus(status);
+    // the newest run of the thread: what a stop addresses (issue #120) and where its UI state lives
+    const stopRun = latestRunId(run);
+    const stopState = stopStateOf?.(stopRun) ?? 'idle';
+    const stopError = stopErrorOf?.(stopRun);
     const items = useMemo<SubagentItem[]>(
         () => runTranscript(run, live, executions, messages),
         [run, live, executions, messages],
@@ -352,7 +463,19 @@ export function SubagentTranscript({
             data-run-id={run.runId}
             sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, minWidth: 0 }}
         >
-            <SubagentLogHead status={status} />
+            <SubagentLogHead
+                status={status}
+                stoppedBy={run.stoppedBy}
+                stopping={stopState === 'stopping'}
+                dense={dense}
+                title={runTitle(run)}
+                onStop={onStop && (() => onStop(stopRun))}
+            />
+            {stopError && (
+                <Alert severity="error" onClose={() => onDismissStopError?.(stopRun)} data-testid="agent-subagent-stop-error">
+                    {stopError}
+                </Alert>
+            )}
             {items.length === 0 && (
                 <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
                     {live ? 'The subagent is starting …' : 'This subagent left no entries.'}
@@ -375,12 +498,14 @@ export function SubagentTranscript({
                     <NoteLine key={it.key} text={it.text} />
                 ) : it.kind === 'agent' ? (
                     <Fragment key={it.key}>
-                        {/* no chat id: a subagent's display images are not served per subagent */}
+                        {/* chatId: images a subagent shows are saved like the main agent's and load with the answer
+                            ID of the text part (issue #120, F16); no new element, the same display */}
                         <AgentBlock
                             item={it}
                             dense={dense}
                             thinking={thinking}
                             results={sent.get(it.key)}
+                            chatId={chatId}
                             filesChatId={chatId}
                         />
                         {/* plans of this subagent's calls (issue #70); the plans left over are not shown here */}
@@ -395,6 +520,12 @@ export function SubagentTranscript({
                         ))}
                     </Fragment>
                 ) : null,
+            )}
+            {/* the closing line of a stopped run (issue #120, L2): the same wording as in the chat */}
+            {status === 'stopped' && run.stoppedBy && (
+                <Typography data-testid="agent-subagent-stopped" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    {abortLineText(runStoppedReason(run.stoppedBy))}
+                </Typography>
             )}
             {/* the working hint only while the run shows nothing of its current answer yet (#57); quiet: always */}
             {live && (status === 'idle' || items[items.length - 1]?.kind !== 'agent') && (

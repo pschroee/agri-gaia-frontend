@@ -4,14 +4,24 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { buildTranscript, isAbortText, isAbortedAnswer, liveParts, parseArgs, stepStatus } from './transcript';
+import {
+    abortLabel,
+    abortLineText,
+    buildTranscript,
+    isAbortText,
+    isAbortedAnswer,
+    liveParts,
+    parseArgs,
+    stepStatus,
+} from './transcript';
 import type { Approval, PiMessage, SocketCall, StoredMessage, ToolExecution } from './types';
 
-const stored = (seq: number, message: PiMessage): StoredMessage => ({
+const stored = (seq: number, message: PiMessage, extra: Partial<StoredMessage> = {}): StoredMessage => ({
     seq,
     role: message.role,
     message,
     created_at: '2026-10-06T10:00:00Z',
+    ...extra,
 });
 
 const ctx = { approvals: [], socketCalls: [], executions: [], running: false };
@@ -139,6 +149,61 @@ describe('buildTranscript after an abort', () => {
         );
         expect(items[0]).toMatchObject({ error: '500 upstream', parts: [{ steps: [{ status: 'error' }] }] });
         expect(items[0]).not.toHaveProperty('stopped');
+    });
+});
+
+describe('naming the reason a turn was stopped (issue #120, F9)', () => {
+    const call = { type: 'toolCall' as const, id: 'c1', name: 'bash', arguments: { command: 'sleep 600' } };
+    const extra = (reason?: StoredMessage['abort_reason']) => (reason === undefined ? {} : { abort_reason: reason });
+    const abortedTurn = (reason?: StoredMessage['abort_reason']) =>
+        buildTranscript(
+            [
+                stored(1, { role: 'user', content: 'Wait' }, extra(reason)),
+                stored(4, { role: 'assistant', content: [call], stopReason: 'aborted' }, extra(reason)),
+            ],
+            ctx,
+        );
+
+    it('shows the reason of the turn on the step and on the closing line', () => {
+        for (const [reason, step, line] of [
+            ['user', 'stopped by you', 'Stopped by you'],
+            ['trash', 'stopped (moved to trash)', 'Stopped (moved to trash)'],
+            ['time_limit', 'stopped (time limit)', 'Stopped (time limit)'],
+            ['turn_limit', 'stopped (limit of turns without you)', 'Stopped (limit of turns without you)'],
+            ['subagent_limit', 'stopped (subagent limit)', 'Stopped (subagent limit)'],
+        ] as const) {
+            const items = abortedTurn(reason);
+            expect(items[1], reason).toMatchObject({
+                stopped: true,
+                abortReason: reason,
+                parts: [{ steps: [{ status: 'aborted', abortReason: reason }] }],
+            });
+            expect(abortLabel(reason), reason).toBe(step);
+            expect(abortLineText(reason), reason).toBe(line);
+        }
+    });
+
+    it('claims nothing without a reason: "stopped", never "stopped by you"', () => {
+        const items = abortedTurn(undefined);
+        expect(items[1]).toMatchObject({ stopped: true, parts: [{ steps: [{ status: 'aborted' }] }] });
+        expect((items[1] as { abortReason?: string }).abortReason).toBeUndefined();
+        expect(abortLabel(undefined)).toBe('stopped');
+        expect(abortLabel('')).toBe('stopped');
+        expect(abortLabel('something_new')).toBe('stopped');
+        expect(abortLineText(undefined)).toBe('Stopped');
+    });
+
+    it('leaves a step that was not aborted without a reason', () => {
+        const items = buildTranscript(
+            [
+                stored(1, { role: 'user', content: 'Wait' }, { abort_reason: 'subagent_limit' }),
+                stored(2, { role: 'assistant', content: [call], stopReason: 'toolUse' }),
+            ],
+            ctx,
+        );
+        expect(items[1]).toMatchObject({ parts: [{ steps: [{ status: 'stopped' }] }] });
+        const part = (items[1] as { parts: { steps: { abortReason?: string }[] }[] }).parts[0];
+        expect(part.steps[0].abortReason).toBeUndefined();
     });
 });
 

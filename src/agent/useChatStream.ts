@@ -40,7 +40,16 @@ import type { ResumeView } from './resume';
 import { pendingSettled } from './runState';
 import type { PendingSend } from './runState';
 import { partialsReducer } from './stepDetail';
-import { mergeLLMCalls, mergeRunMeta, mergeSubagentEntries, mergeSubagentMessages } from './subagents';
+import {
+    isRunningState,
+    mergeLLMCalls,
+    mergeRunMeta,
+    mergeSubagentEntries,
+    mergeSubagentMessages,
+    metaOfSummary,
+    subagentStopErrorText,
+} from './subagents';
+import type { StopState } from './subagents';
 import { compactingAfter } from './usage';
 import type { Compacting } from './usage';
 import type {
@@ -161,7 +170,27 @@ export type ChatStream = {
      * recorded message joins the list at once; throws AgentApiError (409, 429, 400, 404).
      */
     sendSubagentMessage: (run: string, text: string) => Promise<SubagentMessage>;
+    /**
+     * Stops one running subagent without stopping the chat (POST …/subagent-runs/{run}/stop, issue #120); run is the
+     * newest run of its thread. Waits for the gateway's answer and does not throw: a failure lands in the run's stop
+     * state, where the interface shows it next to the control that caused it.
+     */
+    stopSubagent: (run: string) => Promise<void>;
+    /** UI state of a stop of that run (issue #120): nothing was asked, "stopping" or "error". */
+    subagentStopState: (run: string) => StopState;
+    /** Text of the refused stop of that run (issue #120); undefined when there is none. */
+    subagentStopError: (run: string) => string | undefined;
+    /** Takes the text of a refused stop away (issue #120); the next attempt hides it by itself. */
+    clearSubagentStopError: (run: string) => void;
+    /** The runs a stop is on its way for (issue #120); the subagent lists mark those runs as "stopping …". */
+    subagentStopping: ReadonlySet<string>;
 };
+
+/** A stop of one run as the interface knows it (issue #120); nothing of it is stored in the gateway. */
+type SubagentStop = { state: StopState; error?: string };
+
+/** Fallback of "stopping …": without news within this time the control frees itself again (issue #120). */
+export const STOP_FALLBACK_MS = 30_000;
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 const errStatus = (e: unknown) => (e instanceof AgentApiError ? e.status : undefined);
@@ -211,6 +240,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const [running, dispatchRunning] = useReducer(runningReducer, emptyRunning);
     const [subagentEntries, setSubagentEntries] = useState<SubagentEntry[]>([]);
     const [subagentRuns, setSubagentRuns] = useState<SubagentRunMeta[]>([]);
+    // UI state of a stop per run (issue #120): "stopping" while the gateway waits for the run to end, "error" with
+    // the text of a refused stop. Nothing of it is stored: the run's stopped_by is what survives a reload.
+    const [subagentStops, setSubagentStops] = useState<Record<string, SubagentStop>>({});
+    const stopTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
     const [llmCalls, setLLMCalls] = useState<LLMCall[]>([]);
     const [subagentMessages, setSubagentMessages] = useState<SubagentMessage[]>([]);
     const runningTimer = useRef<ReturnType<typeof setTimeout>>();
@@ -319,6 +352,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         dispatchRunning({ type: 'reset' });
         setSubagentEntries([]);
         setSubagentRuns([]);
+        setSubagentStops({});
         setLLMCalls([]);
         resumeDecided.current = false;
         resumeAsked.current = undefined;
@@ -794,6 +828,87 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         [chatId],
     );
 
+    const clearStopTimer = useCallback((run: string) => {
+        const t = stopTimers.current[run];
+        if (t !== undefined) {
+            clearTimeout(t);
+            delete stopTimers.current[run];
+        }
+    }, []);
+    // the timers of the fallback belong to the view, not to a chat: they go with it
+    useEffect(
+        () => () => {
+            for (const t of Object.values(stopTimers.current)) clearTimeout(t);
+            stopTimers.current = {};
+        },
+        [],
+    );
+
+    const setStop = useCallback((run: string, next: SubagentStop) => {
+        setSubagentStops((l) => ({ ...l, [run]: next }));
+    }, []);
+
+    /**
+     * Stops one running subagent (issue #120). After the gateway's 202 the state stays "stopping" until the run
+     * leaves its in-flight state (the refreshed run list decides, the SSE event "subagent_run" brings it); without
+     * news within STOP_FALLBACK_MS the control frees itself again, silently — the stop may still arrive.
+     */
+    const stopSubagent = useCallback(
+        async (run: string) => {
+            if (!chatId) return;
+            clearStopTimer(run);
+            setStop(run, { state: 'stopping' });
+            try {
+                const r = await agentApi.stopSubagent(chatId, run);
+                if (r?.run?.run_id) setSubagentRuns((l) => mergeRunMeta(l, [r.run]));
+                stopTimers.current[run] = setTimeout(() => {
+                    delete stopTimers.current[run];
+                    setStop(run, { state: 'idle' });
+                }, STOP_FALLBACK_MS);
+            } catch (e) {
+                const status = errStatus(e);
+                const code = e instanceof AgentApiError ? e.code : undefined;
+                clearStopTimer(run);
+                setStop(run, { state: 'error', error: subagentStopErrorText({ code, status }) });
+                // the run ended between the click and the request: this view's runs are behind, read them once
+                if (code === 'not_running') {
+                    try {
+                        const list = await agentApi.subagentRuns(chatId);
+                        if (list.length) setSubagentRuns((l) => mergeRunMeta(l, list.map(metaOfSummary)));
+                    } catch {
+                        undefined // the next reload of the chat brings the state anyway
+                    }
+                }
+            }
+        },
+        [chatId, clearStopTimer, setStop],
+    );
+
+    const subagentStopState = useCallback(
+        (run: string): StopState => subagentStops[run]?.state ?? 'idle',
+        [subagentStops],
+    );
+    const subagentStopError = useCallback(
+        (run: string): string | undefined => (subagentStops[run]?.state === 'error' ? subagentStops[run]?.error : undefined),
+        [subagentStops],
+    );
+    const clearSubagentStopError = useCallback((run: string) => setStop(run, { state: 'idle' }), [setStop]);
+    const subagentStopping = useMemo(
+        () => new Set(Object.entries(subagentStops).filter(([, s]) => s.state === 'stopping').map(([run]) => run)),
+        [subagentStops],
+    );
+    // "stopping …" ends as soon as the run reports a state that is no longer in flight (issue #120)
+    useEffect(() => {
+        for (const [run, s] of Object.entries(subagentStops)) {
+            if (s.state !== 'stopping') continue;
+            const meta = subagentRuns.find((r) => r.run_id === run);
+            if (meta?.state && !isRunningState(meta.state)) {
+                clearStopTimer(run);
+                setStop(run, { state: 'idle' });
+            }
+        }
+    }, [subagentRuns, subagentStops, clearStopTimer, setStop]);
+
     return {
         chat,
         messages,
@@ -842,5 +957,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         llmCalls,
         subagentMessages,
         sendSubagentMessage,
+        stopSubagent,
+        subagentStopState,
+        subagentStopError,
+        clearSubagentStopError,
+        subagentStopping,
     };
 }

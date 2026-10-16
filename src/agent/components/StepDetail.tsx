@@ -17,7 +17,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { activityLinkOf } from '../activity';
 import { copyText } from '../clipboard';
 import { formatClock, formatMs } from '../format';
-import { clipText, stepDetail } from '../stepDetail';
+import { clippedText, clipText, EXCERPT_NOTE, isClipped, stepDetail } from '../stepDetail';
 import type { DetailBlock, DetailField, DetailTone, PlatformRequest } from '../stepDetail';
 import type { Step } from '../transcript';
 import type { Approval } from '../types';
@@ -58,7 +58,12 @@ function CopyIconButton({ text, label }: { text: string; label: string }) {
 /** A wrapping monospace block; long text starts clipped with "Show all". */
 function CodeBlock({ block }: { block: Extract<DetailBlock, { type: 'code' }> }) {
     const [all, setAll] = useState(false);
-    const clip = useMemo(() => clipText(block.text), [block.text]);
+    // The gateway cuts long subagent texts at 4 000 bytes and marks the cut (issue #120, F24): the text shows as an
+    // excerpt under a caption, the marker itself is not part of the content. The view's own clipping (clipText) is
+    // something else and comes on top of it.
+    const excerpt = isClipped(block.text);
+    const source = excerpt ? clippedText(block.text) : block.text;
+    const clip = useMemo(() => clipText(source), [source]);
     const clipped = !!block.clip && clip.clipped && !all;
     return (
         <Box data-testid="agent-step-code" data-label={block.label} sx={{ minWidth: 0 }}>
@@ -68,10 +73,15 @@ function CodeBlock({ block }: { block: Extract<DetailBlock, { type: 'code' }> })
                 </Typography>
                 {block.copy && (
                     <Box sx={{ ml: 'auto', display: 'flex' }}>
-                        <CopyIconButton text={block.text} label={block.label.toLowerCase()} />
+                        <CopyIconButton text={source} label={block.label.toLowerCase()} />
                     </Box>
                 )}
             </Box>
+            {excerpt && (
+                <Typography variant="caption" color="text.secondary" data-testid="agent-step-excerpt">
+                    {EXCERPT_NOTE}
+                </Typography>
+            )}
             <Box
                 component="pre"
                 data-error={block.error ? 'true' : undefined}
@@ -94,7 +104,7 @@ function CodeBlock({ block }: { block: Extract<DetailBlock, { type: 'code' }> })
                     minWidth: 0,
                 }}
             >
-                {clipped ? `${clip.text}\n…` : block.text}
+                {clipped ? `${clip.text}\n…` : source}
             </Box>
             {block.clip && clip.clipped && (
                 <ButtonBase
@@ -106,7 +116,7 @@ function CodeBlock({ block }: { block: Extract<DetailBlock, { type: 'code' }> })
                         ? 'Show less'
                         : clip.totalLines > 20
                         ? `Show all (${clip.totalLines} lines)`
-                        : `Show all (${block.text.length.toLocaleString('en-GB')} characters)`}
+                        : `Show all (${source.length.toLocaleString('en-GB')} characters)`}
                 </ButtonBase>
             )}
             {block.note && (

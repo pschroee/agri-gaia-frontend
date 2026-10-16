@@ -29,6 +29,8 @@ export function summaryRun(s: SubagentRunSummary, chatId: string): SubagentRun {
         state: s.state || undefined,
         continues: s.continues_run_id || undefined,
         messageState: s.message_state || undefined,
+        // issue #120: a stopped run of a chat that is not open says so too — the short list carries stopped_by
+        stoppedBy: s.stopped_by || undefined,
         entries: s.last_kind
             ? [
                   {

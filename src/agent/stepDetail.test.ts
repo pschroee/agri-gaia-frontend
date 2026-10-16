@@ -5,8 +5,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    CLIPPED_SUFFIX,
+    clippedText,
     clipText,
+    EXCERPT_NOTE,
     exitCodeOf,
+    isClipped,
     formatResponse,
     isSecretKey,
     partialsReducer,
@@ -351,6 +355,21 @@ describe('helpers', () => {
         expect(s).toEqual({ c1: 'a\nb\n' });
         expect(partialsReducer(s, { type: 'message_update' })).toBe(s);
         expect(partialsReducer(s, { type: 'tool_execution_end', toolCallId: 'c1' })).toEqual({});
+    });
+
+    it("recognises the gateway's excerpt and names it (issue #120, F24)", () => {
+        // the gateway cuts subagent texts at 4 000 bytes and marks the cut; the marker is the contract
+        const cut = 'x'.repeat(4000) + CLIPPED_SUFFIX;
+        expect(isClipped(cut)).toBe(true);
+        expect(clippedText(cut)).toBe('x'.repeat(4000));
+        expect(clippedText(cut)).not.toContain('truncated');
+        expect(EXCERPT_NOTE).toBe('Excerpt – first 4,000 characters');
+        // a text of the view's own making, a mention in the middle and a short one stay as they are
+        expect(isClipped('x'.repeat(4000) + ' …')).toBe(false);
+        expect(isClipped('short')).toBe(false);
+        expect(isClipped('')).toBe(false);
+        expect(clippedText('a … [truncated] b')).toBe('a … [truncated] b');
+        expect(clippedText('x'.repeat(10))).toBe('x'.repeat(10));
     });
 });
 

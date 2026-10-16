@@ -7,22 +7,28 @@ import { describe, expect, it } from 'vitest';
 import {
     FOREGROUND_NOTE,
     STARTING_NOTE,
+    canStopRun,
     deliveryText,
     foldContinuations,
     groupOpen,
     groupOpenByDefault,
     groupRuns,
+    isRunningState,
     latestRunId,
     mergeLLMCalls,
     mergeRunMeta,
     mergeSubagentEntries,
     mergeSubagentMessages,
+    metaOfSummary,
     runUsage,
     subagentInputState,
     subagentSendErrorText,
+    subagentStopErrorText,
     threadIds,
     runDuration,
     runItems,
+    runStatusLabel,
+    runStoppedReason,
     runsSummary,
     runStatus,
     runSubtitle,
@@ -347,6 +353,155 @@ describe('looking into subagents (issue #48)', () => {
         ];
         expect(runsByCall(messages, runs)).toEqual({ 'call-b': ['r1'], 'call-a': ['r2'], 'call-c': ['r3'] });
         expect(runsByCall([], runs)).toEqual({});
+    });
+});
+
+describe('stopping a subagent (issue #120)', () => {
+    it('names the state of a stopped run by who stopped it, short in the narrow lists', () => {
+        expect(runStatusLabel('stopped', 'user')).toBe('stopped by you');
+        expect(runStatusLabel('stopped', 'user', true)).toBe('stopped');
+        expect(runStatusLabel('stopped', 'limit')).toBe('stopped (subagent limit)');
+        expect(runStatusLabel('stopped', 'limit', true)).toBe('stopped');
+        // without a recorded reason nothing is claimed
+        expect(runStatusLabel('stopped')).toBe('ended');
+        expect(runStatusLabel('stopped', '')).toBe('ended');
+        // every other state reads as before
+        expect(runStatusLabel('running')).toBe('running');
+        expect(runStatusLabel('done', 'user')).toBe('done');
+        expect(runStatusLabel('failed')).toBe('failed');
+        expect(runStatusLabel('idle')).toBe('quiet');
+    });
+
+    it('takes "stopping" from pi-subagents as a run that is still in flight', () => {
+        // the halt note of the plan: pi-subagents reports a state the list did not know
+        expect(isRunningState('stopping')).toBe(true);
+        expect(isRunningState('Running')).toBe(true);
+        expect(isRunningState('cancelled')).toBe(false);
+        expect(isRunningState(undefined)).toBe(false);
+        const [a] = groupRuns(entries, [meta('run-abcdef1', { state: 'stopping' })]);
+        expect(runStatus(a, { chatRunning: true, now: T0 })).toBe('running');
+        expect(canStopRun('running')).toBe(true);
+        expect(canStopRun('idle')).toBe(true);
+        expect(canStopRun('stopped')).toBe(false);
+        expect(canStopRun('done')).toBe(false);
+    });
+
+    it('marks the steps still open when the run was stopped with the reason of the stop', () => {
+        const base = [
+            entry('r', 't', 'task', 1, { text: 'Count' }),
+            entry('r', 'c', 'tool_call', 2, { name: 'bash', id: 'x1', arguments: '{"command":"sleep 600"}' }),
+        ];
+        const run = (stoppedBy?: string) => ({ entries: base, stoppedBy });
+        // the task comes first, the steps of the run follow
+        const last = (items: ReturnType<typeof runItems>) => items[items.length - 1];
+        expect(last(runItems(run('user'), false))).toMatchObject({
+            type: 'steps',
+            steps: [{ status: 'aborted', abortReason: 'user' }],
+        });
+        expect(last(runItems(run('limit'), false))).toMatchObject({
+            type: 'steps',
+            steps: [{ status: 'aborted', abortReason: 'subagent_limit' }],
+        });
+        // nothing recorded: the step stays "not finished", as before, and claims no reason
+        const unfinished = last(runItems(run(), false)) as { steps: { status: string; abortReason?: string }[] };
+        expect(unfinished).toMatchObject({ type: 'steps', steps: [{ status: 'stopped' }] });
+        expect(unfinished.steps[0].abortReason).toBeUndefined();
+        // while the run is still winding down its step keeps running
+        expect(last(runItems(run('user'), true))).toMatchObject({ type: 'steps', steps: [{ status: 'running' }] });
+        // a step that did end keeps its own state
+        const done = runItems(
+            {
+                entries: [...base, entry('r', 'r', 'tool_result', 3, { name: 'bash', tool_call_id: 'x1' })],
+                stoppedBy: 'user',
+            },
+            false,
+        );
+        expect(last(done)).toMatchObject({ type: 'steps', steps: [{ status: 'done' }] });
+        expect(runStoppedReason('user')).toBe('user');
+        expect(runStoppedReason('limit')).toBe('subagent_limit');
+        expect(runStoppedReason(undefined)).toBeUndefined();
+    });
+
+    it('carries who stopped a run into the sub-entries and marks a stop on its way', () => {
+        const runs = groupRuns(entries, [
+            meta('run-abcdef1', { state: 'cancelled', stopped_by: 'user' }),
+            meta('run-2', { state: 'running', stopped_by: 'limit', started_at: at(3) }),
+        ]);
+        const nav = subagentNav(runs, { chatRunning: true, now: T0 + 40_000, stopping: new Set(['run-2']) });
+        expect(nav[0]).toMatchObject({ runId: 'run-abcdef1', status: 'stopped', stoppedBy: 'user' });
+        expect(nav[0].stopping).toBeUndefined();
+        // a stop is addressed to the newest run of a thread: a run without continuations is its own newest run,
+        // so the marking set names the run's own ID
+        expect(nav[1]).toMatchObject({ runId: 'run-2', stoppedBy: 'limit', stopping: true });
+        expect(nav[1].latest).toBeUndefined();
+        // a thread names its newest run (issue #81) and a stop goes there
+        const thread = groupRuns([], [
+            meta('run-abcdef1', { state: 'cancelled', stopped_by: 'user', started_at: at(1) }),
+            meta('run-next', { state: 'running', continues_run_id: 'run-abcdef1', started_at: at(20) }),
+        ]);
+        const navThread = subagentNav(thread, { chatRunning: true, now: T0 + 40_000, stopping: new Set(['run-next']) });
+        expect(navThread).toHaveLength(1);
+        expect(navThread[0]).toMatchObject({ runId: 'run-abcdef1', latest: 'run-next', stopping: true });
+        // without the set nothing is marked as stopping (a chat that is not open cannot know)
+        expect(subagentNav(runs, { chatRunning: true, now: T0 })[1].stopping).toBeUndefined();
+    });
+
+    it('names the reason of a refused stop from the gateway code', () => {
+        expect(subagentStopErrorText({ code: 'not_running' })).toBe('Could not stop the subagent: it already ended');
+        expect(subagentStopErrorText({ code: 'chat_in_trash' })).toBe(
+            'Could not stop the subagent: this chat is in the trash.',
+        );
+        expect(subagentStopErrorText({ code: 'subagents_unavailable' })).toBe(
+            'Could not stop the subagent: subagents are not available in this chat right now.',
+        );
+        expect(subagentStopErrorText({ status: 404 })).toBe('Could not stop the subagent: it is no longer available.');
+        // a code of pi-subagents or a network error: the plain sentence
+        expect(subagentStopErrorText({ code: 'invalid_state', status: 409 })).toBe('Could not stop the subagent.');
+        expect(subagentStopErrorText({})).toBe('Could not stop the subagent.');
+    });
+
+    it('turns a line of the short list into run metadata (refreshing one chat after a refused stop)', () => {
+        expect(
+            metaOfSummary({
+                run_id: 'run-1',
+                agent: 'worker',
+                state: 'cancelled',
+                stopped_by: 'user',
+                entries: 4,
+                started_at: at(1),
+                ended_at: at(9),
+            }),
+        ).toEqual({
+            chat_id: '',
+            run_id: 'run-1',
+            agent: 'worker',
+            label: undefined,
+            state: 'cancelled',
+            stopped_by: 'user',
+            continues_run_id: undefined,
+            started_at: at(1),
+            ended_at: at(9),
+            updated_at: '',
+        });
+        expect(metaOfSummary({ run_id: 'run-2', agent: 'scout', entries: 0 })).toMatchObject({ run_id: 'run-2' });
+    });
+
+    it('gives an answer of a subagent the ID of its display images (F16)', () => {
+        const items = runItems(
+            {
+                entries: [
+                    entry('r', 't', 'task', 1, { text: 'Draw' }),
+                    entry('r', 'x', 'text', 2, { text: '![Chart](plot.png)' }, { response_id: 'resp-9' }),
+                ],
+            },
+            false,
+        );
+        expect(items[items.length - 1]).toMatchObject({ type: 'text', text: '![Chart](plot.png)', imageKey: 'resp-9' });
+        const parts = runTranscript(
+            { runId: 'r', entries: [entry('r', 'x', 'text', 2, { text: 'done' }, { response_id: 'resp-9' })] },
+            false,
+        );
+        expect(parts[0].kind === 'agent' && parts[0].parts[0]).toMatchObject({ type: 'text', imageKey: 'resp-9' });
     });
 });
 

@@ -72,6 +72,26 @@ export function clipText(
     return { text: shown, clipped: shown.length < text.length, totalLines: lines.length };
 }
 
+/**
+ * End of a text the gateway shortened for storage (issue #120, F24, DL3.9). The gateway cuts task, answer, argument
+ * and result texts of a subagent at 4 000 bytes and appends exactly this ending; the ending is the contract
+ * (API.md, "Subagent entries are clipped"), not a decoration.
+ */
+export const CLIPPED_SUFFIX = ' … [truncated]';
+
+/** Line above an excerpt; the length is the gateway's limit. */
+export const EXCERPT_NOTE = 'Excerpt – first 4,000 characters';
+
+/** Whether the gateway shortened a stored text. */
+export function isClipped(text: string): boolean {
+    return text.endsWith(CLIPPED_SUFFIX);
+}
+
+/** The stored text without the gateway's marker (shows nothing that only marks the cut). */
+export function clippedText(text: string): string {
+    return isClipped(text) ? text.slice(0, -CLIPPED_SUFFIX.length) : text;
+}
+
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 

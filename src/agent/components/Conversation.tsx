@@ -29,7 +29,7 @@ import type { Approval, Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
 import { showIdleBar } from '../runState';
-import { liveParts } from '../transcript';
+import { abortLineText, liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import { compactionReason, formatTokens } from '../usage';
@@ -244,11 +244,22 @@ export function AgentBlock({
             })}
             {item.error && <Typography sx={{ fontSize: 12.5, color: 'error.main' }}>Error: {item.error}</Typography>}
             {item.stopped && (
+                // the reason decides the wording (issue #120, F9): "Stopped by you" only for the user's own stop,
+                // otherwise the limit or the trash, and just "Stopped" when nothing recorded one
                 <Typography data-testid="agent-answer-stopped" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                    Stopped by you
+                    {abortLineText(item.abortReason)}
                 </Typography>
             )}
-            {runs.length > 0 && subagents && <SubagentCard items={runs} onOpen={subagents.onOpen} />}
+            {runs.length > 0 && subagents && (
+                <SubagentCard
+                    items={runs}
+                    onOpen={subagents.onOpen}
+                    onStop={subagents.stop?.onStop}
+                    stopStateOf={subagents.stop?.stateOf}
+                    stopErrorOf={subagents.stop?.errorOf}
+                    onDismissStopError={subagents.stop?.dismissError}
+                />
+            )}
             {placed.rest.length > 0 && <AgentFileMessage chatId={fileChatId} artifacts={placed.rest} />}
             {/* a plan whose call is not among the parts of this answer stays under the whole answer (as before #138) */}
             {placedPlans.rest.map(planCard)}
