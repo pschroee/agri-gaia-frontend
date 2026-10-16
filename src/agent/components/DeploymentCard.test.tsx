@@ -15,7 +15,11 @@ import type { DeploymentCardData } from '../deploymentCard';
 import type { WatchJob } from '../jobs';
 import DeploymentCard from './DeploymentCard';
 
-afterEach(cleanup);
+afterEach(() => {
+    cleanup();
+    // the width tests mock the measured rect; a failing assertion must not leave it behind for the next one
+    vi.restoreAllMocks();
+});
 
 const job = (over: Partial<WatchJob> = {}): WatchJob => ({
     id: 'j1',
@@ -131,7 +135,6 @@ describe('DeploymentCard', () => {
         expect(screen.getByText('Image')).toBeTruthy();
         expect(screen.getByText('Ports')).toBeTruthy();
         expect(text('agent-deployment-updated')).toMatch(/^updated /);
-        vi.restoreAllMocks();
     });
 
     it('keeps the panel rows on the page while it is narrower than 600 px', () => {
@@ -139,6 +142,5 @@ describe('DeploymentCard', () => {
         render(<DeploymentCard data={card()} layout="page" />);
         expect(screen.queryByText('Edge device')).toBeNull();
         expect(screen.getByTestId('agent-deployment-ports')).toBeTruthy();
-        vi.restoreAllMocks();
     });
 });
