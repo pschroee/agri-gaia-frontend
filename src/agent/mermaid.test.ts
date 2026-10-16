@@ -265,7 +265,7 @@ describe('tolerateHtmlLabels', () => {
         expect(tolerateHtmlLabels('graph LR\n  A["`**a**<br/>b`"]')).toBe('graph LR\n  A["`**a**\nb`"]');
         expect(tolerateHtmlLabels('graph LR\n  A["`a`b<br/>c`"]')).toBe('graph LR\n  A["`a`b c`"]');
     });
-    it('changes nothing outside labels, nothing without tags and nothing in other diagram types', () => {
+    it('changes nothing outside labels and nothing in other diagram types', () => {
         const plain = 'flowchart LR\n  A[a <= b] --> B["x < y"]\n  %% a <br/> comment\n  A -- text --> B';
         expect(tolerateHtmlLabels(plain)).toBe(plain);
         const seq = 'sequenceDiagram\n  A->>B: one<br/>two';
@@ -277,6 +277,22 @@ describe('tolerateHtmlLabels', () => {
     });
     it('leaves a line it cannot read to the end as it is', () => {
         expect(tolerateHtmlLabels('graph LR\n  A[a<br/>b')).toBe('graph LR\n  A[a<br/>b');
+    });
+    it('quotes a label with brackets or quotes though it carries no tag (F7, issue L6/#123)', () => {
+        expect(tolerateHtmlLabels('flowchart LR\n  A[Training (CPU)] --> B')).toBe(
+            'flowchart LR\n  A["Training (CPU)"] --> B',
+        );
+        expect(tolerateHtmlLabels('flowchart LR\n  A -->|a (b)| B')).toBe('flowchart LR\n  A -->|"a (b)"| B');
+        expect(tolerateHtmlLabels('flowchart LR\n  A[Modell "best.pt"] --> B')).toBe(
+            'flowchart LR\n  A["Modell \'best.pt\'"] --> B',
+        );
+        expect(tolerateHtmlLabels('graph TD\n  A --> B[Datensatz (MNIST)]')).toBe(
+            'graph TD\n  A --> B["Datensatz (MNIST)"]',
+        );
+    });
+    it('leaves a shape whose brackets belong to it alone, and a label without brackets (DL6.3)', () => {
+        const shapes = 'flowchart LR\n  A((x)) --> B([y]) --> C{ok}\n  D --> E(a b)\n  F["already (quoted)"] --> G';
+        expect(tolerateHtmlLabels(shapes)).toBe(shapes);
     });
 });
 

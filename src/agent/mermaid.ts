@@ -244,25 +244,33 @@ const HTML_BREAK = /<br\s*\/?>/gi;
 /** Any other HTML tag (opening, closing or self-closing); `a < b` and `<=` are not tags. */
 const HTML_TAG = /<\/?[A-Za-z][^<>]*>/g;
 const HAS_HTML_TAG = /<\/?[A-Za-z][^<>]*>/;
+/** In an unquoted label a bracket or a quote ends the label and breaks the parse (issue #59). */
+const NEEDS_QUOTES = /[()"]/;
 
 /**
- * The text of one label without HTML: `<br>` becomes a real line break, other tags go. Returns the label in its
- * new form, or undefined when it has no tag (then nothing changes). A plain label ends up as a quoted string with
- * real line breaks, which mermaid draws as separate lines in strict mode without HTML labels; the quotes also keep
- * brackets in the text from breaking the parse. A double quote in the text would end the string and becomes `'`
- * (mermaid 12 shows `#quot;` literally without HTML labels). A Markdown string stays one; a backtick inside one
- * cannot be written, so its breaks become spaces there.
+ * The text of one label without HTML, or in quotes, so that mermaid parses it. Returns the label in its new form,
+ * or undefined when it stays as it is: a label with no tag and no bracket and no quote reads the same either way.
+ * `<br>` becomes a real line break, other tags go; a plain label ends up as a quoted string with real line breaks,
+ * which mermaid draws as separate lines in strict mode without HTML labels. A double quote in the text would end
+ * the string and becomes `'` (mermaid 12 shows `#quot;` literally without HTML labels). Brackets are the usual
+ * mistake and need no tag to break the parse (`A[Training (CPU)]`), so they alone put the label in quotes
+ * (issue L6/#123). A Markdown string stays one; a backtick inside one cannot be written, so its breaks become
+ * spaces there.
  */
 function relabel(raw: string): string | undefined {
     const t = raw.trim();
     const markdown = t.length >= 4 && t.startsWith('"`') && t.endsWith('`"');
     const quoted = !markdown && t.length >= 2 && t.startsWith('"') && t.endsWith('"');
     const text = markdown ? t.slice(2, -2) : quoted ? t.slice(1, -1) : t;
-    if (!HAS_HTML_TAG.test(text)) return undefined;
-    const parts = text
-        .split(HTML_BREAK)
-        .map((p) => p.replace(HTML_TAG, '').replace(/\s+/g, ' ').trim())
-        .filter((p) => p !== '');
+    const hasHtml = HAS_HTML_TAG.test(text);
+    if (!hasHtml && !NEEDS_QUOTES.test(text)) return undefined;
+    // Only HTML is rewritten (tags out, `<br>` as a line break); without it the text stays as the agent wrote it.
+    const parts = hasHtml
+        ? text
+              .split(HTML_BREAK)
+              .map((p) => p.replace(HTML_TAG, '').replace(/\s+/g, ' ').trim())
+              .filter((p) => p !== '')
+        : [text];
     if (markdown) {
         const inner = parts.join('\n');
         return inner.includes('`') ? `"\`${parts.join(' ')}\`"` : `"\`${inner}\`"`;
@@ -343,11 +351,12 @@ function relabelLine(line: string): string {
 }
 
 /**
- * Tolerates the most common slip in diagrams written by the agent (issue #59): HTML in the labels of a flowchart.
- * `<br>`, `<br/>` and `<br />` inside node labels and `|…|` edge labels become a real line break of a quoted label,
- * other tags are removed. Nothing outside labels changes; other diagram types stay as they are (in a sequence
- * diagram `<br/>` is mermaid's own line break), and so do comments and front matter. Strict mode and the absence of
- * HTML labels are unaffected: the result carries no HTML at all.
+ * Tolerates the two common slips in diagrams written by the agent (issues #59 and L6/#123): HTML in the labels of a
+ * flowchart, and brackets or quotes in an unquoted label. `<br>`, `<br/>` and `<br />` inside node labels and `|…|`
+ * edge labels become a real line break of a quoted label, other tags are removed, and a label with `(`, `)` or `"`
+ * is put in quotes, where it parses. Nothing outside labels changes; other diagram types stay as they are (in a
+ * sequence diagram `<br/>` is mermaid's own line break), and so do comments and front matter. Strict mode and the
+ * absence of HTML labels are unaffected: the result carries no HTML at all.
  */
 export function tolerateHtmlLabels(code: string): string {
     const lines = code.split('\n');
@@ -361,7 +370,9 @@ export function tolerateHtmlLabels(code: string): string {
         while (i < lines.length && skip(lines[i])) i++;
     }
     if (i >= lines.length || !/^(flowchart|graph)(-elk)?\b/i.test(lines[i].trim())) return code;
-    const out = lines.map((l, n) => (n <= i || skip(l) || !l.includes('<') ? l : relabelLine(l)));
+    // Lines with a tag, a bracket or a quote may carry a label that needs rewriting; every other line stays as it is.
+    const worth = (l: string) => l.includes('<') || NEEDS_QUOTES.test(l);
+    const out = lines.map((l, n) => (n <= i || skip(l) || !worth(l) ? l : relabelLine(l)));
     return out.join('\n');
 }
 
