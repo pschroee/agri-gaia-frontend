@@ -16,5 +16,9 @@ export default defineConfig({
         setupFiles: ['src/testing/dom.ts'],
         // no file runs another's leaked globals
         isolate: true,
+        // The cards render clock times in the local zone, so their expectations only hold in a fixed one; the
+        // tests are written against UTC. Without this the suite passes in the image (UTC) and fails on a Mac in
+        // CEST — measured on 16.10.2026, eight cases.
+        env: { TZ: 'UTC' },
     },
 });
