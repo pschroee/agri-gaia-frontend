@@ -25,6 +25,7 @@ import type { SubagentNavItem } from '../subagents';
 import type { Approval, Artifact } from '../types';
 import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
+import { showIdleBar } from '../runState';
 import { liveParts } from '../transcript';
 import type { TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
@@ -38,7 +39,7 @@ import type { StepControls } from './StepList';
 import SubagentCard from './SubagentCard';
 import PlanCard from './PlanCard';
 import ThinkingBlock from './ThinkingBlock';
-import WorkingIndicator from './WorkingIndicator';
+import WorkingIndicator, { WorkingBar } from './WorkingIndicator';
 import { agentColors } from './tokens';
 
 /** Open state of thinking blocks and of tool steps' details (keys `stepOpenKey`), kept across transcript reloads. */
@@ -585,6 +586,21 @@ export default function Conversation({
                             : undefined
                     }
                 />
+            )}
+            {showIdleBar({
+                running,
+                pending: !!pending,
+                answerShown: !!activeKey,
+                streaming: liveP.some(
+                    (p) => p.type === 'text' || (p.type === 'thinking' && p.liveSince !== undefined),
+                ),
+                toolRunning: runningTools.size > 0,
+                approvalWaiting: waitingApproval,
+                loadingOrCompacting: resuming || !!chat?.starting || !!stream.compacting,
+            }) && (
+                // the answer of the running turn stands there inert (a step just ended, the next output has not begun):
+                // a quiet sign of life, without a text of its own (F8, issue L6/#123, decision DL6.4)
+                <WorkingBar />
             )}
         </Box>
     );

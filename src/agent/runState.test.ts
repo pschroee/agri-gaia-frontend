@@ -15,6 +15,7 @@ import {
     runStateOf,
     runStateText,
     inputControls,
+    showIdleBar,
 } from './runState';
 import type { StatePlace } from './runState';
 import type { Chat, StoredMessage } from './types';
@@ -250,5 +251,33 @@ describe('pendingSettled', () => {
         expect(pendingSettled(p, [msg(3, 'user'), msg(4, 'assistant')])).toBe(false);
         expect(pendingSettled(p, [msg(5, 'assistant')])).toBe(false);
         expect(pendingSettled(p, [msg(4, 'assistant'), msg(5, 'user')])).toBe(true);
+    });
+});
+
+describe('showIdleBar', () => {
+    // The gap between a finished step and the next model output (F8, issue L6/#123).
+    const running = {
+        running: true,
+        pending: false,
+        answerShown: true,
+        streaming: false,
+        toolRunning: false,
+        approvalWaiting: false,
+        loadingOrCompacting: false,
+    };
+    it('stands below the running answer while nothing of it moves', () => {
+        expect(showIdleBar(running)).toBe(true);
+    });
+    it('stays away while something shows itself', () => {
+        expect(showIdleBar({ ...running, streaming: true })).toBe(false);
+        expect(showIdleBar({ ...running, toolRunning: true })).toBe(false);
+        expect(showIdleBar({ ...running, approvalWaiting: true })).toBe(false);
+        expect(showIdleBar({ ...running, loadingOrCompacting: true })).toBe(false);
+        expect(showIdleBar({ ...running, pending: true })).toBe(false);
+    });
+    it('stays away without an answer of this turn and outside a run', () => {
+        // without an answer WorkingIndicator names the reason; without a run there is nothing to show
+        expect(showIdleBar({ ...running, answerShown: false })).toBe(false);
+        expect(showIdleBar({ ...running, running: false })).toBe(false);
     });
 });
