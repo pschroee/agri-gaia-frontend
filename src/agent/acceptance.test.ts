@@ -209,7 +209,10 @@ describe('acceptanceSummary', () => {
         // the full line stays what it was, and an empty report stays empty
         expect(acceptanceSummary(r, { dense: false })).toHaveLength(4);
         expect(acceptanceSummary(r)).toHaveLength(4);
-        expect(acceptanceSummary(parse('{}'), { dense: true })).toEqual([]);
+        // a body without a single field of a report does not count as one (parseAcceptanceReport)
+        expect(acceptanceSummary(parse('{"criteriaSatisfied": [], "changed_files": [], "commands_run": []}'))).toEqual(
+            [],
+        );
     });
 });
 

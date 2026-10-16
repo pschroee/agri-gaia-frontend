@@ -458,8 +458,12 @@ describe('budgetLine', () => {
     });
 
     it('leaves out what the plan does not carry, and an interactive plan has no line', () => {
-        const plain = auto({ usage: { llm_cost: 0, auto_turns: 0, compute_used: 0, compute_max: 0 } });
-        expect(budgetLine(plain, now)).toBe('30m left · 0.42/1.50 USD · 3/20 turns');
+        // no cost limit, no turns, no compute: the duration the plan carries stays, everything else is left out
+        const plain = auto({
+            budget: { max_duration_s: 3600, max_llm_cost: 0, max_auto_turns: 0 },
+            usage: { llm_cost: 0, auto_turns: 0, compute_used: 0, compute_max: 0 },
+        });
+        expect(budgetLine(plain, now)).toBe('30m left');
         expect(budgetLine(plan(), now)).toBe('');
     });
 
@@ -551,7 +555,10 @@ describe('fetchActivePlans and runningPlans', () => {
     it('a plan waiting for the user counts as running, a proposed one does not', () => {
         const parked = auto({ id: 'e', steps: [step({ parked_approval: 'a1' })] });
         expect(runningPlans([parked], new Set(['a1'])).map((p) => p.id)).toEqual(['e']);
-        expect(runningPlans([parked], new Set())).toEqual([]);
+        // a plan the user has not approved yet is not running, a parked step or not
+        expect(runningPlans([auto({ id: 'e', state: 'proposed', steps: [step({ parked_approval: 'a1' })] })], new Set())).toEqual(
+            [],
+        );
     });
 });
 

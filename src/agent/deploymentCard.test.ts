@@ -127,8 +127,11 @@ describe('deploymentToolOf', () => {
     });
 
     it('says nothing for another command', () => {
-        expect(deploymentToolOf(step({ tool: 'bash', args: { command: 'agw-platform datasets' } }))).toBeUndefined();
-        expect(deploymentToolOf(step({ tool: 'read' }))).toBeUndefined();
+        // the name has to go with it: the fixture's own name is an MCP call of a deployment tool
+        expect(
+            deploymentToolOf(step({ tool: 'bash', name: 'bash', args: { command: 'agw-platform datasets' } })),
+        ).toBeUndefined();
+        expect(deploymentToolOf(step({ tool: 'read', name: 'read' }))).toBeUndefined();
     });
 });
 

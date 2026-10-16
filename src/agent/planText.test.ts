@@ -193,14 +193,22 @@ describe('the reject line of an embedded approval (L10)', () => {
     });
 });
 
+/**
+ * The same plan with a compute call among its steps: the gateway names no kind per call, so the kind a compute call
+ * shows comes from the plan's own steps (L12).
+ */
+const withComputeStep = (over: Partial<Plan> = {}): Plan =>
+    plan({ steps: [step({ idx: 1 }), step({ idx: 2, state: 'running', effect: 'compute' })], ...over });
+
 describe('the budget block (L12)', () => {
     it('names the duration with the time it ends at', () => {
+        // the two hours run from the decision, as the design shows them: decided 14:51, ends 16:51
         const now = Date.parse('2026-10-16T14:51:00.000Z');
-        expect(maxDurationText(plan(), now)).toBe('2 h · ends today 15:51');
+        expect(maxDurationText(plan({ decided_at: '2026-10-16T14:51:00.000Z' }), now)).toBe('2 h · ends today 16:51');
     });
 
     it('lists only what the plan carries, the compute calls always', () => {
-        const rows = budgetRowsOf(plan(), Date.parse('2026-10-16T14:00:00.000Z'));
+        const rows = budgetRowsOf(withComputeStep(), Date.parse('2026-10-16T14:00:00.000Z'));
         expect(rows.map((r) => r.label)).toEqual([
             'Max duration',
             'Model cost limit',
@@ -223,7 +231,7 @@ describe('the budget block (L12)', () => {
         const compute = step({ effect: 'compute' });
         expect(computeStepLine(plan(), compute)).toBe('Uses compute time · 2 of 3 compute calls left');
         expect(computeStepLine(plan(), step())).toBe('');
-        expect(computeText(plan())).toBe('1 (training)');
+        expect(computeText(withComputeStep())).toBe('1 (training)');
         expect(computeText(plan({ usage: { llm_cost: 0, auto_turns: 0, compute_used: 0, compute_max: 3 } }))).toBe('0');
     });
 });

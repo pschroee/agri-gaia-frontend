@@ -271,7 +271,8 @@ describe('the rights block of a proposed plan (L13)', () => {
         );
         expect(screen.getByText('RIGHTS WHILE IT RUNS')).toBeTruthy();
         expect(screen.getByText('write dataset')).toBeTruthy();
-        expect(screen.getByText('WRITE')).toBeTruthy();
+        // the chip carries the effect's label in the theme's case; the uppercasing is its CSS (EffectChip)
+        expect(screen.getAllByTestId('agent-effect-chip').map((c) => c.textContent)).toContain('Write');
     });
 
     it('is left out entirely without a grant', () => {

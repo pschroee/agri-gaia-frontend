@@ -8,7 +8,7 @@
 // dialog and the collapsed line of a decided approval. The rules behind it are checked in notebook.test.ts; here the
 // card only has to put them together.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { NotebookApprovalData } from '../notebook';
@@ -92,7 +92,8 @@ describe('the pending approval', () => {
         expect(screen.getByText('1')).toBeTruthy();
         expect(screen.getByText('print("epoch 1")')).toBeTruthy();
         expect(screen.getByTestId('agent-notebook-approval').textContent).toContain('Entry file');
-        expect(screen.getByTestId('agent-notebook-approval').textContent).toContain('SHA-256 bbbb…bbbb');
+        // the short SHA-256 as the design writes it: the first eight and the last four characters (notebook.ts)
+        expect(screen.getByTestId('agent-notebook-approval').textContent).toContain('SHA-256 bbbbbbbb…bbbb');
         expect(screen.getByLabelText(/train\.py, 1 lines, read-only/)).toBeTruthy();
     });
 
@@ -222,7 +223,8 @@ describe('the expand dialog', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
         const dialog = await screen.findByRole('dialog');
         fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
-        expect(screen.queryByRole('dialog')).toBeNull();
+        // the dialog leaves with MUI's transition, so it is gone a tick later, not on the spot
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(onApprove).not.toHaveBeenCalled();
         expect(onReject).not.toHaveBeenCalled();
     });
@@ -233,7 +235,7 @@ describe('the expand dialog', () => {
         fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
         await screen.findByRole('dialog');
         fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-        expect(screen.queryByRole('dialog')).toBeNull();
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
         expect(onApprove).not.toHaveBeenCalled();
     });
 });
@@ -255,7 +257,8 @@ describe('a decided approval', () => {
         expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
         expect(screen.queryByText('print("epoch 1")')).toBeNull();
 
-        fireEvent.click(screen.getByLabelText(/^Approved: Run train\.py/));
+        // the row of the decision is the button; the group around it carries the same label
+        fireEvent.click(screen.getByRole('button', { name: /^Approved: Run train\.py/ }));
         expect(screen.getByText('print("epoch 1")')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
     });
@@ -269,7 +272,7 @@ describe('a decided approval', () => {
             />,
         );
         expect(screen.queryByTestId('agent-notebook-approval-note')).toBeNull();
-        fireEvent.click(screen.getByLabelText(/^Approved: Run train\.py/));
+        fireEvent.click(screen.getByRole('button', { name: /^Approved: Run train\.py/ }));
         expect(screen.getByTestId('agent-notebook-approval-note').textContent).toContain(NOTE);
     });
 
