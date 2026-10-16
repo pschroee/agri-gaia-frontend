@@ -7,11 +7,19 @@ import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 
 import { useAgentOptional } from '../AgentContext';
 import { navBadge } from '../approvalFeed';
+import { badgeCount, badgeTooltip } from '../planAlerts';
 
-/** Count and label of the side navigation's "Agent" entry; without the agent provider nothing waits. */
+/**
+ * Count and label of the side navigation's "Agent" entry; without the agent provider nothing waits. The number is
+ * the same as on the floating button: plans waiting for the user plus open approvals (A-E4, D4.4).
+ */
 export function useAgentNavBadge(): { count: number; visible: boolean; label: string } {
-    const count = useAgentOptional()?.pendingApprovalCount ?? 0;
-    return { count, ...navBadge(count) };
+    const agent = useAgentOptional();
+    const approvals = agent?.pendingApprovalCount ?? 0;
+    const needsInput = agent?.planNeedsInput ?? 0;
+    const count = badgeCount(needsInput, approvals);
+    const tip = badgeTooltip(needsInput, approvals);
+    return { count, ...navBadge(count), label: tip ? `Agent · ${tip}` : 'Agent' };
 }
 
 /**

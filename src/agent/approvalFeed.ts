@@ -7,6 +7,8 @@
 // then every new or decided "approval". A slow poll of GET /approvals?state=pending is the fallback; while the
 // stream is down it polls faster.
 
+import { planAlertAction } from './planAlerts';
+import type { PlanAlert } from './planAlerts';
 import type { Approval } from './types';
 
 /** Pending approvals by id, plus a counter of stream events so a poll that started earlier cannot undo them. */
@@ -76,7 +78,8 @@ export function feedAction(text: string): PendingAction | undefined {
     if (!ev || typeof ev !== 'object') return undefined;
     const { kind, data } = ev as { kind?: unknown; data?: unknown };
     if (kind === 'approvals') return { type: 'snapshot', approvals: Array.isArray(data) ? (data as Approval[]) : [] };
-    if (kind === 'approval' && data && typeof data === 'object') return { type: 'approval', approval: data as Approval };
+    if (kind === 'approval' && data && typeof data === 'object')
+        return { type: 'approval', approval: data as Approval };
     return undefined;
 }
 
@@ -99,6 +102,8 @@ export type FeedOptions = {
     onLive?: (live: boolean) => void;
     /** A poll answered 401: the session is gone. */
     onUnauthorized?: () => void;
+    /** The stream carried a `plan_alert` (A-E4, D4.3); the approvals are unaffected by it. */
+    onAlert?: (alert: PlanAlert) => void;
     isUnauthorized?: (e: unknown) => boolean;
     /** Poll interval while the stream is open (fallback against a silently stalled stream). */
     slowPollMs?: number;
@@ -145,9 +150,12 @@ export function startApprovalFeed(o: FeedOptions): () => void {
     function schedulePoll() {
         clearTimeout(poller);
         if (stopped) return;
-        poller = setTimeout(() => {
-            void poll().finally(schedulePoll);
-        }, live ? slow : fast);
+        poller = setTimeout(
+            () => {
+                void poll().finally(schedulePoll);
+            },
+            live ? slow : fast,
+        );
     }
 
     const connect = () => {
@@ -159,6 +167,12 @@ export function startApprovalFeed(o: FeedOptions): () => void {
             setLive(true);
         };
         src.onmessage = (msg) => {
+            // one stream carries both: the approvals of the user and, since A-E4, the alerts of autonomous plans
+            const alert = planAlertAction(msg.data);
+            if (alert) {
+                o.onAlert?.(alert);
+                return;
+            }
             const a = feedAction(msg.data);
             if (a) o.dispatch(a);
         };
