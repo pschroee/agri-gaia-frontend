@@ -734,6 +734,443 @@ export type Command = {
 
 export type CommandOption = { value: string; label?: string; current?: boolean };
 
+// --- pre-annotation of a chat (gateway V1/V3, issue #112) ------------------------------------------------------
+// The answer of GET /api/chats/{id}/annotation (`internal/api/annotation.go`): the runs and the jobs of a chat,
+// each oldest first. The route reads the gateway's own tables and never calls CVAT, so it carries no count per
+// class and no frame numbers (the agent's `annotation_summary` stays the source of the counts).
+
+/** The answer of the annotation route; `cvat_url` is the base every link of the cards starts with. */
+export type AnnotationAnswer = {
+    /** Public address of CVAT (AGW_CVAT_PUBLIC_URL); empty when the setup runs no pre-annotation. */
+    cvat_url: string;
+    runs: AnnotationRun[];
+    jobs: AnnotationJob[];
+};
+
+/** The states of a run (`store.AnnotationRun*`); `expired` means CVAT no longer has it. */
+export type AnnotationRunState = 'queued' | 'running' | 'finished' | 'failed' | 'expired';
+
+/** One pre-annotation run of a chat, as the route answers it. */
+export type AnnotationRun = {
+    run_id: string;
+    /** The dataset whose task the run works on; the gateway stores the id, not the name. */
+    dataset_id: number;
+    task_id: number;
+    /** Id of the pre-annotation function, which is its name (V2). */
+    function: string;
+    min_confidence: number;
+    mapping: Record<string, string>;
+    /** keep or replace; a run with replace wipes every annotation of the task (irreversible). */
+    existing: string;
+    state: AnnotationRunState;
+    error?: string;
+    /** The percent the watcher last wrote; absent while none was reported (a queued run). */
+    progress?: number;
+    message?: string;
+    /** The tool call that started the run; empty when the watcher did not see it. */
+    tool_call_id?: string;
+    created_at: string;
+    ended_at?: string;
+    /** The task's address in CVAT; empty without a public address. */
+    cvat_url?: string;
+};
+
+/** The kinds of an annotation job (`internal/annotation/job.go`). */
+export type AnnotationJobKind = 'calibrate' | 'uncertain' | 'fill' | 'verify';
+
+/** The states of an annotation job (`store.AnnotationJob*`); a job has no `expired`. */
+export type AnnotationJobState = 'queued' | 'running' | 'finished' | 'failed';
+
+/** One check or fill job of a chat, as the route answers it. */
+export type AnnotationJob = {
+    job_id: string;
+    kind: AnnotationJobKind;
+    dataset_id: number;
+    task_id: number;
+    function: string;
+    state: AnnotationJobState;
+    done: number;
+    total: number;
+    /** The call the agent made (limit, mapping, uncertain_below, min_confidence, source_id, final). */
+    params?: AnnotationJobParams;
+    /** The result a finished job wrote; its shape depends on `kind`. */
+    result?: unknown;
+    error?: string;
+    /** The tool call that started the job; empty when the watcher did not see it. */
+    tool_call_id?: string;
+    created_at: string;
+    ended_at?: string;
+    cvat_url?: string;
+};
+
+/** The parameters a job was started with (`annotation.jobSpec`). */
+export type AnnotationJobParams = {
+    limit?: number;
+    mapping?: Record<string, string>;
+    /** The threshold of an uncertainty check, in whole percent. */
+    uncertain_below?: number;
+    /** The threshold a fill or a run used, in whole percent. */
+    min_confidence?: number;
+    /** The run or fill a verification judges. */
+    source_id?: string;
+    final?: boolean;
+};
+
+/** The answer of a finished calibrate job (`annotation.Calibration`). */
+export type CalibrationResult = {
+    /** How many manually annotated images were measured. */
+    images: number;
+    /** The proposed mapping of the function's labels onto the classes of the dataset. */
+    mapping: Record<string, string>;
+    /** Per label the function answered: how often which manual class stood on the same image. */
+    confusion: Record<string, Record<string, number>>;
+    /** Share of answered images the function gets right; null for a detector. */
+    accuracy: number | null;
+    /** The figures at the proposed threshold; null for a classification. */
+    precision: number | null;
+    recall: number | null;
+    f1: number | null;
+    /** The proposed threshold, in whole percent. */
+    proposed_min_confidence: number;
+    /** Share of the measured images the function answers at the proposed threshold. */
+    coverage: number;
+    note?: string;
+};
+
+/** One image a check was unsure about (`annotation.UncertainImage`). */
+export type UncertainImage = {
+    frame: number;
+    /** The file name in CVAT; absent when CVAT did not give one. */
+    file?: string;
+    top_label: string;
+    confidence: number;
+    boxes: number;
+    cvat_url?: string;
+};
+
+/** The answer of a finished uncertainty check (`annotation.uncertainAnswer`). */
+export type UncertainResult = {
+    /** How many images the check asked the function about. */
+    checked: number;
+    uncertain: UncertainImage[];
+};
+
+/** The answer of a finished fill (`annotation.fillAnswer`). */
+export type FillResult = {
+    /** Images the job wrote annotations on. */
+    filled: number;
+    /** Images it left alone because they carry an annotation. */
+    skipped_annotated: number;
+    /** Images the function answered nothing usable on. */
+    empty_results: number;
+};
+
+/** One image worth a look (`annotation.SuspiciousImage`; V3b). */
+export type SuspiciousImage = {
+    frame: number;
+    file?: string;
+    /** Why the image stands there, in the gateway's words. */
+    reason: string;
+    cvat_url?: string;
+};
+
+/** What the automatic annotations look like against the manual ones (`annotation.Plausibility`). */
+export type Plausibility = {
+    filled_images: number;
+    manual_images: number;
+    class_share_auto: Record<string, number>;
+    class_share_manual: Record<string, number>;
+    /** How far the two distributions stand apart (half the sum of the absolute differences). */
+    tvd: number;
+    empty_share_auto: number;
+    empty_share_manual: number;
+    boxes_per_image_auto: number;
+    boxes_per_image_manual: number;
+    median_rel_area_ratio: number;
+    /** The plausibility rests on the annotations of the whole task; false: none of them was registered. */
+    measured: boolean;
+};
+
+/** The check a report compares itself with (`annotation.RoundComparison`, `assess.CheckComparison`). */
+export type RoundComparison = {
+    source_id: string;
+    /** The correction round that figure belongs to; 0 is the initial pre-annotation. */
+    round: number;
+    verdict: string;
+    accuracy?: number;
+    macro_f1?: number;
+    score: number;
+};
+
+/** The change against the round before (`annotation.RoundDelta`; V3c). */
+export type RoundDelta = {
+    score: number;
+    accuracy?: number;
+    macro_f1?: number;
+    per_class_f1?: Record<string, number>;
+};
+
+/** The answer of a finished verify job (V3b/V3c); its shell is the report of `assess.Report`. */
+export type VerifyResult = AssessReport & {
+    /** The run or the fill this measurement judged. */
+    source_id: string;
+    calibration_images: number;
+    per_class: Record<string, ClassFigures>;
+    overall: Overall;
+    plausibility: Plausibility;
+    suspicious: SuspiciousImage[];
+    /** The correction round (V3c); 0 or missing: the initial pre-annotation. */
+    round?: number;
+    previous?: RoundComparison;
+    delta?: RoundDelta;
+};
+
+// --- result checks of a chat (gateway R0-R3, issue #112) ------------------------------------------------------
+
+/** What a check measured (`assess.Kind*`). */
+export type AssessKind = 'annotation' | 'training_model' | 'own_model' | 'deployment';
+
+/**
+ * The states of a check. `queued`, `running`, `finished` and `failed` are the gateway's own (`store.Assess*`);
+ * `expired` is the card's: a tool call named a check that neither the route nor `assess_status` still knows, so
+ * the card stands there without a report (issue #112, D16).
+ */
+export type AssessState = 'queued' | 'running' | 'finished' | 'failed' | 'expired';
+
+/** What the gateway thinks of a result (`assess.Verdict`); empty in a partial report of a failed check. */
+export type AssessVerdict = 'usable' | 'questionable' | 'not_measured' | '';
+
+/** The one line the agent starts its reply with (`assess.Header`). */
+export type AssessReport = {
+    kind: string;
+    verdict: AssessVerdict;
+    /** The check measured at the hold-out set; false: it compared rounds (validation set). */
+    final: boolean;
+    /** What was measured: holdout, validation or synthetic. */
+    set: string;
+    /** The number of images or test requests behind the figures. */
+    measured_images: number;
+    image_review: ImageReview;
+    /** Why the verdict is what it is, in the gateway's words; the first one stands in the header of a not measured
+     * report and does not appear again under "Reasons". */
+    reasons?: string[];
+    hints?: string[];
+    suggestions?: SuggestionText[];
+    /** What was measured, per kind (`TrainingFigures`, `OwnModelFigures` or `DeploymentFigures`). */
+    figures?: unknown;
+    note?: string;
+    header: string;
+};
+
+/** Whether a model looked at the pictures behind the measured task (`assess.ImageReview`). */
+export type ImageReview = {
+    done: boolean;
+    model?: string;
+    /** How many images the review gave a verdict for; 0 when no model looked at any. */
+    checked?: number;
+    /** The share of the checked images the review complained about. */
+    flagged_share?: number;
+    /** Why no model looked at the images; empty when one did. */
+    reason?: string;
+};
+
+/** What the agent may do about a questionable result (`assess.Suggestion`). */
+export type SuggestionText = { id: string; text: string };
+
+/** What a running check reports about itself (`assess.Progress`). */
+export type AssessProgress = {
+    /** The set it measures (holdout, validation, synthetic). */
+    set?: string;
+    images?: number;
+    note?: string;
+};
+
+/** One line of GET /api/chats/{id}/assessments (`internal/api/assess.go`). */
+export type AssessCheck = {
+    check_id: string;
+    kind: AssessKind;
+    /** What was checked: model:<id>, sha:<hex> or deployment:<name>. */
+    subject: string;
+    final: boolean;
+    state: AssessState;
+    /** The whole report of the check; null while it runs or after it failed without a partial one. */
+    report: AssessReport | null;
+    /** Only while the check runs (a finished check's progress is stale). */
+    progress?: AssessProgress;
+    error?: string;
+    /** The call that started the check, so the card can be placed in the history. */
+    tool_call_id?: string;
+    created_at: string;
+    started_at?: string;
+    ended_at?: string;
+    /** For a check of a file (subject sha:<hex>): the model this file was uploaded as, once that happened. */
+    uploaded_model?: { id: number; name?: string };
+};
+
+/** The answer of the check route. */
+export type AssessAnswer = { checks: AssessCheck[] };
+
+/** Figures of one class (`assess.ClassFigures`); precision is null when the class was never predicted. */
+export type ClassFigures = {
+    precision: number | null;
+    recall: number;
+    f1: number;
+    /** Images (or objects) of this class in the measured set. */
+    support: number;
+    /** The figures of this class under their limit ("recall"); the card paints exactly these red. */
+    below?: string[];
+};
+
+/** The figures over the whole measured set, with both values present (`assess.OverallFigures`). */
+export type OverallFigures = { accuracy: number; macro_f1: number };
+
+/** The same two values as the pre-annotation's report carries them (`assess.Overall`); either may be missing. */
+export type Overall = { accuracy?: number; macro_f1?: number };
+
+/** What the majority class reaches on the measured set (`assess.BaselineFigures`). */
+export type BaselineFigures = {
+    kind: string;
+    class: string;
+    accuracy: number;
+    macro_f1: number;
+    /** The tail probability of the one-sided binomial test "better than this baseline". */
+    p_value: number;
+};
+
+/** What the model reaches on the images it saw (`assess.SeenSample`). */
+export type SeenSample = { images: number; accuracy: number };
+
+/** A structure of an id and a name (`assess.SubjectRef`, `assess.DatasetRef`, `assess.DeploymentRef`). */
+export type NamedRef = { id: number; name: string };
+
+/** What the training template measured itself (`assess.PlatformFigure`). */
+export type PlatformFigure = { name: string; value: number; source: string; note: string };
+
+/** The previous check a report compares itself with (`assess.CheckComparison`). */
+export type CheckComparison = {
+    check_id: string;
+    model: NamedRef;
+    verdict: string;
+    accuracy: number;
+    macro_f1: number;
+};
+
+/** Figures of a training check (R1, `assess.TrainingFigures`). */
+export type TrainingFigures = {
+    model: NamedRef;
+    eval_dataset: NamedRef;
+    seen_datasets?: NamedRef[];
+    measured_images: number;
+    per_class: Record<string, ClassFigures>;
+    overall: OverallFigures;
+    baseline: BaselineFigures;
+    seen_sample: SeenSample;
+    mapping?: Record<string, string>;
+    /** The template's own figure; missing when the log was not read, null when it was read and carries none. */
+    platform_figure?: PlatformFigure | null;
+    log_nan?: boolean;
+    previous?: CheckComparison;
+    delta?: Record<string, number>;
+};
+
+/** The file an own-model check measured (`assess.FileRef`). */
+export type FileRef = {
+    name: string;
+    sha256: string;
+    /** The notebook run the file came out of; null without one. */
+    run_id?: string | null;
+    path?: string;
+};
+
+/** The preprocessing the check fed the model (`assess.PreprocessFigures`). */
+export type PreprocessFigures = {
+    color: string;
+    size?: number[];
+    scale: number;
+    mean?: number[];
+    std?: number[];
+    layout: string;
+    /** The agent named this preprocessing; false: it is the default of the platform templates. */
+    declared: boolean;
+};
+
+/** One tensor the file declares (`assess.TensorInfo`). */
+export type TensorInfo = { name: string; shape: number[]; type: string };
+
+/** What the check found out about the file itself (`assess.BasicFigures`). */
+export type BasicFigures = {
+    loads: boolean;
+    load_error?: string;
+    inputs: TensorInfo[];
+    outputs: TensorInfo[];
+    /** The number of outputs the model shows (0: it is no classification). */
+    classes: number;
+    /** Different images gave different answers; null when fewer than two probe images could be run. */
+    varied?: boolean | null;
+    /** The derived class order is the one the agent declared; null without declared class names. */
+    class_order?: boolean | null;
+};
+
+/** Figures of an own-model check (R2, `assess.OwnModelFigures`). */
+export type OwnModelFigures = {
+    file: FileRef;
+    /** The model the file was uploaded as; null before the upload. */
+    model?: NamedRef | null;
+    eval_dataset: NamedRef;
+    seen_datasets?: NamedRef[];
+    measured_images: number;
+    per_class: Record<string, ClassFigures>;
+    overall: OverallFigures;
+    baseline: BaselineFigures;
+    seen_sample: SeenSample;
+    mapping?: Record<string, string>;
+    preprocess: PreprocessFigures;
+    basic?: BasicFigures | null;
+    previous?: CheckComparison;
+    delta?: Record<string, number>;
+};
+
+/** The device a deployment runs on (`assess.DeviceRef`). */
+export type DeviceRef = { name: string; simulated: boolean };
+
+/** What one source says about the inputs and outputs of the model (`assess.SourceIO`). */
+export type SourceIO = { inputs: TensorInfo[]; outputs: TensorInfo[] };
+
+/** The comparison of the three sources (`assess.DeploymentIO`). */
+export type DeploymentIO = { same: boolean; triton: SourceIO; platform: SourceIO; file: SourceIO };
+
+/** What the gateway knows about the check of a model (`assess.ModelCheck`, R1.14). */
+export type ModelCheck = {
+    found: boolean;
+    final: boolean;
+    verdict?: string;
+    measured_images?: number;
+    accuracy?: number;
+    reason?: string;
+};
+
+/** Figures of a deployment check (R3, `assess.DeploymentFigures`). */
+export type DeploymentFigures = {
+    deployment: NamedRef;
+    device: DeviceRef;
+    image?: string;
+    model: NamedRef;
+    /** The deployment answered the test requests. */
+    ready: boolean;
+    /** The model the device served, as the check read it. */
+    served_model?: string;
+    io: DeploymentIO;
+    /** Requests that were sent; 0 when none was. */
+    requests: number;
+    /** The largest difference to the model file; null while nothing was compared. */
+    max_abs_diff: number | null;
+    /** In how many requests the device named the same top class; null without a classification output. */
+    argmax_same: number | null;
+    /** The round trips of the test requests, in milliseconds. */
+    roundtrip_ms: { median: number; max: number };
+    model_check: ModelCheck | null;
+};
+
 export type PiEvent = { type: string; [key: string]: unknown };
 
 export type ServerEvent =
