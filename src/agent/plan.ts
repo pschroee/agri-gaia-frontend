@@ -48,6 +48,12 @@ export type PlanUsage = {
 /** One right of the plan's grant, as the gateway wrote it ("create dataset"), with its effect class. */
 export type GrantEntry = { effect: 'read' | 'write' | 'compute' | 'irreversible'; text: string };
 
+/** A rule of the raw grant the gateway stores with an autonomous plan (`delegation.Delegation`). */
+export type GrantRule = { action: string; resource: string; ids?: string[] };
+
+/** The grant as the gateway sends it (E1): the rules, without a structured summary in words. */
+export type PlanGrant = { rules?: GrantRule[]; expires_at?: string };
+
 /** An object a platform job produced (gateway A-E2), as the observer read it. */
 export type WatchOutput = { resource: string; id: string; label?: string };
 
@@ -130,8 +136,13 @@ export type Plan = {
     budget?: PlanBudget;
     /** What the plan has used of its budget (E4, D4.5); the gateway writes it with the plan. */
     usage?: PlanUsage;
-    /** One entry per right the plan carries, in the gateway's order (D4.4/E1). */
+    /**
+     * One entry per right the plan carries, in the gateway's order (D4.4/E1). A gateway that sends no structured
+     * summary sends the raw `grant` instead (see grantRows).
+     */
     grant_summary?: GrantEntry[];
+    /** The delegation the plan was approved with, as the gateway stores it (E1). */
+    grant?: PlanGrant;
     /** Why a paused plan is paused: user, abort, login, budget_turns, budget_cost, restart (E1/E3). */
     pause_reason?: string;
     /** The plan this one superseded (D1.12). */
@@ -634,6 +645,30 @@ export function createdSubject(plan: Plan): string {
 /** Whether that subject names one kind, so its verb is singular. */
 export const createdSingular = (plan: Plan): boolean =>
     planOutputs(plan).length > 0 && [...new Set(planOutputs(plan).map(outputKind))].filter(Boolean).length === 1;
+
+/** The effect class of a rule of the raw grant; an unknown action counts as a read. */
+function effectOfAction(action: string): GrantEntry['effect'] {
+    return action === 'write' || action === 'compute' || action === 'irreversible' ? action : 'read';
+}
+
+/**
+ * The rights of a proposed plan as its block lists them, one row per right (L13). The gateway's `grant_summary`
+ * wins where it sends one; a gateway of E1 sends the raw grant instead, and the rows are formed from its rules
+ * then ("write dataset", "read everything"). An unreadable grant leaves the block empty, so the card leaves it
+ * out rather than showing rights it cannot vouch for.
+ */
+export function grantRows(plan: Plan): GrantEntry[] {
+    if (plan.grant_summary && plan.grant_summary.length > 0) return plan.grant_summary;
+    const rules = plan.grant?.rules ?? [];
+    return rules
+        .filter((r) => typeof r?.action === 'string' && typeof r?.resource === 'string')
+        .map((r) => {
+            const all = (r.ids ?? []).length === 0 || (r.ids ?? []).includes('*');
+            const ids = all ? '' : ` (${(r.ids ?? []).join(', ')})`;
+            const text = r.action === 'read' && all ? 'read everything' : `${r.action} ${r.resource}${ids}`;
+            return { effect: effectOfAction(r.action), text };
+        });
+}
 
 /** "Dataset and model stay." / "Dataset stays." — '' when the plan produced nothing (L10). */
 export function createdStay(plan: Plan): string {

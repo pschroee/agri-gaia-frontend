@@ -257,6 +257,29 @@ describe('the created objects (L4)', () => {
     });
 });
 
+describe('the rights block of a proposed plan (L13)', () => {
+    it('lists one row per right of the raw grant, with its effect chip', () => {
+        render(
+            <PlanCard
+                plan={plan({
+                    state: 'proposed',
+                    decided_at: undefined,
+                    grant: { rules: [{ action: 'write', resource: 'dataset' }] },
+                })}
+                onControl={vi.fn()}
+            />,
+        );
+        expect(screen.getByText('RIGHTS WHILE IT RUNS')).toBeTruthy();
+        expect(screen.getByText('write dataset')).toBeTruthy();
+        expect(screen.getByText('WRITE')).toBeTruthy();
+    });
+
+    it('is left out entirely without a grant', () => {
+        render(<PlanCard plan={plan({ state: 'proposed', decided_at: undefined })} onControl={vi.fn()} />);
+        expect(screen.queryByText('RIGHTS WHILE IT RUNS')).toBeNull();
+    });
+});
+
 describe('the card as a group', () => {
     it('is announced with its number of steps and its state (accessibility)', () => {
         render(<PlanCard plan={plan({ state: 'paused', pause_reason: 'login' })} onControl={vi.fn()} />);

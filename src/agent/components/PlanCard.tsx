@@ -74,6 +74,7 @@ import {
     awaitingPlatform,
     budgetLine,
     createdStay,
+    grantRows,
     isAutonomous,
     needsInput,
     outputKind,
@@ -905,7 +906,7 @@ function RightRow({ text, effect }: { text: string; effect: 'read' | 'write' | '
 
 /** The rights block of a proposed plan: what the plan may do while it runs (design, D4.4/E1, L13). */
 function RightsBlock({ plan }: { plan: Plan }) {
-    const grant = plan.grant_summary ?? [];
+    const grant = grantRows(plan);
     const irreversible = plan.steps.filter((s) => s.effect === 'irreversible');
     if (grant.length === 0) return null;
     return (

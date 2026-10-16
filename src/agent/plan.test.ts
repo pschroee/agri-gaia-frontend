@@ -18,6 +18,7 @@ import {
     durationText,
     fetchActivePlans,
     fetchPlans,
+    grantRows,
     isAutonomous,
     leftText,
     needsInput,
@@ -551,5 +552,36 @@ describe('fetchActivePlans and runningPlans', () => {
         const parked = auto({ id: 'e', steps: [step({ parked_approval: 'a1' })] });
         expect(runningPlans([parked], new Set(['a1'])).map((p) => p.id)).toEqual(['e']);
         expect(runningPlans([parked], new Set())).toEqual([]);
+    });
+});
+
+describe('grantRows (L13)', () => {
+    it('takes the gateway\'s structured summary where it sends one', () => {
+        const p = auto({ grant_summary: [{ effect: 'write', text: 'create dataset' }] });
+        expect(grantRows(p)).toEqual([{ effect: 'write', text: 'create dataset' }]);
+    });
+
+    it('forms the rows from the raw grant when there is none (E1 sends no summary yet)', () => {
+        const p = auto({
+            grant: {
+                rules: [
+                    { action: 'write', resource: 'dataset' },
+                    { action: 'compute', resource: 'training', ids: ['7'] },
+                    { action: 'read', resource: 'dataset', ids: ['*'] },
+                    { action: 'irreversible', resource: 'model' },
+                ],
+            },
+        });
+        expect(grantRows(p)).toEqual([
+            { effect: 'write', text: 'write dataset' },
+            { effect: 'compute', text: 'compute training (7)' },
+            { effect: 'read', text: 'read everything' },
+            { effect: 'irreversible', text: 'irreversible model' },
+        ]);
+    });
+
+    it('without a readable grant the block stays empty', () => {
+        expect(grantRows(auto())).toEqual([]);
+        expect(grantRows(auto({ grant: { rules: [] } }))).toEqual([]);
     });
 });
