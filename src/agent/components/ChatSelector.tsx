@@ -201,7 +201,8 @@ function SubagentRow({ item, selected, onSelect }: { item: SubagentNavItem; sele
         >
             <SubagentIcon size={18} />
             <EllipsisText text={item.title} sx={{ flex: 1 }} />
-            <SubagentState status={item.status} />
+            {/* issue #120: a stopped run says "stopped by you" here too, "stopping …" while the stop is on its way */}
+            <SubagentState status={item.status} stoppedBy={item.stoppedBy} stopping={item.stopping} />
         </ButtonBase>
     );
 }

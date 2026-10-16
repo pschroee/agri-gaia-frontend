@@ -132,7 +132,13 @@ type AgentState = {
 };
 
 /** Runs of the open chat and whether the chat works (for estimating the state of runs without one). */
-export type OpenChatSubagents = { chatId: string; runs: SubagentRun[]; chatRunning: boolean };
+export type OpenChatSubagents = {
+    chatId: string;
+    runs: SubagentRun[];
+    chatRunning: boolean;
+    /** The runs a stop is on its way for (issue #120): their sub-entries read "stopping …". */
+    stopping?: ReadonlySet<string>;
+};
 
 const AgentContext = createContext<AgentState | undefined>(undefined);
 

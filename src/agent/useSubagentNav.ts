@@ -29,9 +29,14 @@ export function useSubagentNav(): SubagentNav {
     const { openChatSubagents, selectedSubagent, selectSubagent } = useAgent();
     const runs = openChatSubagents?.runs ?? [];
     const chatRunning = !!openChatSubagents?.chatRunning;
-    const anyLive = chatRunning || runs.some((r) => isLiveStatus(runStatus(r, { chatRunning, now: Date.now() })));
+    // a run a stop is on its way for (issue #120) counts as working, so the clock keeps ticking while it ends
+    const stopping = openChatSubagents?.stopping;
+    const anyLive =
+        chatRunning ||
+        !!stopping?.size ||
+        runs.some((r) => isLiveStatus(runStatus(r, { chatRunning, now: Date.now() })));
     const now = useNow(anyLive, 2000);
-    const items = subagentNav(runs, { chatRunning, now });
+    const items = subagentNav(runs, { chatRunning, now, stopping });
     const statuses = items.map((i) => i.status);
     const chatId = openChatSubagents?.chatId;
     const [toggles, setToggles] = useState<Record<string, GroupToggle>>({});
