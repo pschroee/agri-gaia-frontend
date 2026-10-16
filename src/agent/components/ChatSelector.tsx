@@ -5,11 +5,12 @@
 // The panel's chat row (issue #54, design "Agent Chat Panel v2"; before: issue #38): an outlined field with the
 // floating label "Chat" and the open chat's title, then "New chat" and the internet switch as square outlined buttons
 // of the same height. With a subagent open the field turns violet ("Subagent", 2 px border), a back arrow sits in it
-// and the title reads "Chat › 🤖 Subagent". The list opens with "Search chats" on top, which filters chats and the
-// open chat's subagents; the open chat's subagents sit indented under it (#48: open while one runs). The "🤖 n" badge of
-// every other chat opens its group too (issue #60): the first time it loads the chat's short list of runs, without
-// opening or waking the chat, and a click on a sub-entry opens that chat with the subagent's view. The list shows the 20 newest chats and, when there are more, closes with a
-// row naming their number and pointing at the search and at /ai-agent (issue #122).
+// and the field shows the subagent alone, its chat's title as the back arrow's tooltip (issue #122). The list opens
+// with "Search chats" on top, which filters chats and the open chat's subagents; the open chat's subagents sit indented
+// under it (#48: open while one runs). The "🤖 n" badge of every other chat opens its group too (issue #60): the first
+// time it loads the chat's short list of runs, without opening or waking the chat, and a click on a sub-entry opens
+// that chat with the subagent's view. The list shows the 20 newest chats and, when there are more, closes with a row
+// naming their number and pointing at the search and at /ai-agent (issue #122).
 
 import { KeyboardEvent, MouseEvent, ReactNode, useMemo, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
@@ -27,7 +28,6 @@ import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
@@ -51,6 +51,15 @@ import { CHAT_ROW_HEIGHT, agentColors } from './tokens';
 const VIOLET = agentColors.subagent;
 /** Room kept free below the list: the platform footer (30 px) and the popover's margin. */
 const FOOTER_SPACE = 30 + 16;
+
+/** A chat title inside a tooltip: at most three lines, then an ellipsis, so a long one stays compact (issue #122). */
+function ChatTitleTooltip({ title }: { title: string }) {
+    return (
+        <Box sx={{ display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {title}
+        </Box>
+    );
+}
 
 /** Badge on a chat with subagents: "🤖 3 ⌄"; on the open chat it opens or closes the group under it. */
 function SubagentBadge({ count, open, onToggle }: { count: number; open?: boolean; onToggle?: () => void }) {
@@ -402,9 +411,15 @@ export default function ChatSelector() {
                         }}
                     >
                         {isSub && (
-                            <Tooltip title="Back to chat" disableFocusListener disableInteractive enterDelay={400}>
+                            <Tooltip
+                                title={selected ? <ChatTitleTooltip title={chatTitle(selected)} /> : ''}
+                                disableFocusListener
+                                disableInteractive
+                                enterDelay={400}
+                                slotProps={{ tooltip: { sx: { maxWidth: 360 } } }}
+                            >
                                 <IconButton
-                                    aria-label={`Back to chat ${title}`}
+                                    aria-label={selected ? `Back to ${chatTitle(selected)}` : 'Back to chat'}
                                     data-testid="agent-subagent-back"
                                     onClick={() => sub.select(undefined)}
                                     sx={{ width: 40, height: '100%', borderRadius: 0, flex: 'none', color: 'rgba(0, 0, 0, 0.54)' }}
@@ -416,7 +431,7 @@ export default function ChatSelector() {
                         <Tooltip
                             // the chat title in full, only when it is cut; a subagent's title has its own (issue #52).
                             // Hover only: the field keeps focus after its list closes, and a tooltip must not stay.
-                            title={selected && !isSub ? chatTitle(selected) : ''}
+                            title={selected && !isSub ? <ChatTitleTooltip title={chatTitle(selected)} /> : ''}
                             open={tipOpen && !menuOpen && !isSub}
                             onOpen={() => {
                                 if (!menuOpen && isHovered(fieldRef.current) && isTruncated(titleRef.current))
@@ -427,6 +442,8 @@ export default function ChatSelector() {
                             disableInteractive
                             enterDelay={400}
                             enterNextDelay={400}
+                            // three lines at most, so a long title stays a compact tooltip (issue #122)
+                            slotProps={{ tooltip: { sx: { maxWidth: 360 } } }}
                         >
                             <ButtonBase
                                 ref={fieldRef}
@@ -460,28 +477,14 @@ export default function ChatSelector() {
                                     <Box
                                         component="span"
                                         data-testid="agent-subagent-breadcrumb"
-                                        sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0, flex: '0 1 auto' }}
+                                        sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: '1 1 0' }}
                                     >
-                                        <Box
-                                            component="span"
-                                            sx={{
-                                                flex: '0 1 auto',
-                                                minWidth: 24,
-                                                fontSize: 14,
-                                                color: 'text.secondary',
-                                                whiteSpace: 'nowrap',
-                                                overflow: 'hidden',
-                                                textOverflow: 'ellipsis',
-                                            }}
-                                        >
-                                            {chatTitle(selected)}
-                                        </Box>
-                                        <ChevronRightIcon sx={{ fontSize: 18, color: 'rgba(0, 0, 0, 0.38)', flex: 'none' }} />
                                         <SubagentIcon size={20} />
+                                        {/* the chat title sits in the back arrow's tooltip, not in the field (#122) */}
                                         <EllipsisText
                                             text={sub.selected.title}
                                             testId="agent-subagent-breadcrumb-title"
-                                            sx={{ flex: '0 1 auto', minWidth: 40, fontSize: 16, fontWeight: 500, color: VIOLET }}
+                                            sx={{ flex: '1 1 0', minWidth: 0, fontSize: 16, fontWeight: 500, color: VIOLET }}
                                         />
                                     </Box>
                                 ) : (
@@ -502,7 +505,8 @@ export default function ChatSelector() {
                                         {title}
                                     </Box>
                                 )}
-                                <Box component="span" sx={{ flex: 1 }} />
+                                {/* the subagent's title takes the whole field, so no spacer pushes the arrow out */}
+                                {!(isSub && selected && sub.selected) && <Box component="span" sx={{ flex: 1 }} />}
                                 <ArrowDropDownIcon sx={{ fontSize: 24, color: 'rgba(0, 0, 0, 0.54)', flex: 'none' }} />
                             </ButtonBase>
                         </Tooltip>
