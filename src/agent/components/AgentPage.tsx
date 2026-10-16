@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -141,6 +141,9 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
             }),
         [result, sub.chatId, sub.items, sub.open, chats, groups.group],
     );
+    // DL5.5 (issue #122): a double click renames only the entry that was already open. The first click of the pair
+    // selects (and wakes) the chat, so the selection has to be read at the first press, not at the double click.
+    const preselected = useRef(false);
     return (
         <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
@@ -215,6 +218,9 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
                                 role="button"
                                 tabIndex={0}
                                 onClick={() => selectChat(c.id)}
+                                onMouseDown={(e) => {
+                                    if (e.detail <= 1) preselected.current = on;
+                                }}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') selectChat(c.id);
                                     else if (e.key === 'F2') rename.start(c);
@@ -248,8 +254,10 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
                                     <Box sx={{ display: 'flex', alignItems: 'flex-start', columnGap: 0.5 }}>
                                         <Box
                                             data-testid="agent-history-title"
-                                            // double-click renames, like the menu (issue #49)
-                                            onDoubleClick={() => rename.start(c)}
+                                            // double-click renames, like the menu (issue #49), but only the open chat (#122)
+                                            onDoubleClick={() => {
+                                                if (preselected.current) rename.start(c);
+                                            }}
                                             sx={{
                                                 flex: 1,
                                                 minWidth: 0,
