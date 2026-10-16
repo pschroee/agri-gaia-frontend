@@ -8,9 +8,13 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import Link from '@mui/material/Link';
+import Button from '@mui/material/Button';
+import LinearProgress from '@mui/material/LinearProgress';
+import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Tooltip from '@mui/material/Tooltip';
@@ -20,6 +24,19 @@ import { useAgent } from '../AgentContext';
 import { agentApi } from '../api';
 import { chatTitle, formatClock, variantLabel } from '../format';
 import { effortLabel } from '../modelChoice';
+import {
+    agentTitle,
+    budgetLine,
+    currentStepIndex,
+    fetchActivePlans,
+    needsInput,
+    pendingIdsOf,
+    planHeadline,
+    runningPlans,
+    stepMain,
+    Plan,
+} from '../plan';
+import { planChip, runningPlansLine, STATUS_COLUMNS, STATUS_EMPTY, statusProgress, statusWaiting } from '../planText';
 import {
     activeConnection,
     activityText,
@@ -48,6 +65,8 @@ import { agentColors, blockSx, MONO } from './tokens';
 
 type Snapshot = {
     at: number;
+    /** The autonomous plans of the user's chats, newest first (A-E4, L22); absent while they could not be read. */
+    plans?: Plan[];
     gateway: { ms?: number; error?: unknown };
     me?: Me;
     pool?: Pool;
@@ -64,11 +83,16 @@ const settled = <T,>(r: PromiseSettledResult<T>) => (r.status === 'fulfilled' ? 
 const failed = (r: PromiseSettledResult<unknown>) => (r.status === 'rejected' ? r.reason : undefined);
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** Loads everything the tab shows; a failed request leaves its section empty instead of failing the tab. */
-async function loadSnapshot(): Promise<Snapshot> {
+/**
+ * Loads everything the tab shows; a failed request leaves its section empty instead of failing the tab. The plans
+ * come per chat (the gateway has no route across chats): one request each, which is why they are loaded with the
+ * rest once per refresh instead of on their own timer.
+ */
+async function loadSnapshot(chatIds: string[]): Promise<Snapshot> {
     const t0 = performance.now();
     const meP = agentApi.me().then((me) => ({ me, ms: Math.round(performance.now() - t0) }));
-    const [me, pool, variants, models, config, approvals, platform] = await Promise.allSettled([
+    const plansP = fetchActivePlans(chatIds);
+    const [me, pool, variants, models, config, approvals, platform, planned] = await Promise.allSettled([
         meP,
         agentApi.pool(),
         agentApi.variants(),
@@ -76,6 +100,7 @@ async function loadSnapshot(): Promise<Snapshot> {
         agentApi.config(),
         agentApi.pendingApprovals(),
         agentApi.platform(),
+        plansP,
     ]);
     const meV = settled(me);
     const arr = <T,>(v: T[] | undefined) => (Array.isArray(v) ? v : undefined);
@@ -91,6 +116,7 @@ async function loadSnapshot(): Promise<Snapshot> {
         approvals: arr(settled(approvals)),
         platform: settled(platform),
         platformError: failed(platform),
+        plans: arr(settled(planned)),
     };
 }
 
@@ -252,6 +278,100 @@ function VariantCard({ p, onOpenChat }: { p: VariantPool; onOpenChat: (id: strin
     );
 }
 
+/**
+ * One row of the "Running plans" table (design, L21): the plan, its chat, the step it is on with its state, the
+ * progress, what is left of its budget and the jump into the chat. A plan waiting for the user is highlighted.
+ */
+function PlanRow({
+    plan,
+    now,
+    title,
+    pending,
+    pendingAt,
+    onOpenChat,
+}: {
+    plan: Plan;
+    now: number;
+    title: string;
+    pending: ReadonlySet<string>;
+    /** When each still-pending approval was raised, for the waiting time of a step that needs input. */
+    pendingAt: ReadonlyMap<string, string>;
+    onOpenChat: (id: string) => void;
+}) {
+    const step = plan.steps.find((s) => s.state === 'running' || s.state === 'waiting');
+    const i = currentStepIndex(plan);
+    const n = plan.steps.length;
+    const head = (step ? stepMain(step).head : planHeadline(plan)).split('\n')[0];
+    const chat = planChip(plan, 'page', pending);
+    const parked = plan.steps.find((s) => !!s.parked_approval && pending.has(s.parked_approval));
+    const ask = parked?.parked_approval ? statusWaiting(pendingAt.get(parked.parked_approval), now) : '';
+    const percent = step && typeof step.progress === 'number' ? step.progress : undefined;
+    const highlight = needsInput(plan, pending);
+    return (
+        <TableRow hover sx={highlight ? { bgcolor: agentColors.amberTint } : undefined}>
+            <TableCell sx={{ maxWidth: 240 }}>
+                <Typography
+                    component="div"
+                    title={`${agentTitle(plan) || head} (agent's title – not verified)`}
+                    sx={{
+                        fontStyle: 'italic',
+                        fontSize: 13.5,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                    }}
+                >
+                    {agentTitle(plan) || head || 'Plan'}
+                </Typography>
+            </TableCell>
+            <TableCell sx={{ maxWidth: 200 }}>
+                <Typography
+                    component="div"
+                    title={title}
+                    sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                    {title}
+                </Typography>
+            </TableCell>
+            <TableCell sx={{ maxWidth: 320 }}>
+                <Typography
+                    component="div"
+                    title={head}
+                    sx={{ fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                >
+                    {`${i}/${n} · ${head}`}
+                </Typography>
+                <Typography component="div" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                    {chat}
+                </Typography>
+            </TableCell>
+            <TableCell sx={{ minWidth: 140 }}>
+                {ask ? (
+                    <Typography sx={{ fontSize: 12.5, color: 'warning.dark' }}>{ask}</Typography>
+                ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <LinearProgress
+                            variant={percent === undefined ? 'indeterminate' : 'determinate'}
+                            value={percent}
+                            color={plan.state === 'paused' ? 'warning' : 'primary'}
+                            sx={{ flex: 1, height: 4, borderRadius: 2, minWidth: 60 }}
+                        />
+                        <Typography sx={{ fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                            {statusProgress(plan, now)}
+                        </Typography>
+                    </Box>
+                )}
+            </TableCell>
+            <TableCell sx={{ whiteSpace: 'nowrap', fontSize: 12.5 }}>{budgetLine(plan, now)}</TableCell>
+            <TableCell align="right">
+                <Button size="small" onClick={() => onOpenChat(plan.chat_id)}>
+                    Open
+                </Button>
+            </TableCell>
+        </TableRow>
+    );
+}
+
 const headSx = { fontWeight: 500, whiteSpace: 'nowrap' } as const;
 const numSx = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' } as const;
 
@@ -266,15 +386,18 @@ export default function StatusView({
     refreshKey: number;
     onOpenChat: (id: string) => void;
 }) {
-    const { chats, models: ctxModels, me: ctxMe } = useAgent();
+    const { chats, models: ctxModels, me: ctxMe, pendingApprovals } = useAgent();
     const [snap, setSnap] = useState<Snapshot>();
     const [loading, setLoading] = useState(false);
     const alive = useRef(true);
+    // the chats the plans are read from, through a ref so that the loading function stays stable
+    const chatIds = useRef<string[]>([]);
+    chatIds.current = chats.map((c) => c.id);
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
-            const s = await loadSnapshot();
+            const s = await loadSnapshot(chatIds.current);
             if (alive.current) setSnap(s);
         } finally {
             if (alive.current) setLoading(false);
@@ -303,6 +426,12 @@ export default function StatusView({
         : [];
     const cfg = snap?.config;
     const connection = activeConnection(cfg, variants);
+    const pendingIds = useMemo(() => pendingIdsOf(pendingApprovals), [pendingApprovals]);
+    const pendingAt = useMemo(
+        () => new Map(pendingApprovals.map((a) => [a.id, a.created_at] as const)),
+        [pendingApprovals],
+    );
+    const running = useMemo(() => runningPlans(snap?.plans ?? [], pendingIds), [snap?.plans, pendingIds]);
 
     if (!snap) {
         return (
@@ -335,6 +464,52 @@ export default function StatusView({
                     {STATUS_REFRESH_MS / 1000} s.
                 </Alert>
             )}
+
+            <section data-testid="agent-status-plans">
+                <SectionTitle
+                    aside={
+                        running.length > 0
+                            ? runningPlansLine(
+                                  running.length,
+                                  new Set(running.map((p) => p.chat_id)).size,
+                                  formatClock(new Date(snap.at).toISOString(), true),
+                              )
+                            : undefined
+                    }
+                >
+                    Running plans
+                </SectionTitle>
+                {running.length === 0 ? (
+                    <Empty>{STATUS_EMPTY}</Empty>
+                ) : (
+                    <TableContainer component={Paper} variant="outlined">
+                        <Table size="small" sx={{ '& td, & th': { fontSize: 13.5 } }}>
+                            <TableHead>
+                                <TableRow>
+                                    {STATUS_COLUMNS.map((c) => (
+                                        <TableCell key={c} sx={headSx}>
+                                            {c}
+                                        </TableCell>
+                                    ))}
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {running.map((p) => (
+                                    <PlanRow
+                                        key={p.id}
+                                        plan={p}
+                                        now={snap.at}
+                                        title={titleOf(p.chat_id)}
+                                        pending={pendingIds}
+                                        pendingAt={pendingAt}
+                                        onOpenChat={onOpenChat}
+                                    />
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
+                )}
+            </section>
 
             <section>
                 <SectionTitle
