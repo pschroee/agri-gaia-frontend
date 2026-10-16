@@ -14,6 +14,7 @@ import {
     runsCacheReducer,
     selectionFor,
     summaryNav,
+    summaryRun,
 } from './chatSubagents';
 import type { RunsCache, RunsCacheAction } from './chatSubagents';
 import type { SubagentRunSummary } from './types';
@@ -62,6 +63,21 @@ describe('summaryNav', () => {
         // a text answer as the newest entry counts as done
         const answered = summaryNav([{ ...runs[2], last_kind: 'text' }], 'c1', { chatRunning: false, now: NOW });
         expect(answered[0].status).toBe('done');
+    });
+
+    it('carries who stopped a run of a chat that is not open (issue #120)', () => {
+        // the short list is all the panel and the history have for another chat: without stopped_by its run
+        // would read "ended" instead of "stopped"
+        expect(summaryRun({ ...runs[0], state: 'cancelled', stopped_by: 'user' }, 'c1').stoppedBy).toBe('user');
+        expect(summaryRun({ ...runs[0], state: 'cancelled', stopped_by: 'limit' }, 'c1').stoppedBy).toBe('limit');
+        expect(summaryRun({ ...runs[0], state: 'cancelled' }, 'c1').stoppedBy).toBeUndefined();
+        const items = summaryNav([{ ...runs[0], state: 'cancelled', stopped_by: 'user' }], 'c1', {
+            chatRunning: false,
+            now: NOW,
+        });
+        expect(items[0]).toMatchObject({ status: 'stopped', stoppedBy: 'user' });
+        // a stop of another chat is never marked as on its way: only the open chat knows its own stops
+        expect(items[0].stopping).toBeUndefined();
     });
 });
 
