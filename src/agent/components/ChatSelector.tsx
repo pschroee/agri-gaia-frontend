@@ -8,17 +8,22 @@
 // and the title reads "Chat › 🤖 Subagent". The list opens with "Search chats" on top, which filters chats and the
 // open chat's subagents; the open chat's subagents sit indented under it (#48: open while one runs). The "🤖 n" badge of
 // every other chat opens its group too (issue #60): the first time it loads the chat's short list of runs, without
-// opening or waking the chat, and a click on a sub-entry opens that chat with the subagent's view.
+// opening or waking the chat, and a click on a sub-entry opens that chat with the subagent's view. The list shows the 20 newest chats and, when there are more, closes with a
+// row naming their number and pointing at the search and at /ai-agent (issue #122).
 
 import { KeyboardEvent, MouseEvent, ReactNode, useMemo, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import IconButton from '@mui/material/IconButton';
 import InputBase from '@mui/material/InputBase';
+import Link from '@mui/material/Link';
 import Popover from '@mui/material/Popover';
 import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
@@ -28,7 +33,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import SearchIcon from '@mui/icons-material/Search';
 
 import { useAgent } from '../AgentContext';
-import { searchChats } from '../chatSearch';
+import { olderChatsLabel, searchChats } from '../chatSearch';
 import { chatTitle } from '../format';
 import { runStateOf, runStateText } from '../runState';
 import type { SubagentNavItem } from '../subagents';
@@ -278,7 +283,7 @@ export default function ChatSelector() {
     if (result.chats.length === 0)
         rows.push(
             <Box key="none" sx={{ px: 2, py: 1.25, fontSize: 14, color: 'text.secondary' }}>
-                {query.trim() ? 'No chat matches.' : 'No chats yet'}
+                {query.trim() ? 'No chats match' : 'No chats yet'}
             </Box>,
         );
     for (const c of result.chats) {
@@ -553,8 +558,25 @@ export default function ChatSelector() {
                         sx={{ fontSize: 14 }}
                     />
                 </Box>
-                <Box role="listbox" aria-label="Chats" data-testid="agent-chat-list" sx={{ overflowY: 'auto', py: 1 }}>
-                    {rows}
+                {/* the list scrolls together with the row that follows it: the hint about the older chats (#122) */}
+                <Box data-testid="agent-chat-list-scroll" sx={{ overflowY: 'auto', py: 1 }}>
+                    <Box role="listbox" aria-label="Chats" data-testid="agent-chat-list">
+                        {rows}
+                    </Box>
+                    {/* outside the listbox: not a chat, reachable with Tab, skipped by the arrow keys */}
+                    {!query.trim() && result.hidden > 0 && (
+                        <>
+                            <Divider sx={{ mt: 1 }} />
+                            <Box data-testid="agent-chat-older" sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                    {olderChatsLabel(result.hidden)} – search above or open the{' '}
+                                    <Link component={RouterLink} to="/ai-agent" onClick={close}>
+                                        agent page
+                                    </Link>
+                                </Typography>
+                            </Box>
+                        </>
+                    )}
                 </Box>
             </Popover>
         </Box>
