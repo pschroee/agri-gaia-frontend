@@ -20,6 +20,7 @@ export default function EffectChip({ effect }: { effect: Effect }) {
     return (
         <Box
             component="span"
+            data-testid="agent-effect-chip"
             sx={{
                 display: 'inline-block',
                 fontSize: 11,

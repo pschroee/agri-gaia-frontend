@@ -14,7 +14,7 @@
 // platform job of a step. The words are in planText.ts, the rules about states and progress in plan.ts, so both
 // can be tested without rendering this file.
 
-import { ReactElement, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
@@ -39,6 +39,7 @@ import Link from '@mui/material/Link';
 import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import Paper from '@mui/material/Paper';
+import { alpha } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -247,6 +248,77 @@ export function SummaryDetails({ details }: { details: string[] }) {
                     {d}
                 </Typography>
             ))}
+        </Box>
+    );
+}
+
+/** The height of the error block: exactly three lines of the monospace 12 px text (design, issue #112). */
+const ERROR_LINES = 3;
+const ERROR_LINE_HEIGHT = 18;
+
+/**
+ * The red block of a failed run or check (issue #112, design *Error*): the gateway's error text in monospace,
+ * exactly three lines high, with "Show more" only while it is cut. The block stands open; the link only takes
+ * the three-line limit away, and "Show less" puts it back.
+ */
+export function ErrorBlock({ text, testId = 'agent-error-block' }: { text: string; testId?: string }) {
+    const [open, setOpen] = useState(false);
+    const [cut, setCut] = useState(false);
+    const body = useRef<HTMLDivElement>(null);
+    useLayoutEffect(() => {
+        const el = body.current;
+        if (el) setCut(el.scrollHeight > el.clientHeight + 1);
+    }, [text, open]);
+    return (
+        <Box data-testid={testId} sx={{ minWidth: 0 }}>
+            <Typography variant="body2" sx={{ color: 'error.main', fontWeight: 500 }}>
+                Error
+            </Typography>
+            <Box
+                ref={body}
+                component="pre"
+                data-testid={`${testId}-text`}
+                sx={{
+                    m: 0,
+                    mt: 0.5,
+                    px: '10px',
+                    py: 0.75,
+                    borderRadius: 0.5,
+                    bgcolor: (t) => alpha(t.palette.error.main, 0.08),
+                    border: 1,
+                    borderColor: 'error.light',
+                    color: 'error.main',
+                    fontFamily: MONO,
+                    fontSize: 12,
+                    lineHeight: `${ERROR_LINE_HEIGHT}px`,
+                    whiteSpace: 'pre-wrap',
+                    overflowWrap: 'anywhere',
+                    ...(open
+                        ? {}
+                        : {
+                              maxHeight: ERROR_LINES * ERROR_LINE_HEIGHT,
+                              overflow: 'hidden',
+                              display: '-webkit-box',
+                              WebkitLineClamp: ERROR_LINES,
+                              WebkitBoxOrient: 'vertical',
+                          }),
+                }}
+            >
+                {text}
+            </Box>
+            {cut && (
+                <Link
+                    component="button"
+                    type="button"
+                    variant="caption"
+                    data-testid={`${testId}-toggle`}
+                    aria-expanded={open}
+                    onClick={() => setOpen((v) => !v)}
+                    sx={{ mt: 0.25, textDecorationColor: 'rgba(15,84,50,0.4)' }}
+                >
+                    {open ? 'Show less' : 'Show more'}
+                </Link>
+            )}
         </Box>
     );
 }

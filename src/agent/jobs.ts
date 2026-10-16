@@ -25,7 +25,8 @@ export type WatchJob = {
     step_idx?: number;
     /** The tool call that started the job; empty for a job the gateway started itself. */
     tool_call_id?: string;
-    /** The sort of job: training, image, task, annotation … */
+    /** The sort of job: training, image, task, notebook_run, edge_deployment, annotation_run, annotation_job,
+     * `assessment` (the result checks, issue #112) … */
     kind: string;
     /** The platform's id of the object the job works on. */
     ref?: string;
