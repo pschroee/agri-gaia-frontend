@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { CHAT_LIST_LIMIT, normalizeQuery, searchChats, titleMatches } from './chatSearch';
+import { CHAT_LIST_LIMIT, historyGroups, normalizeQuery, olderChatsLabel, searchChats, titleMatches } from './chatSearch';
 
 const chat = (id: string, title: string) => ({ id, title });
 const chats = [
@@ -74,5 +74,109 @@ describe('searchChats with subagents of other chats (issue #60)', () => {
     it('takes the open chat from its own runs, not from an older short list', () => {
         const r = searchChats(chats, 'stale', { chatId: 'c1', subagents, others: { c1: [{ title: 'stale title' }] } });
         expect(r.chats).toEqual([]);
+    });
+});
+
+describe('how many chats the list leaves out (issue #122)', () => {
+    const many = Array.from({ length: 25 }, (_, i) => chat(`x${i}`, `Chat ${i}`));
+
+    it('counts the older chats of the panel list', () => {
+        const r = searchChats(many, '', { subagents: [] });
+        expect(r.chats).toHaveLength(CHAT_LIST_LIMIT);
+        expect(r.hidden).toBe(5);
+        expect(r.more).toBe(true);
+    });
+
+    it('does not count an older chat that is shown because it is selected', () => {
+        const r = searchChats(many, '', { selectedChatId: 'x22', subagents: [] });
+        expect(r.chats).toHaveLength(CHAT_LIST_LIMIT + 1);
+        expect(r.chats[CHAT_LIST_LIMIT].id).toBe('x22');
+        expect(r.hidden).toBe(4);
+    });
+
+    it('hides nothing when the caller asks for the whole list', () => {
+        const r = searchChats(many, '', { subagents: [] }, { limit: Infinity });
+        expect(r.chats).toHaveLength(25);
+        expect(r.hidden).toBe(0);
+        expect(r.more).toBe(false);
+    });
+
+    it('hides nothing while searching and lists matches beyond the limit', () => {
+        const r = searchChats(many, 'chat 24', { subagents: [] });
+        expect(r.chats.map((c) => c.id)).toEqual(['x24']);
+        expect(r.hidden).toBe(0);
+    });
+
+    it('agrees with `more`', () => {
+        for (const n of [0, 1, 20, 21, 25]) {
+            const list = many.slice(0, n);
+            const r = searchChats(list, '', { subagents: [] });
+            expect(r.more).toBe(r.hidden > 0);
+        }
+    });
+
+    it('names the number in words', () => {
+        expect(olderChatsLabel(1)).toBe('1 older chat');
+        expect(olderChatsLabel(5)).toBe('5 older chats');
+        expect(olderChatsLabel(0)).toBe('0 older chats');
+    });
+});
+
+describe('historyGroups (issue #122)', () => {
+    const state = {
+        openChatId: 'c1',
+        openChat: { items: subagents, open: true },
+        other: () => ({ items: undefined, open: false }),
+    };
+
+    it('shows only the matching subagents of a search, with their group open', () => {
+        const result = searchChats(chats, 'csv', { chatId: 'c1', subagents });
+        const listed = historyGroups(result, state);
+        expect(listed.c1).toEqual({ subagents: [{ title: 'Write the CSV generator' }], open: true });
+    });
+
+    it('gives a chat that matches by its title alone no sub-entries', () => {
+        const result = searchChats(chats, 'testen', { chatId: 'c1', subagents });
+        expect(result.chats.map((c) => c.id)).toEqual(['c1']);
+        expect(historyGroups(result, state)).toEqual({});
+    });
+
+    it('opens the group of another chat for the subagents the search found there', () => {
+        const others = { c3: [{ title: 'Count rows' }, { title: 'Sum them' }] };
+        const result = searchChats(chats, 'count', { chatId: 'c1', subagents, others });
+        expect(historyGroups(result, state).c3).toEqual({ subagents: [{ title: 'Count rows' }], open: true });
+    });
+
+    it('keeps the stored groups when there is no search', () => {
+        const result = searchChats(chats, '', {
+            chatId: 'c1',
+            selectedChatId: 'c1',
+            subagents,
+            others: { c3: [{ title: 'Count rows' }] },
+        });
+        const listed = historyGroups(result, {
+            openChatId: 'c1',
+            openChat: { items: subagents, open: false },
+            other: (id) => ({ items: id === 'c3' ? [{ title: 'Count rows' }] : undefined, open: id === 'c3' }),
+        });
+        // the open chat's group is closed as the user left it, the other chat's is open
+        expect(listed.c1).toEqual({ subagents, open: false });
+        expect(listed.c3).toEqual({ subagents: [{ title: 'Count rows' }], open: true });
+    });
+
+    it('lists a group that is open but has nothing loaded yet, so its note shows', () => {
+        const result = searchChats(chats, '', { subagents: [] });
+        const listed = historyGroups(result, {
+            openChat: { items: [], open: false },
+            other: (id) => ({ items: undefined, open: id === 'c3' }),
+        });
+        expect(listed).toEqual({ c3: { subagents: [], open: true } });
+    });
+
+    it('lists nothing for a chat whose group was never opened', () => {
+        const result = searchChats(chats, '', { subagents: [] });
+        expect(historyGroups(result, { openChat: { items: [], open: false }, other: () => ({ open: false }) })).toEqual(
+            {},
+        );
     });
 });

@@ -8,6 +8,7 @@ import { attachHint } from './files';
 import { formatMs } from './format';
 import { viaLabel } from './activity';
 import { backgroundStatus } from './background';
+import { olderChatsLabel } from './chatSearch';
 import { newChatErrorText } from './newChat';
 import { RUN_STATE_HINT } from './runState';
 import { RESUME_STEP_LABEL, resumeSummary } from './resume';
@@ -55,5 +56,12 @@ describe('visible agent UI texts', () => {
         // issue L2/#119: the gateway's own reads show up as "System", not as "orchestrator".
         expect(viaLabel('orchestrator')).not.toMatch(INFRA);
         expect(viaLabel('user')).not.toMatch(INFRA);
+    });
+
+    it('the number of older chats reads as a sentence, in both numbers', () => {
+        // issue #122: "1 older chat – search above or open the agent page" in the panel's chat list.
+        expect(olderChatsLabel(1)).toBe('1 older chat');
+        expect(olderChatsLabel(12)).toBe('12 older chats');
+        for (const n of [1, 2, 12]) expect(olderChatsLabel(n)).not.toMatch(INFRA);
     });
 });
