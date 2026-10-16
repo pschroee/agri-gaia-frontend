@@ -104,6 +104,8 @@ function Card({
     thumb,
     href,
     onRemove,
+    removeLabel,
+    removeTitle = 'Remove',
     progress,
     tooltip,
     width,
@@ -119,8 +121,12 @@ function Card({
     href?: string;
     /** Opens the preview (issue #74); the card is then a button. */
     onOpen?: () => void;
-    /** Remove cross in the top right corner (staged files). */
+    /** Remove cross in the top right corner (staged files); it cancels a running upload (issue L4/#121). */
     onRemove?: () => void;
+    /** Accessible name of the cross ("Remove attachment <name>" without it). */
+    removeLabel?: string;
+    /** Tooltip of the cross. */
+    removeTitle?: string;
     /** Share uploaded so far, while the file is on its way. */
     progress?: number;
     tooltip: string;
@@ -210,8 +216,8 @@ function Card({
             )}
             {onRemove && (
                 <IconButton
-                    aria-label={`Remove attachment ${name}`}
-                    title="Remove"
+                    aria-label={removeLabel ?? `Remove attachment ${name}`}
+                    title={removeTitle}
                     onClick={onRemove}
                     sx={{ position: 'absolute', top: 4, right: 4, width: 22, height: 22, p: 0 }}
                 >
@@ -326,18 +332,23 @@ const listSx = {
 
 /**
  * Attachments of the message being written, inside the input field above the text: uploaded files removable until
- * sent, files on their way with "Uploading 71%" and a bar at the bottom.
+ * sent, files on their way with "Uploading 71%" and a bar at the bottom — and the same cross on those tiles, which
+ * cancels the upload (issue L4/#121).
  */
 export function StagedAttachments({
     chatId,
     files,
     uploads = [],
     onRemove,
+    onCancel,
 }: {
     chatId?: string;
     files: Artifact[];
     uploads?: UploadInFlight[];
+    /** Cross on an uploaded file: it is taken back in the gateway. */
     onRemove: (name: string) => void;
+    /** Cross on a file that is still uploading: the request is aborted. */
+    onCancel: (id: string) => void;
 }) {
     if (files.length === 0 && uploads.length === 0) return null;
     return (
@@ -368,6 +379,9 @@ export function StagedAttachments({
                     type={fileTypeOf(u)}
                     progress={u.progress}
                     tooltip={`${u.name} · ${uploadingText(u.progress)}`}
+                    removeLabel={`Cancel upload ${u.name}`}
+                    removeTitle="Cancel upload"
+                    onRemove={() => onCancel(u.id)}
                     width={STAGED_CARD_WIDTH}
                 />
             ))}

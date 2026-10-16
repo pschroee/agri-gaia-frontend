@@ -72,13 +72,10 @@ export type ChatStream = {
     executions: ToolExecution[];
     /** Inputs and outputs of the chat (from the chat, uploads and the SSE event "artifact"). */
     artifacts: Artifact[];
-    /**
-     * Uploads files for the agent; returns the stored inputs. Throws AgentApiError. With onProgress, one file at a
-     * time with its share sent so far; `signal` cancels the request (issue L4/#121).
-     */
+    /** Uploads files for the agent; returns the stored inputs. Throws AgentApiError. With onProgress, one file at a
+     * time with its share sent so far; `signal` cancels the request (issue L4/#121). The other view drops a card the
+     * user took back with the SSE event `artifact_removed`. */
     uploadFiles: (files: File[], onProgress?: (share: number) => void, signal?: AbortSignal) => Promise<Artifact[]>;
-    /** Takes back an uploaded input that was not sent with a message (gateway issue L4/#121). Throws AgentApiError. */
-    removeInput: (name: string) => Promise<void>;
     /** Queued messages (gateway entries, then the ones still being sent). */
     queue: QueueRow[];
     /** Messages handed to the agent that wait for their stored user message (greyed bubbles at the end of the history). */
@@ -563,16 +560,6 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         [chatId],
     );
 
-    /** Takes back an input that was not sent with a message (issue L4/#121). */
-    const removeInput = useCallback(
-        async (name: string) => {
-            if (!chatId) return;
-            await agentApi.removeInput(chatId, name);
-            setArtifacts((l) => removeArtifact(l, 'input', name));
-        },
-        [chatId],
-    );
-
     const refreshCommands = useCallback(() => {
         if (!chatId) return;
         agentApi.commands(chatId).then(
@@ -803,7 +790,6 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         executions,
         artifacts,
         uploadFiles,
-        removeInput,
         queue,
         delivered,
         queueError,
