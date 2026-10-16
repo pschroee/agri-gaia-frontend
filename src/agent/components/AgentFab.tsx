@@ -10,6 +10,7 @@ import CloseIcon from '@mui/icons-material/Close';
 
 import { useAgent } from '../AgentContext';
 import { fabBadge } from '../approvalFeed';
+import { badgeCount, badgeTooltip } from '../planAlerts';
 import { AGENT_PANEL_WIDTH, FOOTER_HEIGHT } from './AgentContextPanel';
 
 /**
@@ -17,17 +18,19 @@ import { AGENT_PANEL_WIDTH, FOOTER_HEIGHT } from './AgentContextPanel';
  * badge counts the open approvals of all the user's chats, live from the gateway's stream (approvalFeed.ts).
  */
 export default function AgentFab() {
-    const { panelOpen, setPanelOpen, pendingApprovalCount } = useAgent();
-    const badge = fabBadge(pendingApprovalCount, panelOpen);
+    const { panelOpen, setPanelOpen, pendingApprovalCount, planNeedsInput } = useAgent();
+    const count = badgeCount(planNeedsInput, pendingApprovalCount);
+    const badge = fabBadge(count, panelOpen);
+    const tip = badgeTooltip(planNeedsInput, pendingApprovalCount) || 'AI agent';
 
     // While the panel is open the button sits left of it, so it never covers the input field.
     const right = panelOpen ? AGENT_PANEL_WIDTH + 24 : 24;
 
     return (
-        <Tooltip title={panelOpen ? 'Close AI agent' : badge.label} placement="left">
+        <Tooltip title={panelOpen ? 'Close AI agent' : tip} placement="left">
             <Fab
                 color="primary"
-                aria-label={badge.label}
+                aria-label={panelOpen ? 'Close AI agent' : tip}
                 onClick={() => setPanelOpen(!panelOpen)}
                 sx={{
                     position: 'fixed',
@@ -39,7 +42,7 @@ export default function AgentFab() {
             >
                 <Badge
                     color="error"
-                    badgeContent={pendingApprovalCount}
+                    badgeContent={count}
                     max={99}
                     invisible={!badge.visible}
                     data-testid="agent-fab-badge"

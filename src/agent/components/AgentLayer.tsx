@@ -14,6 +14,7 @@ import { SharedChatStreamProvider } from '../sharedChatStream';
 import AgentContextPanel, { AGENT_PANEL_WIDTH } from './AgentContextPanel';
 import AgentFab from './AgentFab';
 import AgentMenuTheme from './AgentMenuTheme';
+import PlanAlertSnackbar from './PlanAlertSnackbar';
 
 export { AGENT_ROUTE };
 
@@ -41,14 +42,19 @@ export function useAgentPanelMargin(): number {
     return agent?.panelOpen && !onAgentPage(pathname) ? AGENT_PANEL_WIDTH : 0;
 }
 
-/** Floating button and context panel; not shown on the agent page itself, which has the full chat. */
+/**
+ * Floating button, context panel and the plan alerts. The button and the panel are not shown on the agent page
+ * itself, which has the full chat; the snackbar is — an alert of another chat is exactly what the user should see
+ * there (A-E4, D4.4).
+ */
 export default function AgentLayer() {
     const { pathname } = useLocation();
-    if (onAgentPage(pathname)) return null;
+    if (onAgentPage(pathname)) return <PlanAlertSnackbar />;
     return (
         <AgentMenuTheme>
             <AgentContextPanel />
             <AgentFab />
+            <PlanAlertSnackbar />
         </AgentMenuTheme>
     );
 }

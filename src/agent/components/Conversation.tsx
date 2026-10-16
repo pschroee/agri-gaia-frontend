@@ -18,8 +18,11 @@ import { answerSteps } from '../answer';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
 import { outputsByStepPart, placeOutputs } from '../files';
-import { placePlans, plansByPart } from '../plan';
+import { placePlans, plansByPart, pendingIdsOf } from '../plan';
 import type { PlacedPlan, Plan } from '../plan';
+import { useJobs } from '../jobs';
+import type { WatchJob } from '../jobs';
+import { useAgentOptional } from '../AgentContext';
 import type { CommandNotice } from '../commands';
 import type { SubagentNavItem } from '../subagents';
 import type { Approval, Artifact } from '../types';
@@ -109,6 +112,17 @@ export function UserBubble({
     );
 }
 
+/** What the plan cards of this view need (A-E4): the chat's approvals, its observed jobs and the layout. */
+export type PlanEnv = {
+    approvals: Approval[];
+    jobs: WatchJob[];
+    /** Ids of the approvals that are still pending: a step with such a parked approval waits for the user. */
+    pending: ReadonlySet<string>;
+    layout: 'panel' | 'page';
+    /** The user allowed browser notifications for a plan (D4.4); absent where the view cannot store it. */
+    onNotify?: (planId: string, on: boolean) => void;
+};
+
 /**
  * One answer of the agent: its parts in the order they happened, live as they arrive (issue #57, as before #54): text
  * as Markdown, each thinking block as one collapsed "Thinking · 3 s", each run of tool calls as a step list with its
@@ -129,6 +143,7 @@ export function AgentBlock({
     plans,
     approvals,
     onDecide,
+    planEnv,
 }: {
     item: Extract<TranscriptItem, { kind: 'agent' }>;
     dense: boolean;
@@ -148,6 +163,8 @@ export function AgentBlock({
     /** Approvals the plan cards show (issue #70); the subagent view renders its cards itself. */
     approvals?: Approval[];
     onDecide?: (approval: Approval, approve: boolean) => Promise<void>;
+    /** What every plan card of this view needs on top (autonomy E4): approvals, jobs, pending ids, layout. */
+    planEnv?: PlanEnv;
 }) {
     const fileChatId = filesChatId ?? chatId;
     const placed = useMemo(() => outputsByStepPart(item.parts, results), [item.parts, results]);
@@ -158,6 +175,11 @@ export function AgentBlock({
             key={p.id}
             plan={p}
             approval={approvals?.find((a) => a.id === p.approval_id)}
+            approvals={planEnv?.approvals}
+            jobs={planEnv?.jobs}
+            pending={planEnv?.pending}
+            layout={planEnv?.layout}
+            onNotify={planEnv ? (on) => planEnv.onNotify?.(p.id, on) : undefined}
             onDecide={onDecide}
             dense={dense}
         />
@@ -178,7 +200,14 @@ export function AgentBlock({
     return (
         <Box
             data-testid="agent-answer"
-            sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, fontSize: dense ? 14 : 14.5, lineHeight: 1.6 }}
+            sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 1,
+                minWidth: 0,
+                fontSize: dense ? 14 : 14.5,
+                lineHeight: 1.6,
+            }}
         >
             {item.parts.map((p, i) => {
                 // plans proposed in this part come right after it (issue #138)
@@ -187,7 +216,12 @@ export function AgentBlock({
                     return (
                         <Fragment key={i}>
                             <Box data-testid="agent-answer-text" sx={{ minWidth: 0 }}>
-                                <Markdown text={p.text} dense={dense} images={{ chatId, msgId: p.imageKey }} streaming={live} />
+                                <Markdown
+                                    text={p.text}
+                                    dense={dense}
+                                    images={{ chatId, msgId: p.imageKey }}
+                                    streaming={live}
+                                />
                             </Box>
                             {cards}
                         </Fragment>
@@ -332,7 +366,9 @@ function EmptyChat() {
             }}
         >
             <AutoAwesomeIcon sx={{ fontSize: 32, color: alpha(agentColors.green, 0.5) }} />
-            <Typography sx={{ fontSize: 14, lineHeight: 1.5 }}>No messages yet. Describe what you want to do.</Typography>
+            <Typography sx={{ fontSize: 14, lineHeight: 1.5 }}>
+                No messages yet. Describe what you want to do.
+            </Typography>
         </Box>
     );
 }
@@ -363,6 +399,14 @@ export default function Conversation({
     plans?: Plan[];
 }) {
     const { chat, live, resumes, pending } = stream;
+    // the observed platform jobs of this chat (A-E2) and what the plan cards of this view need (A-E4)
+    const jobs = useJobs(stream.chat?.id);
+    const pendingIds = useMemo(() => pendingIdsOf(stream.approvals), [stream.approvals]);
+    const setPlanNotify = useAgentOptional()?.setPlanNotify;
+    const planEnv: PlanEnv = useMemo(
+        () => ({ approvals: stream.approvals, jobs, pending: pendingIds, layout: dense ? 'panel' : 'page' }),
+        [stream.approvals, jobs, pendingIds, dense],
+    );
     const liveP = useMemo(() => liveParts(live), [live]);
     // Open state chosen per thinking block and per tool step (collapsed until opened); kept here so it survives the
     // switch from live to stored message and every reload of the transcript.
@@ -410,6 +454,11 @@ export default function Conversation({
                 key={p.id}
                 plan={p}
                 approval={stream.approvals.find((a) => a.id === p.approval_id)}
+                approvals={stream.approvals}
+                jobs={jobs}
+                pending={pendingIds}
+                layout={dense ? 'panel' : 'page'}
+                onNotify={setPlanNotify ? (on) => setPlanNotify(p.id, on) : undefined}
                 onDecide={stream.decide}
                 dense={dense}
             />
@@ -417,7 +466,14 @@ export default function Conversation({
     const running = !!chat?.running;
     const waitingApproval = stream.approvals.some((a) => a.state === 'pending');
     // the answer of the running turn: the live one, else the last stored answer while the chat runs
-    const activeKey = running && !pending ? (liveItem ? 'live' : shown[shown.length - 1]?.kind === 'agent' ? shown[shown.length - 1].key : undefined) : undefined;
+    const activeKey =
+        running && !pending
+            ? liveItem
+                ? 'live'
+                : shown[shown.length - 1]?.kind === 'agent'
+                ? shown[shown.length - 1].key
+                : undefined
+            : undefined;
     // resume blocks sit after the user message that triggered them; not stored yet: at the end. A resume on opening
     // the chat sits where it started, before anything stored later and before a message still on its way. The start of
     // a new chat's first sandbox comes before everything.
@@ -480,6 +536,7 @@ export default function Conversation({
             plans={placedPlans.byItem.get(it.key)}
             approvals={stream.approvals}
             onDecide={stream.decide}
+            planEnv={planEnv}
         />
     );
     const empty =
@@ -566,14 +623,7 @@ export default function Conversation({
             {stream.compacting && <CompactionLine running={stream.compacting} />}
             {/* handed to the agent, which reads it after its current step: the stored message takes this place */}
             {stream.delivered.map((d) => (
-                <UserBubble
-                    key={d.key}
-                    text={d.text}
-                    attachments={d.attachments}
-                    files={files}
-                    dense={dense}
-                    quiet
-                />
+                <UserBubble key={d.key} text={d.text} attachments={d.attachments} files={files} dense={dense} quiet />
             ))}
             {/* the agent works, but nothing of this turn's answer shows yet: a subtle hint, never in place of the steps */}
             {(running || pending) && !activeKey && !resuming && !chat?.starting && !stream.compacting && (

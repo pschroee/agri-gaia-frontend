@@ -28,6 +28,9 @@ import type {
     Variant,
 } from './types';
 
+import type { Plan } from './plan';
+import type { WatchJob } from './jobs';
+
 import { AGENT_BASE } from './login';
 import { type PageContext, pageOnly, wireContext } from './pageContext';
 
@@ -74,7 +77,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
         let details: unknown;
         let approval: Approval | undefined;
         try {
-            const body = (await res.json()) as { error?: string; code?: string; details?: unknown; approval?: Approval };
+            const body = (await res.json()) as {
+                error?: string;
+                code?: string;
+                details?: unknown;
+                approval?: Approval;
+            };
             if (body?.error) message = body.error;
             code = body?.code;
             details = body?.details;
@@ -253,8 +261,7 @@ export const agentApi = {
     /** Ends a running background task (409: not running, 404: unknown). */
     stopBackground: (id: string, bg: string) => post<BackgroundTask>(`chats/${enc(id)}/background/${enc(bg)}/stop`),
     /** Model calls recorded at the LLM proxy (incl. subagents), for the tokens per subagent run. */
-    llmCalls: (id: string) =>
-        request<LLMCall[]>(`chats/${enc(id)}/llm_calls`).then((l) => (Array.isArray(l) ? l : [])),
+    llmCalls: (id: string) => request<LLMCall[]>(`chats/${enc(id)}/llm_calls`).then((l) => (Array.isArray(l) ? l : [])),
     /** Short list of a chat's subagent runs; reading it does not wake the chat (gateway issue #60). */
     subagentRuns: (id: string) =>
         request<SubagentRunSummary[]>(`chats/${enc(id)}/subagent-runs`).then((l) => (Array.isArray(l) ? l : [])),
@@ -278,6 +285,25 @@ export const agentApi = {
     trash: () => request<TrashList>('trash'),
     /** Deletes every chat of the user in the trash for good. */
     emptyTrash: () => post<{ deleted: number }>('trash/empty'),
+    /** The plans of a chat, oldest first (gateway issue #70); a gateway without the route answers 404. */
+    plans: (id: string) => request<Plan[]>(`chats/${enc(id)}/plans`).then((l) => (Array.isArray(l) ? l : [])),
+    /**
+     * Autonomous plans: the user's own controls (gateway A-E1). The agent has no tool for any of them. 404 for an
+     * unknown plan or a foreign chat, 409 when the plan is not in the state the control needs.
+     */
+    pausePlan: (id: string, plan: string) => post<Plan>(`chats/${enc(id)}/plans/${enc(plan)}/pause`),
+    resumePlan: (id: string, plan: string) => post<Plan>(`chats/${enc(id)}/plans/${enc(plan)}/resume`),
+    cancelPlan: (id: string, plan: string) => post<Plan>(`chats/${enc(id)}/plans/${enc(plan)}/cancel`),
+    /**
+     * Stops the platform job a waiting step of a plan observes (gateway A-E2, D2.9). 409 when the step does not
+     * wait or its job cannot be stopped.
+     */
+    stopPlanStep: (id: string, plan: string, idx: number) =>
+        post<Plan>(`chats/${enc(id)}/plans/${enc(plan)}/steps/${idx}/stop`),
+    /** Observed platform jobs of a chat (gateway A-E2); 404 on gateways without the route. */
+    jobs: (id: string) => request<WatchJob[]>(`chats/${enc(id)}/jobs`).then((l) => (Array.isArray(l) ? l : [])),
+    /** Stops one observed job of a chat (gateway A-E2); 409 when it does not run or cannot be stopped. */
+    stopJob: (id: string, job: string) => post<WatchJob>(`chats/${enc(id)}/jobs/${enc(job)}/stop`),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
     /** Platform calls of the user's chats across all chats (query from activityQuery); 404 on older gateways. */
     activity: (query: string) => request<ActivityPage>(`activity${query}`),

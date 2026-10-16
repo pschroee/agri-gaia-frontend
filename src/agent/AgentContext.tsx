@@ -2,10 +2,32 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import {
+    createContext,
+    ReactNode,
+    useCallback,
+    useContext,
+    useEffect,
+    useMemo,
+    useReducer,
+    useRef,
+    useState,
+} from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { AgentApiError, agentApi, approvalEventsUrl, silentLogin } from './api';
 import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './approvalFeed';
+import { AGENT_ROUTE } from './expand';
+import { showNotification, shouldNotify } from './notify';
+import { onAgentPage } from './panelCarry';
+import {
+    alertKey,
+    alertSticky,
+    dismissAlert as dismissAlertItem,
+    PlanAlert,
+    pushAlert,
+    QueuedAlert,
+} from './planAlerts';
 import { RunsCache, ensureChatRuns, runsCacheReducer, selectionFor } from './chatSubagents';
 import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
@@ -95,6 +117,18 @@ type AgentState = {
     pendingApprovalCount: number;
     /** The stream across chats is open (otherwise the count comes from polling every 15 s). */
     approvalsLive: boolean;
+    /** The plan alerts of the stream across chats, newest first (A-E4, D4.3): the snackbar's queue. */
+    planAlerts: QueuedAlert[];
+    /** The plans that wait for the user right now: the sticky `needs_input` alerts of that queue. */
+    planNeedsInput: number;
+    /** Opens the chat of an alert and jumps to its plan card; the alert leaves the queue. */
+    openPlanAlert: (alert: PlanAlert) => void;
+    /** Takes one alert out of the queue (the snackbar's close button). */
+    dismissPlanAlert: (alert: PlanAlert | QueuedAlert) => void;
+    /** Sends a browser notification for this plan (the checkbox in the proposed card, D4.4). */
+    setPlanNotify: (planId: string, on: boolean) => void;
+    /** Whether the user allowed a browser notification for this plan. */
+    planNotifyOptIn: (planId: string) => boolean;
 };
 
 /** Runs of the open chat and whether the chat works (for estimating the state of runs without one). */
@@ -156,6 +190,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [freshChat, setFreshChat] = useState<FreshChat>();
     const [pending, dispatchPending] = useReducer(pendingReducer, emptyPending);
     const [approvalsLive, setApprovalsLive] = useState(false);
+    const [planAlerts, setPlanAlerts] = useState<QueuedAlert[]>([]);
+    // the browser notification is per plan (E4, D4.4) and lives in this tab; the gateway stores no field for it
+    const [notifyPlans, setNotifyPlans] = useState<ReadonlySet<string>>(() => new Set<string>());
+    const notifyPlansRef = useRef(notifyPlans);
+    notifyPlansRef.current = notifyPlans;
+    const navigate = useNavigate();
+    const { pathname } = useLocation();
     const pendingVersion = useRef(0);
     pendingVersion.current = pending.version;
     const checking = useRef(false);
@@ -225,6 +266,13 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             dispatch: dispatchPending,
             version: () => pendingVersion.current,
             onLive: setApprovalsLive,
+            onAlert: (a) => {
+                setPlanAlerts((q) => pushAlert(q, a));
+                // a system notification only with the user's permission for this plan and only while the tab
+                // is hidden; the in-app snackbar carries everything else (D4.4)
+                const hidden = typeof document !== 'undefined' && document.hidden;
+                if (shouldNotify(a, hidden, notifyPlansRef.current.has(a.plan_id))) showNotification(a);
+            },
             isUnauthorized: (e) => e instanceof AgentApiError && e.status === 401,
             onUnauthorized: () => setStatus('signed-out'),
         });
@@ -265,7 +313,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const selectSubagent = useCallback(
-        (runId: string | undefined) => setSubagent(runId && selectedChatId ? { chatId: selectedChatId, runId } : undefined),
+        (runId: string | undefined) =>
+            setSubagent(runId && selectedChatId ? { chatId: selectedChatId, runId } : undefined),
         [selectedChatId],
     );
     // only a subagent of the selected chat counts (the fallback to the newest chat leaves it too)
@@ -275,7 +324,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         (chatId: string, value: Omit<OpenChatSubagents, 'chatId'> | undefined) =>
             setOpenChatSubagentsState((cur) => {
                 if (!value) return cur?.chatId === chatId ? undefined : cur;
-                if (cur?.chatId === chatId && cur.runs === value.runs && cur.chatRunning === value.chatRunning) return cur;
+                if (cur?.chatId === chatId && cur.runs === value.runs && cur.chatRunning === value.chatRunning)
+                    return cur;
                 return { chatId, ...value };
             }),
         [],
@@ -328,7 +378,10 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             } catch (e) {
                 if (e instanceof AgentApiError && e.status === 401) setStatus('signed-out');
                 setNewChatError(
-                    newChatErrorText(e instanceof AgentApiError ? e.status : undefined, e instanceof Error ? e.message : String(e)),
+                    newChatErrorText(
+                        e instanceof AgentApiError ? e.status : undefined,
+                        e instanceof Error ? e.message : String(e),
+                    ),
                 );
             } finally {
                 creating.current = false;
@@ -400,6 +453,36 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const setPanelOpen = useCallback((open: boolean) => dispatchPanel({ type: 'set', open }), []);
+    const openPlanAlert = useCallback(
+        (alert: PlanAlert) => {
+            selectChat(alert.chat_id);
+            if (onAgentPage(pathname)) navigate(AGENT_ROUTE);
+            else setPanelOpen(true);
+            setPlanAlerts((q) => dismissAlertItem(q, alertKey(alert)));
+        },
+        [selectChat, navigate, pathname],
+    );
+
+    const dismissPlanAlert = useCallback(
+        (alert: PlanAlert | QueuedAlert) => setPlanAlerts((q) => dismissAlertItem(q, alertKey(alert))),
+        [],
+    );
+
+    const setPlanNotify = useCallback(
+        (planId: string, on: boolean) =>
+            setNotifyPlans((s) => {
+                const next = new Set(s);
+                if (on) next.add(planId);
+                else next.delete(planId);
+                return next;
+            }),
+        [],
+    );
+
+    const planNotifyOptIn = useCallback((planId: string) => notifyPlans.has(planId), [notifyPlans]);
+
+    // a plan that needs input keeps its alert until the user opened the chat or closed it (D4.4)
+    const planNeedsInput = useMemo(() => planAlerts.filter(alertSticky).length, [planAlerts]);
     const hasChat = !!selectedChatId;
     const noteRoute = useCallback(
         (pathname: string, search: string) => dispatchPanel({ type: 'route', pathname, search, hasChat }),
@@ -452,6 +535,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             pendingApprovals,
             pendingApprovalCount: pendingApprovals.length,
             approvalsLive,
+            planAlerts,
+            planNeedsInput,
+            openPlanAlert,
+            dismissPlanAlert,
+            setPlanNotify,
+            planNotifyOptIn,
         }),
         [
             status,
@@ -492,6 +581,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             noteRoute,
             pendingApprovals,
             approvalsLive,
+            planAlerts,
+            planNeedsInput,
+            openPlanAlert,
+            dismissPlanAlert,
+            setPlanNotify,
+            planNotifyOptIn,
         ],
     );
 

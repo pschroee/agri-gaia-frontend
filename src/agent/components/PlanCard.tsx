@@ -2,51 +2,171 @@
 //
 // SPDX-License-Identifier: MIT
 
-// The plan card (issue #70): a plan of several platform calls with one decision by the user. Shown under the answer
-// that proposed it, in the panel, on /ai-agent and in the subagent view. Since gateway issue #72 it is the only place
-// where a plan is decided: the list of pending approvals shows a reference line to it (PlanReference). What a step
-// does is the gateway's summary; the agent's title and notes are shown apart and marked as not verified.
+// The plan card (issue #70, autonomy E4): a plan of several platform calls with one decision by the user. Shown
+// under the answer that proposed it, in the panel, on /ai-agent and in the subagent view. Since gateway issue #72
+// it is the only place where a plan is decided: the list of pending approvals shows a reference line to it
+// (PlanReference). What a step does is the gateway's summary; the agent's title and notes are shown apart and
+// marked as not verified.
+//
+// An autonomous plan (E1) shows more: its budget and what it has used of it, the progress of the step it is on
+// (percent, the platform's line, the runtime and, where the gateway can estimate it, the time left and the tail of
+// the job's log), the objects it produced, and the controls the user has — pause, resume, cancel and stop the
+// platform job of a step. The words are in planText.ts, the rules about states and progress in plan.ts, so both
+// can be tested without rendering this file.
 
-import { ReactElement, useState } from 'react';
+import { ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 
-import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
+import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardContent from '@mui/material/CardContent';
+import Checkbox from '@mui/material/Checkbox';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import FormHelperText from '@mui/material/FormHelperText';
+import IconButton from '@mui/material/IconButton';
+import LinearProgress from '@mui/material/LinearProgress';
+import Link from '@mui/material/Link';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import Paper from '@mui/material/Paper';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CheckIcon from '@mui/icons-material/Check';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import ListAltOutlinedIcon from '@mui/icons-material/ListAltOutlined';
+import BackHandIcon from '@mui/icons-material/BackHand';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
+import PauseIcon from '@mui/icons-material/Pause';
+import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
+import StopIcon from '@mui/icons-material/Stop';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
+import TimelapseIcon from '@mui/icons-material/Timelapse';
+import ViewInArOutlinedIcon from '@mui/icons-material/ViewInArOutlined';
 
+import { agentApi } from '../api';
+import { jobOfStep } from '../jobs';
+import type { WatchJob } from '../jobs';
+import { notifyCheckbox, permissionOf, browserNotify, requestPermission } from '../notify';
+import type { NotifyPermission } from '../notify';
 import {
     agentNote,
     agentTitle,
+    awaitingPlatform,
+    budgetLine,
+    createdStay,
+    grantRows,
+    isAutonomous,
+    needsInput,
+    outputKind,
+    outputLink,
     planLabel,
+    planOutputs,
     stepCount,
     stepMain,
-    stepStatus,
+    stepPhase,
+    stepRuntime,
     stepTechnical,
+    stepTimeLine,
+    stepMessage,
     summaryChanged,
-    STEP_LABEL,
     summaryParts,
+    PHASE_LABEL,
     Plan,
     PlanStep,
-    StepStatus,
+    StepPhase,
 } from '../plan';
+import {
+    approvalExplain,
+    budgetRowsOf,
+    CHANGE_HINT,
+    cancelConfirmText,
+    cancelledText,
+    completedText,
+    computeStepLine,
+    failedText,
+    failedTitle,
+    FAILED_HINT,
+    IRREVERSIBLE_HINT,
+    LOG_SWITCH,
+    logTail,
+    NOTIFY_LABEL,
+    pauseAllowed,
+    pauseText,
+    pauseTitle,
+    planChip,
+    rejectText,
+    RESTART_INTERRUPTED,
+    resumeAllowed,
+    rightText,
+    RIGHTS_END_TEXT,
+    RIGHTS_OVERLINE,
+    BUDGET_OVERLINE,
+    CREATED_OVERLINE,
+    AGENT_NOTE_LABEL,
+    AGENT_TITLE_LABEL,
+    ASKS_AGAIN,
+    cancelAllowed,
+    waitingForApproval,
+    WAITING_INFO,
+} from '../planText';
 import { scrollToPlanCard, useRegisterPlanCard } from '../planRegistry';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
-import { agentColors, blockSx, MONO } from './tokens';
+import { agentColors, MONO } from './tokens';
 
-const STATUS_ICON: Record<StepStatus, ReactElement> = {
-    done: <CheckCircleIcon sx={{ fontSize: 17, color: agentColors.green }} aria-hidden />,
+/** The step's state mark, one per phase (design, MUI mapping). */
+const PHASE_ICON: Record<StepPhase, ReactElement> = {
+    done: <CheckCircleIcon sx={{ fontSize: 17, color: agentColors.ok }} aria-hidden />,
     approval: <HourglassEmptyIcon sx={{ fontSize: 17, color: agentColors.amber }} aria-hidden />,
     open: <RadioButtonUncheckedIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
-    running: <CircularProgress size={12} aria-hidden />,
+    queued: <RadioButtonUncheckedIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
+    running: <CircularProgress size={14} aria-hidden />,
+    paused: <PauseCircleOutlineIcon sx={{ fontSize: 17, color: agentColors.amber }} aria-hidden />,
     failed: <ErrorOutlineIcon sx={{ fontSize: 17, color: agentColors.red }} aria-hidden />,
+    notrun: <RemoveCircleOutlineIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
+    stopped: <StopCircleIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
 };
+
+/** The left border of the card, one colour per state (design, MUI mapping). */
+function edgeColor(plan: Plan): string {
+    switch (plan.state) {
+        case 'approved':
+            return 'primary.main';
+        case 'paused':
+            return 'warning.main';
+        case 'completed':
+            return 'success.light';
+        case 'failed':
+            return 'error.main';
+        case 'cancelled':
+            return 'grey.400';
+        default:
+            return 'warning.main';
+    }
+}
+
+/** The body of a step the card still expects work from (L7): anything else shows no note. */
+const NOTE_PHASES: StepPhase[] = ['open', 'running', 'paused', 'approval'];
 
 export const PRE_SX = {
     fontFamily: MONO,
@@ -164,7 +284,10 @@ export function ProposedSummary({ summary, testId }: { summary: string; testId?:
 }
 
 /** Approve and change buttons; both answer the plan's approval (change rejects it). */
-function Decision({ onDecide }: { onDecide: (approve: boolean) => Promise<void> }) {
+const DECISION_TEXT =
+    'Approving runs these steps in this order with exactly these parameters, for 30 minutes. Steps marked irreversible still ask you on their own.';
+
+function Decision({ explain, onDecide }: { explain?: string; onDecide: (approve: boolean) => Promise<void> }) {
     const [busy, setBusy] = useState(false);
     const decide = async (approve: boolean) => {
         setBusy(true);
@@ -176,31 +299,412 @@ function Decision({ onDecide }: { onDecide: (approve: boolean) => Promise<void> 
     };
     return (
         <Box sx={{ mt: 1.25 }}>
-            <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 0.75 }}>
-                Approving runs these steps in this order with exactly these parameters, for 30 minutes. Steps marked
-                irreversible still ask you on their own.
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 0.75, overflowWrap: 'anywhere' }}>
+                {explain ?? DECISION_TEXT}
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
                     Approve plan
                 </Button>
-                <Button size="small" variant="outlined" color="secondary" disabled={busy} onClick={() => void decide(false)}>
+                <Button
+                    size="small"
+                    variant="outlined"
+                    color="secondary"
+                    disabled={busy}
+                    onClick={() => void decide(false)}
+                >
                     Change
                 </Button>
             </Box>
-            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75 }}>
-                Change rejects this plan; tell the agent what to change.
-            </Typography>
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75 }}>{CHANGE_HINT}</Typography>
         </Box>
     );
 }
 
-function StepItem({ step }: { step: PlanStep }) {
-    const status = stepStatus(step);
+/** The state chip of the card's header (design, MUI mapping). */
+function StateChip({ plan, layout, pending }: { plan: Plan; layout: 'panel' | 'page'; pending: ReadonlySet<string> }) {
+    const color =
+        plan.state === 'failed'
+            ? 'error'
+            : plan.state === 'completed'
+            ? 'success'
+            : plan.state === 'cancelled'
+            ? 'default'
+            : plan.state === 'paused' || plan.state === 'proposed'
+            ? 'warning'
+            : needsInput(plan, pending)
+            ? 'warning'
+            : 'primary';
+    return (
+        <Chip
+            size="small"
+            variant="outlined"
+            color={color}
+            data-testid="agent-plan-chip"
+            data-plan-state={plan.state}
+            icon={
+                plan.state === 'completed' ? (
+                    <CheckCircleIcon sx={{ fontSize: 14 }} />
+                ) : (
+                    <FiberManualRecordIcon sx={{ fontSize: 12 }} />
+                )
+            }
+            label={planChip(plan, layout, pending)}
+            sx={{ flex: 'none' }}
+        />
+    );
+}
+
+/** The controls of the card: icon buttons in the 400 px panel, text buttons on the page (design). */
+function Controls({
+    plan,
+    layout,
+    onControl,
+}: {
+    plan: Plan;
+    layout: 'panel' | 'page';
+    onControl: (action: 'pause' | 'resume' | 'cancel') => Promise<void>;
+}) {
+    const [cancelOpen, setCancelOpen] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const run = async (action: 'pause' | 'resume' | 'cancel') => {
+        setBusy(true);
+        try {
+            await onControl(action);
+        } finally {
+            setBusy(false);
+        }
+    };
+    return (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 'none' }}>
+            {pauseAllowed(plan) &&
+                (layout === 'panel' ? (
+                    <Tooltip title="Pause plan">
+                        <IconButton
+                            size="small"
+                            aria-label="Pause plan"
+                            disabled={busy}
+                            onClick={() => void run('pause')}
+                        >
+                            <PauseIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                    </Tooltip>
+                ) : (
+                    <Button
+                        size="small"
+                        variant="text"
+                        startIcon={<PauseIcon />}
+                        disabled={busy}
+                        onClick={() => void run('pause')}
+                    >
+                        Pause
+                    </Button>
+                ))}
+            {resumeAllowed(plan) &&
+                (layout === 'panel' ? (
+                    <Tooltip title="Resume plan">
+                        <IconButton
+                            size="small"
+                            aria-label="Resume plan"
+                            disabled={busy}
+                            onClick={() => void run('resume')}
+                        >
+                            <PlayArrowIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                    </Tooltip>
+                ) : (
+                    <Button
+                        size="small"
+                        variant="text"
+                        startIcon={<PlayArrowIcon />}
+                        disabled={busy}
+                        onClick={() => void run('resume')}
+                    >
+                        Resume
+                    </Button>
+                ))}
+            {cancelAllowed(plan) &&
+                (layout === 'panel' ? (
+                    <Tooltip title="Cancel plan">
+                        <IconButton
+                            size="small"
+                            aria-label="Cancel plan"
+                            disabled={busy}
+                            onClick={() => setCancelOpen(true)}
+                        >
+                            <CancelOutlinedIcon sx={{ fontSize: 18 }} />
+                        </IconButton>
+                    </Tooltip>
+                ) : (
+                    <Button
+                        size="small"
+                        variant="text"
+                        color="error"
+                        disabled={busy}
+                        onClick={() => setCancelOpen(true)}
+                    >
+                        Cancel plan
+                    </Button>
+                ))}
+            <CancelDialog
+                plan={plan}
+                open={cancelOpen}
+                busy={busy}
+                onClose={() => setCancelOpen(false)}
+                onConfirm={async () => {
+                    await run('cancel');
+                    setCancelOpen(false);
+                }}
+            />
+        </Box>
+    );
+}
+
+/** The confirmation before a plan is cancelled (design, D1.10: the platform jobs keep running). */
+function CancelDialog({
+    plan,
+    open,
+    busy,
+    onClose,
+    onConfirm,
+}: {
+    plan: Plan;
+    open: boolean;
+    busy: boolean;
+    onClose: () => void;
+    onConfirm: () => Promise<void>;
+}) {
+    const keep = useRef<HTMLButtonElement>(null);
+    return (
+        <Dialog
+            open={open}
+            onClose={onClose}
+            aria-labelledby="agent-cancel-plan-title"
+            aria-describedby="agent-cancel-plan-text"
+            TransitionProps={{ onEntered: () => keep.current?.focus() }}
+        >
+            <DialogTitle id="agent-cancel-plan-title">Cancel plan?</DialogTitle>
+            <DialogContent>
+                <DialogContentText id="agent-cancel-plan-text" data-testid="agent-plan-cancel-text">
+                    {cancelConfirmText(plan)}
+                </DialogContentText>
+            </DialogContent>
+            <DialogActions>
+                <Button ref={keep} onClick={onClose}>
+                    Keep running
+                </Button>
+                <Button color="error" disabled={busy} onClick={() => void onConfirm()}>
+                    Cancel plan
+                </Button>
+            </DialogActions>
+        </Dialog>
+    );
+}
+
+/** The banner of the plan's state (design, MUI mapping): one Alert per state and pause reason. */
+function PlanBanner({ plan }: { plan: Plan }) {
+    if (plan.state === 'proposed') return null;
+    if (plan.state === 'paused') {
+        const reason = plan.pause_reason ?? '';
+        const interrupted = plan.steps.some((s) => s.state === 'failed' && reason === 'restart');
+        return (
+            <Alert severity="warning" sx={{ mt: 1, fontSize: 12.5 }} data-testid="agent-plan-banner">
+                <AlertTitle sx={{ fontSize: 13 }}>{pauseTitle(reason)}</AlertTitle>
+                {pauseText(plan)}
+                {interrupted && (
+                    <Box component="span" sx={{ display: 'block', mt: 0.5 }}>
+                        {RESTART_INTERRUPTED}
+                    </Box>
+                )}
+            </Alert>
+        );
+    }
+    if (plan.state === 'completed') {
+        return (
+            <Alert severity="success" sx={{ mt: 1, fontSize: 12.5 }} data-testid="agent-plan-banner">
+                {completedText(plan)}
+            </Alert>
+        );
+    }
+    if (plan.state === 'failed') {
+        const failed = plan.steps.find((s) => s.state === 'failed');
+        return (
+            <Alert severity="error" sx={{ mt: 1, fontSize: 12.5 }} data-testid="agent-plan-banner">
+                <AlertTitle sx={{ fontSize: 13 }}>{failedTitle(plan)}</AlertTitle>
+                {failed?.result && <Box sx={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>{failed.result}</Box>}
+                <Box sx={{ mt: failed?.result ? 0.5 : 0 }}>{failedText(plan)}</Box>
+                <Box sx={{ mt: 0.5, color: 'text.secondary' }}>{FAILED_HINT}</Box>
+            </Alert>
+        );
+    }
+    if (plan.state === 'cancelled') {
+        return (
+            <Alert severity="info" sx={{ mt: 1, fontSize: 12.5 }} data-testid="agent-plan-banner">
+                {cancelledText(plan)}
+            </Alert>
+        );
+    }
+    // waiting for the platform: the agent is idle, nobody spends turns or model cost (design)
+    if (awaitingPlatform(plan)) {
+        return (
+            <Alert severity="info" sx={{ mt: 1, fontSize: 12.5 }} data-testid="agent-plan-banner">
+                {WAITING_INFO}
+            </Alert>
+        );
+    }
+    return null;
+}
+
+/** The tail of a step's job log, collapsed (design, L9: the switch and "Stop job" share a row). */
+function LogTail({
+    step,
+    open,
+    onToggle,
+    job,
+    onStop,
+    busy,
+}: {
+    step: PlanStep;
+    open: boolean;
+    onToggle: () => void;
+    job?: WatchJob;
+    onStop?: () => void;
+    busy?: boolean;
+}) {
+    const tail = logTail(job?.log_tail ?? step.log_tail);
+    const stoppable = !!job && job.state === 'running' && !!onStop;
+    if (!tail && !stoppable) return null;
+    return (
+        <Box sx={{ mt: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, minWidth: 0 }}>
+                {tail ? (
+                    <Box
+                        component="button"
+                        type="button"
+                        onClick={onToggle}
+                        aria-expanded={open}
+                        data-testid="agent-plan-log-toggle"
+                        sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 0.25,
+                            border: 0,
+                            background: 'none',
+                            p: 0,
+                            font: 'inherit',
+                            fontSize: 12,
+                            color: agentColors.muted,
+                            cursor: 'pointer',
+                        }}
+                    >
+                        {open ? <ExpandMoreIcon sx={{ fontSize: 16 }} /> : <ChevronRightIcon sx={{ fontSize: 16 }} />}
+                        {LOG_SWITCH}
+                    </Box>
+                ) : (
+                    <span />
+                )}
+                {stoppable && (
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<StopIcon />}
+                        disabled={busy}
+                        onClick={onStop}
+                        data-testid="agent-plan-stop-job"
+                        sx={{ flex: 'none' }}
+                    >
+                        Stop job
+                    </Button>
+                )}
+            </Box>
+            {tail && (
+                <Collapse in={open} unmountOnExit>
+                    <Box component="pre" data-testid="agent-plan-log" sx={{ ...PRE_SX, maxHeight: 150 }}>
+                        {tail}
+                    </Box>
+                </Collapse>
+            )}
+        </Box>
+    );
+}
+
+/** The progress of a running step: the bar, the message, the runtime and the time left (design, D2.4/D4.6). */
+function StepProgress({ plan, step, now }: { plan: Plan; step: PlanStep; now: number }) {
+    const phase = stepPhase(plan, step);
+    const paused = phase === 'paused';
+    const percent = typeof step.progress === 'number' ? step.progress : undefined;
+    const message = stepMessage(step);
+    const timeLine = stepTimeLine(step, now);
+    const runtime = stepRuntime(step, now);
+    const detail =
+        step.state === 'waiting' && !step.started_at
+            ? message
+            : [message, timeLine].filter((s) => s !== '').join(' · ');
+    if (percent === undefined && !detail && !paused) return null;
+    return (
+        <Box sx={{ mt: 0.5 }} data-testid="agent-plan-progress">
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <LinearProgress
+                    variant={percent === undefined ? 'indeterminate' : 'determinate'}
+                    value={percent}
+                    color={paused ? 'warning' : 'primary'}
+                    sx={{ flex: 1, height: 4, borderRadius: 2 }}
+                />
+                {percent !== undefined && (
+                    <Typography sx={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                        {`${Math.round(percent)} %`}
+                    </Typography>
+                )}
+            </Box>
+            {detail && (
+                <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.25, overflowWrap: 'anywhere' }}>
+                    {detail}
+                </Typography>
+            )}
+            {paused && (
+                <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.25 }}>
+                    {runtime
+                        ? `${runtime} · step ${step.idx + 1} starts after you resume`
+                        : `Step ${step.idx + 1} starts after you resume`}
+                </Typography>
+            )}
+        </Box>
+    );
+}
+
+/** One step of the card: number, effect, state, the gateway's summary and, where there is one, its progress. */
+function StepItem({
+    plan,
+    step,
+    now,
+    jobs,
+    onControl,
+    approvals,
+    onDecide,
+}: {
+    plan: Plan;
+    step: PlanStep;
+    now: number;
+    jobs: WatchJob[];
+    onControl: (action: 'stop', step: number) => Promise<void>;
+    approvals: Approval[];
+    onDecide?: (a: Approval, approve: boolean) => Promise<void>;
+}) {
+    const phase = stepPhase(plan, step);
     const main = stepMain(step);
     const note = agentNote(step);
+    const job = jobOfStep(jobs, step);
+    const waiting = step.state === 'waiting';
+    const [logOpen, setLogOpen] = useState(phase === 'running' && !waiting);
+    const [busy, setBusy] = useState(false);
+    const strong = phase !== 'queued' && phase !== 'notrun';
+    const decide = onDecide;
+    const parkedApproval = step.parked_approval ? approvals.find((a) => a.id === step.parked_approval) : undefined;
+    const embedded = phase === 'approval' && parkedApproval?.state === 'pending' && decide ? parkedApproval : undefined;
+    const extra = computeStepLine(plan, step);
     return (
-        <Box component="li" data-testid="agent-plan-step" data-status={status} sx={{ minWidth: 0 }}>
+        <Box component="li" data-testid="agent-plan-step" data-status={phase} sx={{ minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
                 <Typography sx={{ fontSize: 12, color: 'text.secondary', minWidth: 14, lineHeight: '22px' }}>
                     {step.idx}
@@ -209,12 +713,19 @@ function StepItem({ step }: { step: PlanStep }) {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0 }}>
                         <EffectChip effect={step.effect} />
                         <Box
-                            sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 'none', fontSize: 12, ml: 'auto' }}
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 0.5,
+                                flex: 'none',
+                                fontSize: 12,
+                                ml: 'auto',
+                            }}
                             title={step.result}
                         >
-                            {STATUS_ICON[status]}
+                            {PHASE_ICON[phase]}
                             <Typography component="span" sx={{ fontSize: 12 }}>
-                                {STEP_LABEL[status]}
+                                {PHASE_LABEL[phase]}
                             </Typography>
                         </Box>
                     </Box>
@@ -223,7 +734,8 @@ function StepItem({ step }: { step: PlanStep }) {
                         data-from-gateway={main.fromGateway ? 'true' : 'false'}
                         sx={{
                             fontSize: 13,
-                            fontWeight: 500,
+                            fontWeight: strong ? 500 : 400,
+                            color: strong ? 'text.primary' : 'text.secondary',
                             mt: 0.5,
                             overflowWrap: 'anywhere',
                             ...(main.fromGateway ? {} : { fontFamily: MONO, fontSize: 12 }),
@@ -232,10 +744,63 @@ function StepItem({ step }: { step: PlanStep }) {
                         {main.head}
                     </Typography>
                     <SummaryDetails details={main.details} />
+                    {phase === 'open' && (extra || !step.covered) && (
+                        <Box component="ul" sx={{ listStyle: 'none', m: 0, mt: 0.25, p: 0 }}>
+                            {extra && (
+                                <Typography component="li" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                                    {`◦ ${extra}`}
+                                </Typography>
+                            )}
+                            {!step.covered && (
+                                <Typography component="li" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                                    {`◦ ${ASKS_AGAIN}`}
+                                </Typography>
+                            )}
+                        </Box>
+                    )}
                     {step.summary_proposed && (
                         <ProposedSummary summary={step.summary_proposed} testId="agent-plan-step-proposed" />
                     )}
-                    {note && <AgentText label="Agent's note – not verified" text={note} testId="agent-plan-step-note" />}
+                    {note && NOTE_PHASES.includes(phase) && (
+                        <AgentText label={AGENT_NOTE_LABEL} text={note} testId="agent-plan-step-note" />
+                    )}
+                    {/* a step the plan does not cover asks on its own (D2.8): the decision is in the card */}
+                    {embedded && decide && (
+                        <StepApproval
+                            plan={plan}
+                            step={step}
+                            approval={embedded}
+                            onDecide={async (approve) => {
+                                setBusy(true);
+                                try {
+                                    await decide(embedded, approve);
+                                } finally {
+                                    setBusy(false);
+                                }
+                            }}
+                            busy={busy}
+                        />
+                    )}
+                    {(phase === 'running' || phase === 'paused' || waiting) && (
+                        <StepProgress plan={plan} step={step} now={now} />
+                    )}
+                    {(phase === 'running' || phase === 'paused' || waiting) && (
+                        <LogTail
+                            step={step}
+                            job={job}
+                            open={logOpen}
+                            onToggle={() => setLogOpen((o) => !o)}
+                            busy={busy}
+                            onStop={
+                                job && job.state === 'running'
+                                    ? () => {
+                                          setBusy(true);
+                                          onControl('stop', step.idx).finally(() => setBusy(false));
+                                      }
+                                    : undefined
+                            }
+                        />
+                    )}
                     <Technical text={stepTechnical(step)} testId="agent-plan-step-technical" />
                 </Box>
             </Box>
@@ -243,67 +808,412 @@ function StepItem({ step }: { step: PlanStep }) {
     );
 }
 
+/** The approval of a step the plan does not cover, decided inside the card (design, D2.8). */
+export function StepApproval({
+    plan,
+    step,
+    approval,
+    onDecide,
+    busy,
+}: {
+    plan: Plan;
+    step: PlanStep;
+    approval: Approval;
+    onDecide: (approve: boolean) => Promise<void>;
+    busy?: boolean;
+}) {
+    const parts = summaryParts(approval.summary);
+    return (
+        <Box
+            data-testid="agent-plan-step-approval"
+            data-approval-id={approval.id}
+            sx={{
+                mt: 0.75,
+                p: 1,
+                border: 1,
+                borderColor: agentColors.amberLine,
+                borderRadius: 1,
+                bgcolor: '#fff',
+                minWidth: 0,
+            }}
+        >
+            <Typography sx={{ fontSize: 12.5, fontWeight: 500 }}>
+                {waitingForApproval(approval.created_at, Date.now())}
+            </Typography>
+            {parts && <SummaryDetails details={parts.details} />}
+            {approval.preview && <Technical text={approval.preview} open={!parts} />}
+            <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                <Button
+                    size="small"
+                    variant="contained"
+                    disabled={busy}
+                    onClick={() => void onDecide(true)}
+                    data-testid="agent-plan-step-approve"
+                >
+                    Approve step
+                </Button>
+                <Button
+                    size="small"
+                    variant="outlined"
+                    color="error"
+                    disabled={busy}
+                    onClick={() => void onDecide(false)}
+                    data-testid="agent-plan-step-reject"
+                >
+                    Reject
+                </Button>
+            </Box>
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75, overflowWrap: 'anywhere' }}>
+                {rejectText(plan, step)}
+            </Typography>
+        </Box>
+    );
+}
+
+/** The budget block of a proposed plan (design, D4.5, L12). */
+function BudgetBlock({ plan, now }: { plan: Plan; now: number }) {
+    const rows = budgetRowsOf(plan, now);
+    if (rows.length === 0) return null;
+    return (
+        <Paper variant="outlined" sx={{ mt: 1.25, p: 1.25, borderRadius: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 11, letterSpacing: 1.2, color: 'text.disabled', textTransform: 'uppercase' }}>
+                {BUDGET_OVERLINE}
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 0.25, mt: 0.5 }}>
+                {rows.map((r) => (
+                    <Box key={r.label} sx={{ display: 'contents' }}>
+                        <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{r.label}</Typography>
+                        <Typography sx={{ fontSize: 12.5 }}>{r.value}</Typography>
+                    </Box>
+                ))}
+            </Box>
+        </Paper>
+    );
+}
+
+/** One right of the plan's grant, with its effect chip (design, L13). */
+function RightRow({ text, effect }: { text: string; effect: 'read' | 'write' | 'compute' | 'irreversible' }) {
+    return (
+        <ListItem sx={{ px: 0, py: 0.25, gap: 1, alignItems: 'flex-start' }}>
+            <CheckIcon sx={{ fontSize: 16, color: agentColors.ok, mt: '3px', flex: 'none' }} aria-hidden />
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ fontSize: 12.5, overflowWrap: 'anywhere' }}>{rightText(text)}</Typography>
+            </Box>
+            <EffectChip effect={effect} />
+        </ListItem>
+    );
+}
+
+/** The rights block of a proposed plan: what the plan may do while it runs (design, D4.4/E1, L13). */
+function RightsBlock({ plan }: { plan: Plan }) {
+    const grant = grantRows(plan);
+    const irreversible = plan.steps.filter((s) => s.effect === 'irreversible');
+    if (grant.length === 0) return null;
+    return (
+        <Paper variant="outlined" sx={{ mt: 1.25, p: 1.25, borderRadius: 1, minWidth: 0 }}>
+            <Typography sx={{ fontSize: 11, letterSpacing: 1.2, color: 'text.disabled', textTransform: 'uppercase' }}>
+                {RIGHTS_OVERLINE}
+            </Typography>
+            <List dense disablePadding sx={{ mt: 0.5 }}>
+                {grant.map((g, i) => (
+                    <RightRow key={i} text={g.text} effect={g.effect} />
+                ))}
+                {irreversible.map((s) => (
+                    <ListItem key={`irr-${s.idx}`} sx={{ px: 0, py: 0.25, gap: 1, alignItems: 'flex-start' }}>
+                        <BackHandIcon
+                            sx={{ fontSize: 16, color: 'text.disabled', mt: '3px', flex: 'none' }}
+                            aria-hidden
+                        />
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 12.5, color: 'text.secondary', overflowWrap: 'anywhere' }}>
+                                {`Step ${s.idx} – ${IRREVERSIBLE_HINT}`}
+                            </Typography>
+                        </Box>
+                    </ListItem>
+                ))}
+            </List>
+            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.5 }}>{RIGHTS_END_TEXT}</Typography>
+        </Paper>
+    );
+}
+
+/** The checkbox that lets this plan notify in the browser (design, D4.4, L26). */
+function NotifyCheckbox({ onOptIn }: { onOptIn: (on: boolean) => void }) {
+    const [permission, setPermission] = useState<NotifyPermission>(() => permissionOf(browserNotify()));
+    const [asked, setAsked] = useState(false);
+    // the browser may only be asked on a gesture, and only while it has not decided yet (D4.4)
+    const ask = async () => setPermission(await requestPermission());
+    const state = notifyCheckbox(permission, asked);
+    return (
+        <Box sx={{ mt: 1.25 }}>
+            <FormControlLabel
+                control={
+                    <Checkbox
+                        size="small"
+                        checked={state.checked}
+                        disabled={state.disabled}
+                        onChange={(_, checked) => {
+                            setAsked(checked);
+                            onOptIn(checked);
+                            if (checked) void ask();
+                        }}
+                        inputProps={{ 'data-testid': 'agent-plan-notify' } as Record<string, string>}
+                    />
+                }
+                label={<Typography sx={{ fontSize: 12.5 }}>{NOTIFY_LABEL}</Typography>}
+            />
+            {!state.disabled ? (
+                <FormHelperText sx={{ mt: 0 }}>{state.help}</FormHelperText>
+            ) : (
+                <Alert severity="info" sx={{ mt: 0.5, fontSize: 12 }} data-testid="agent-plan-notify-state">
+                    {state.help}
+                </Alert>
+            )}
+        </Box>
+    );
+}
+
+/** The objects the plan produced, as links to their platform pages (design, L4). */
+function CreatedLinks({ plan }: { plan: Plan }) {
+    const outputs = planOutputs(plan);
+    if (outputs.length === 0) return null;
+    return (
+        <Box sx={{ mt: 1.25 }} data-testid="agent-plan-created">
+            <Typography sx={{ fontSize: 11, letterSpacing: 1.2, color: 'text.disabled', textTransform: 'uppercase' }}>
+                {CREATED_OVERLINE}
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: '20px 56px 1fr', columnGap: 1, rowGap: 0.25, mt: 0.5 }}>
+                {outputs.map((o) => {
+                    const kind = outputKind(o);
+                    const href = outputLink(o);
+                    const label = o.label || o.id;
+                    return (
+                        <Box key={`${kind}:${o.id}`} sx={{ display: 'contents' }}>
+                            <OutputIcon kind={kind} />
+                            <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                                {kind === 'dataset' ? 'Dataset' : kind === 'model' ? 'Model' : 'Image'}
+                            </Typography>
+                            {href ? (
+                                <Link
+                                    href={href}
+                                    underline="always"
+                                    title={label}
+                                    sx={{
+                                        fontSize: kind === 'image' ? 12 : 12.5,
+                                        fontFamily: kind === 'image' ? MONO : 'inherit',
+                                        overflowWrap: 'anywhere',
+                                    }}
+                                >
+                                    {label}
+                                </Link>
+                            ) : (
+                                <Typography sx={{ fontSize: 12.5, overflowWrap: 'anywhere' }}>{label}</Typography>
+                            )}
+                        </Box>
+                    );
+                })}
+            </Box>
+        </Box>
+    );
+}
+
+function OutputIcon({ kind }: { kind: ReturnType<typeof outputKind> }): ReactElement {
+    const sx = { fontSize: 18, color: 'text.secondary' } as const;
+    if (kind === 'dataset') return <DescriptionOutlinedIcon sx={sx} aria-hidden />;
+    if (kind === 'model') return <ViewInArOutlinedIcon sx={sx} aria-hidden />;
+    return <Inventory2OutlinedIcon sx={sx} aria-hidden />;
+}
+
+/**
+ * A plan of several platform calls: the gateway's steps, the agent's title and notes, and — for an autonomous
+ * plan — its budget, progress and controls.
+ */
 export default function PlanCard({
     plan,
     approval,
+    approvals,
     onDecide,
     dense,
     register = true,
+    layout,
+    jobs = [],
+    pending,
+    onControl,
+    onNotify,
 }: {
     plan: Plan;
     approval?: Approval;
+    /** All approvals of the chat: the card finds the one a step waits for (D2.8). */
+    approvals?: Approval[];
     onDecide?: (a: Approval, approve: boolean) => Promise<void>;
     dense?: boolean;
     /** Counts as the view's card of this plan (false only where the approval list shows the card itself). */
     register?: boolean;
+    /** Where the card sits: the 400 px panel uses icon buttons for the controls, the page text buttons. */
+    layout?: 'panel' | 'page';
+    /** Observed platform jobs of the chat (A-E2); they carry the log tail, the ETA and the stop route. */
+    jobs?: WatchJob[];
+    /** Approvals that are still pending, by id: a step with such a parked approval waits for the user. */
+    pending?: ReadonlySet<string>;
+    /** Runs a control of the plan (pause, resume, cancel, stop a step's job); without one the card calls the API. */
+    onControl?: (action: 'pause' | 'resume' | 'cancel' | 'stop', step?: number) => Promise<void>;
+    /** The user allowed browser notifications for a plan (E4, D4.4). */
+    onNotify?: (on: boolean) => void;
 }) {
     useRegisterPlanCard(plan.id, register);
     const now = Date.now();
     const canDecide = plan.state === 'proposed' && approval?.state === 'pending' && !!onDecide;
     const title = agentTitle(plan);
+    const auto = isAutonomous(plan);
+    const frame = layout ?? (dense ? 'panel' : 'page');
+    const pendingIds = useMemo(() => pending ?? new Set<string>(), [pending]);
+    const allApprovals = approvals ?? (approval ? [approval] : []);
+    const runControl = async (action: 'pause' | 'resume' | 'cancel' | 'stop', step?: number) => {
+        if (onControl) return onControl(action, step);
+        switch (action) {
+            case 'pause':
+                await agentApi.pausePlan(plan.chat_id, plan.id);
+                break;
+            case 'resume':
+                await agentApi.resumePlan(plan.chat_id, plan.id);
+                break;
+            case 'cancel':
+                await agentApi.cancelPlan(plan.chat_id, plan.id);
+                break;
+            case 'stop':
+                if (step) await agentApi.stopPlanStep(plan.chat_id, plan.id, step);
+                break;
+        }
+    };
+    // while the plan may still change, its progress moves: redraws every 5 s keep the runtime and the ETA honest
+    const [, tick] = useState(0);
+    const live = plan.state === 'approved';
+    useEffect(() => {
+        if (!live) return undefined;
+        const t = setInterval(() => tick((n) => n + 1), 5000);
+        return () => clearInterval(t);
+    }, [live]);
+
     return (
-        <Box
+        <Card
+            variant="outlined"
             data-testid="agent-plan-card"
             data-plan-id={plan.id}
+            data-plan-state={plan.state}
+            role="group"
             tabIndex={-1}
+            aria-label={ariaLabel(plan, pendingIds)}
             sx={{
-                ...blockSx,
-                borderLeft: `3px solid ${plan.state === 'proposed' ? agentColors.amber : agentColors.greenLine}`,
-                px: dense ? 1.25 : 1.5,
-                py: 1.25,
+                borderRadius: 1,
+                borderLeft: 3,
+                borderLeftColor: edgeColor(plan),
+                boxShadow: 'none',
                 minWidth: 0,
                 outline: 'none',
             }}
         >
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, minWidth: 0 }}>
-                <ListAltOutlinedIcon sx={{ fontSize: 17, color: agentColors.green, mt: '2px', flex: 'none' }} aria-hidden />
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                    <Typography sx={{ fontSize: 13, fontWeight: 600 }}>Plan · {stepCount(plan.steps.length)}</Typography>
-                    <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.25 }}>{planLabel(plan, now)}</Typography>
-                    {title && <AgentText label="Agent's title – not verified" text={title} testId="agent-plan-title" />}
+            <CardContent sx={{ p: dense ? 1.25 : 1.5, '&:last-child': { pb: dense ? 1.25 : 1.5 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, minWidth: 0 }}>
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', minWidth: 0 }}>
+                            <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                                Plan · {stepCount(plan.steps.length)}
+                            </Typography>
+                            <StateChip plan={plan} layout={frame} pending={pendingIds} />
+                            <Box sx={{ ml: 'auto' }}>
+                                <Controls plan={plan} layout={frame} onControl={runControl} />
+                            </Box>
+                        </Box>
+                        <Box aria-live="polite">
+                            {auto && budgetLine(plan, now) && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+                                    <TimelapseIcon sx={{ fontSize: 14, color: 'text.secondary' }} aria-hidden />
+                                    <Typography
+                                        variant="caption"
+                                        color="text.secondary"
+                                        data-testid="agent-plan-budget"
+                                    >
+                                        {budgetLine(plan, now)}
+                                    </Typography>
+                                </Box>
+                            )}
+                        </Box>
+                        {/* an interactive plan keeps the line it always had (its expiry matters); an
+                            autonomous one is described by its chip, its budget line and its banner (D4.2) */}
+                        {!auto && (
+                            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.25 }}>
+                                {planLabel(plan, now)}
+                            </Typography>
+                        )}
+                        {title && <AgentText label={AGENT_TITLE_LABEL} text={title} testId="agent-plan-title" />}
+                    </Box>
                 </Box>
-            </Box>
 
-            <Box
-                component="ol"
-                sx={{ listStyle: 'none', m: 0, p: 0, mt: 1.25, display: 'flex', flexDirection: 'column', gap: 1.25 }}
-            >
-                {plan.steps.map((step) => (
-                    <StepItem key={step.idx} step={step} />
-                ))}
-            </Box>
+                <PlanBanner plan={plan} />
 
-            {canDecide && approval && summaryChanged(approval) && (
-                <>
-                    <ChangedAlert />
-                    {approval.summary_proposed && (
-                        <ProposedSummary summary={approval.summary_proposed} testId="agent-approval-proposed" />
-                    )}
-                </>
-            )}
-            {canDecide && approval && onDecide && <Decision onDecide={(approve) => onDecide(approval, approve)} />}
-        </Box>
+                {plan.state === 'proposed' && auto && <BudgetBlock plan={plan} now={now} />}
+                {plan.state === 'proposed' && auto && <RightsBlock plan={plan} />}
+                {plan.state === 'proposed' && auto && onNotify && <NotifyCheckbox onOptIn={onNotify} />}
+
+                <Box
+                    component="ol"
+                    sx={{
+                        listStyle: 'none',
+                        m: 0,
+                        p: 0,
+                        mt: 1.25,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 1.25,
+                    }}
+                >
+                    {plan.steps.map((step) => (
+                        <StepItem
+                            key={step.idx}
+                            plan={plan}
+                            step={step}
+                            now={now}
+                            jobs={jobs}
+                            approvals={allApprovals}
+                            onDecide={onDecide}
+                            onControl={runControl}
+                        />
+                    ))}
+                </Box>
+
+                <CreatedLinks plan={plan} />
+                {plan.state === 'cancelled' && createdStay(plan) !== '' && (
+                    <Typography
+                        sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75 }}
+                        data-testid="agent-plan-cancelled-stay"
+                    >
+                        {createdStay(plan)}
+                    </Typography>
+                )}
+
+                {canDecide && approval && summaryChanged(approval) && (
+                    <>
+                        <ChangedAlert />
+                        {approval.summary_proposed && (
+                            <ProposedSummary summary={approval.summary_proposed} testId="agent-approval-proposed" />
+                        )}
+                    </>
+                )}
+                {canDecide && approval && onDecide && (
+                    <Decision
+                        explain={auto ? approvalExplain(plan) : undefined}
+                        onDecide={(approve) => onDecide(approval, approve)}
+                    />
+                )}
+            </CardContent>
+        </Card>
     );
+}
+
+/** The spoken label of the card: the number of steps and the state (design, accessibility). */
+function ariaLabel(plan: Plan, pending: ReadonlySet<string>): string {
+    const chip = planChip(plan, 'page', pending);
+    return `Plan, ${plan.steps.length} ${plan.steps.length === 1 ? 'step' : 'steps'}: ${chip}`;
 }
 
 /**

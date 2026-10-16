@@ -48,11 +48,19 @@ export function useShownPlanCards(): ReadonlySet<string> {
 
 const EMPTY: ReadonlySet<string> = new Set();
 
-/** Scrolls to the plan's card in the transcript; false when the view shows none. */
+/** How long the jumped-to card stays highlighted (design). */
+export const PLAN_HIGHLIGHT_MS = 1000;
+
+/** Scrolls to the plan's card in the transcript, marks it for a second and puts the focus on it; false without one. */
 export function scrollToPlanCard(planId: string, root: ParentNode = document): boolean {
     const el = root.querySelector<HTMLElement>(`[data-testid="agent-plan-card"][data-plan-id="${CSS.escape(planId)}"]`);
     if (!el) return false;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
     el.focus({ preventScroll: true });
+    // Web Animations API: the mark fades on its own and needs no cleanup if the card goes away in between
+    el.animate?.([{ backgroundColor: 'rgba(15,84,50,0.08)' }, { backgroundColor: 'transparent' }], {
+        duration: PLAN_HIGHLIGHT_MS,
+        easing: 'ease-out',
+    });
     return true;
 }

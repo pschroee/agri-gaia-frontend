@@ -18,7 +18,44 @@ export type PlanState =
     | 'expired'
     | 'completed'
     | 'failed'
-    | 'superseded';
+    | 'superseded'
+    /** An autonomous plan the user paused (autonomy E1/E4). */
+    | 'paused'
+    /** An autonomous plan the user cancelled; its platform jobs keep running (D1.10). */
+    | 'cancelled';
+
+/** Step states the gateway stores (autonomy E1/E2); "waiting" is a step whose platform job the gateway observes. */
+export type PlanStepState = 'open' | 'running' | 'waiting' | 'done' | 'failed' | 'skipped';
+
+/** The mode of a plan: "autonomous" carries a budget and a derived grant (E1); absent on older gateways. */
+export type PlanMode = 'interactive' | 'autonomous';
+
+/** Budget of an autonomous plan (D4.5), as the gateway stores it. */
+export type PlanBudget = {
+    max_duration_s: number;
+    max_llm_cost: number;
+    max_auto_turns: number;
+};
+
+/** What an autonomous plan has used of its budget (gateway A-E4, D4.5); absent for interactive plans. */
+export type PlanUsage = {
+    llm_cost: number;
+    auto_turns: number;
+    compute_used: number;
+    compute_max: number;
+};
+
+/** One right of the plan's grant, as the gateway wrote it ("create dataset"), with its effect class. */
+export type GrantEntry = { effect: 'read' | 'write' | 'compute' | 'irreversible'; text: string };
+
+/** A rule of the raw grant the gateway stores with an autonomous plan (`delegation.Delegation`). */
+export type GrantRule = { action: string; resource: string; ids?: string[] };
+
+/** The grant as the gateway sends it (E1): the rules, without a structured summary in words. */
+export type PlanGrant = { rules?: GrantRule[]; expires_at?: string };
+
+/** An object a platform job produced (gateway A-E2), as the observer read it. */
+export type WatchOutput = { resource: string; id: string; label?: string };
 
 export type PlanStep = {
     idx: number;
@@ -51,11 +88,30 @@ export type PlanStep = {
     effect: 'write' | 'compute' | 'irreversible';
     /** Covered by the approval of the plan (false: the step asks for its own approval). */
     covered: boolean;
-    state: 'open' | 'running' | 'done' | 'failed';
+    state: PlanStepState;
     result?: string;
     created_resource?: string;
     created_id?: string;
     done_at?: string;
+    /** The route asks for every single call (gateway G1.1): never covered by a plan. */
+    confirm_each?: boolean;
+    /** How often an autonomous plan may repeat this step, and how often it was claimed (D1.6). */
+    max_attempts?: number;
+    attempts?: number;
+    /**
+     * The approval a step of an autonomous plan was parked on (gateway D2.8). It stays on the step after the
+     * decision, so whether the step still waits is decided by that approval's state (see pendingStepOf).
+     */
+    parked_approval?: string;
+    /** The platform job the step waits for (gateway A-E2); its progress is read with the step. */
+    watch_job?: string;
+    /** Progress of that job: the percent, its line, the estimated end, its log tail and what it produced. */
+    progress?: number;
+    progress_msg?: string;
+    eta?: string;
+    log_tail?: string;
+    outputs?: WatchOutput[];
+    started_at?: string;
 };
 
 export type Plan = {
@@ -73,6 +129,26 @@ export type Plan = {
     created_at: string;
     decided_at?: string;
     expires_at?: string;
+    /** End of an autonomous plan (completed, failed, cancelled); absent while it runs. */
+    ended_at?: string;
+    /** "autonomous" carries a budget and a derived grant; absent or "interactive" otherwise (E1). */
+    mode?: PlanMode;
+    budget?: PlanBudget;
+    /** What the plan has used of its budget (E4, D4.5); the gateway writes it with the plan. */
+    usage?: PlanUsage;
+    /**
+     * One entry per right the plan carries, in the gateway's order (D4.4/E1). A gateway that sends no structured
+     * summary sends the raw `grant` instead (see grantRows).
+     */
+    grant_summary?: GrantEntry[];
+    /** The delegation the plan was approved with, as the gateway stores it (E1). */
+    grant?: PlanGrant;
+    /** Why a paused plan is paused: user, abort, login, budget_turns, budget_cost, restart (E1/E3). */
+    pause_reason?: string;
+    /** The plan this one superseded (D1.12). */
+    replaces?: string;
+    /** Turns the plan has taken without the user (also inside usage). */
+    auto_turns?: number;
     steps: PlanStep[];
 };
 
@@ -169,6 +245,10 @@ export function planLabel(plan: Plan, now: number): string {
             return 'Expired';
         case 'failed':
             return 'Stopped: a step failed';
+        case 'paused':
+            return 'Paused';
+        case 'cancelled':
+            return 'Cancelled by you';
         case 'superseded':
             return 'Replaced by a newer plan';
         default:
@@ -187,6 +267,24 @@ export async function fetchPlans(chatId: string): Promise<Plan[]> {
     if (res.status === 404) return [];
     if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
     return (await res.json()) as Plan[];
+}
+
+/**
+ * The active autonomous plans of several chats, newest first (the status tab lists them across chats, L22). A chat
+ * whose plans cannot be read contributes nothing instead of failing the whole list.
+ */
+export async function fetchActivePlans(chatIds: string[]): Promise<Plan[]> {
+    const lists = await Promise.allSettled(chatIds.map((id) => fetchPlans(id)));
+    const out: Plan[] = [];
+    for (const l of lists) if (l.status === 'fulfilled') out.push(...l.value.filter(isAutonomous));
+    return out;
+}
+
+/** The plans the status tab lists: running, waiting for the platform, paused or waiting for the user (L22). */
+export function runningPlans(plans: Plan[], pending: ReadonlySet<string>): Plan[] {
+    return plans
+        .filter((p) => p.state === 'approved' || p.state === 'paused' || needsInput(p, pending))
+        .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }
 
 /** The step whose ID or call ID is `callId` (the plan's tool_call_id); undefined when the answer has none. */
@@ -216,9 +314,7 @@ export function placePlans(
     for (const p of plans) {
         if (mainOnly && p.session !== undefined && !mainSessions.includes(p.session)) continue;
         const id = p.tool_call_id;
-        const owner = id
-            ? items.find((it) => it.kind === 'agent' && stepOf(it.parts, id) !== undefined)
-            : undefined;
+        const owner = id ? items.find((it) => it.kind === 'agent' && stepOf(it.parts, id) !== undefined) : undefined;
         const step = owner && owner.kind === 'agent' && id ? stepOf(owner.parts, id) : undefined;
         const placed: PlacedPlan = step ? { ...p, afterCallId: step.callId ?? step.id } : { ...p };
         if (owner) byItem.set(owner.key, [...(byItem.get(owner.key) ?? []), placed]);
@@ -249,4 +345,334 @@ export function plansByPart(
         else byPart.set(i, [...(byPart.get(i) ?? []), p]);
     }
     return { byPart, rest };
+}
+
+// --- Autonomous plans (A-E4): state, progress, budget and created objects -------------------------
+
+/** An autonomous plan carries a budget and a derived grant (gateway E1); an older gateway sends no mode. */
+export const isAutonomous = (plan: Plan): boolean => plan.mode === 'autonomous';
+
+/** How long the plan indicator stays after an end state (design: 10 minutes). */
+export const PLAN_TAIL_MS = 10 * 60 * 1000;
+
+/** Newest by created_at; without a usable date the gateway's order decides (the last one). */
+function newestByCreated(plans: Plan[]): Plan {
+    let best = plans[plans.length - 1];
+    let bestAt = -Infinity;
+    for (const p of plans) {
+        const at = Date.parse(p.created_at);
+        if (!Number.isNaN(at) && at >= bestAt) {
+            best = p;
+            bestAt = at;
+        }
+    }
+    return best;
+}
+
+/**
+ * The plan the chat header shows (design, D4.2): an autonomous plan that runs, waits or is paused, else one that
+ * ended less than PLAN_TAIL_MS ago. A proposed plan is not shown — the approval covers it — and neither is a plan
+ * that ended longer ago, so the header goes quiet again.
+ */
+export function activePlan(plans: Plan[], now: number): Plan | undefined {
+    const auto = plans.filter(isAutonomous);
+    const live = auto.filter((p) => p.state === 'approved' || p.state === 'paused');
+    if (live.length > 0) return newestByCreated(live);
+    const recent = auto.filter((p) => {
+        const at = p.ended_at ? Date.parse(p.ended_at) : NaN;
+        return !Number.isNaN(at) && now - at < PLAN_TAIL_MS;
+    });
+    return recent.length > 0 ? newestByCreated(recent) : undefined;
+}
+
+/**
+ * The step the plan is on (L15): the running or waiting one, else the failed, else the next open, else the last
+ * done. A completed plan counts all its steps.
+ */
+export function currentStepIndex(plan: Plan): number {
+    if (plan.steps.length === 0) return 0;
+    if (plan.state === 'completed') return plan.steps.length;
+    const running = plan.steps.find((s) => s.state === 'running' || s.state === 'waiting');
+    if (running) return running.idx;
+    if (plan.state === 'failed') {
+        const failed = plan.steps.find((s) => s.state === 'failed');
+        if (failed) return failed.idx;
+    }
+    const open = plan.steps.find((s) => s.state === 'open');
+    if (open) return open.idx;
+    const done = [...plan.steps].reverse().find((s) => s.state === 'done');
+    return done ? done.idx : 1;
+}
+
+/** The step the plan is on; undefined without steps. */
+export function currentStep(plan: Plan): PlanStep | undefined {
+    const i = currentStepIndex(plan);
+    return plan.steps.find((s) => s.idx === i) ?? plan.steps[0];
+}
+
+/** How many steps are done (the numerator of "Plan 2/4"). */
+export const doneSteps = (plan: Plan): number => plan.steps.filter((s) => s.state === 'done').length;
+
+/**
+ * The short title of a step (L17): the first line of the gateway's summary up to its first quotation mark, without
+ * trailing spaces ("Run training \"EfficientNet-B0\" …" → "Run training"); without one the whole first line. Never
+ * the agent's text.
+ */
+export function stepTitle(step: PlanStep | undefined): string {
+    if (!step) return '';
+    const head = stepMain(step).head.split('\n')[0];
+    const i = head.search(/["“”]/);
+    return (i >= 0 ? head.slice(0, i) : head).trim();
+}
+
+/** The plan's short line for tables and tooltips: the title of the step it is on. */
+export const planHeadline = (plan: Plan): string => stepTitle(currentStep(plan));
+
+/**
+ * The step of a running plan that waits for the user's own approval (gateway D2.8): it carries the parked
+ * approval and that approval is still pending. The gateway keeps the mark on the step after the decision, so the
+ * pending list decides, not the field alone.
+ */
+export function pendingStepOf(plan: Plan, pending: ReadonlySet<string>): PlanStep | undefined {
+    return plan.steps.find((s) => !!s.parked_approval && pending.has(s.parked_approval));
+}
+
+/** The ids of the approvals that are still pending, as the plan helpers take them. */
+export function pendingIdsOf(approvals: readonly { id: string; state: string }[]): ReadonlySet<string> {
+    return new Set(approvals.filter((a) => a.state === 'pending').map((a) => a.id));
+}
+
+/** The plan waits for the user: a step of a running plan has an approval still to decide (D4.3 needs_input). */
+export const needsInput = (plan: Plan, pending: ReadonlySet<string>): boolean =>
+    plan.state === 'approved' && pendingStepOf(plan, pending) !== undefined;
+
+/** The plan waits for the platform: it runs and one of its steps waits for an observed platform job (A-E2). */
+export const awaitingPlatform = (plan: Plan): boolean =>
+    plan.state === 'approved' && plan.steps.some((s) => s.state === 'waiting');
+
+/** What the card shows for one step, the plan's state included (design: Open, Queued, Done, Running, Paused, …). */
+export type StepPhase =
+    | 'done'
+    | 'approval'
+    | 'open'
+    | 'queued'
+    | 'running'
+    | 'paused'
+    | 'failed'
+    | 'notrun'
+    | 'stopped';
+
+export const PHASE_LABEL: Record<StepPhase, string> = {
+    done: 'Done',
+    approval: 'Needs approval',
+    open: 'Open',
+    queued: 'Queued',
+    running: 'Running',
+    paused: 'Paused',
+    failed: 'Failed',
+    notrun: 'Not run',
+    stopped: 'Stopped',
+};
+
+export function stepPhase(plan: Plan, step: PlanStep): StepPhase {
+    if (step.state === 'done') return 'done';
+    if (step.state === 'failed') return 'failed';
+    if (step.state === 'skipped') return 'stopped';
+    if (plan.state === 'cancelled') {
+        return step.state === 'running' || step.state === 'waiting' ? 'stopped' : 'notrun';
+    }
+    if (step.state === 'running' || step.state === 'waiting') return plan.state === 'paused' ? 'paused' : 'running';
+    if (plan.state === 'failed') return 'notrun';
+    if (!step.covered) return 'approval';
+    return plan.state === 'paused' ? 'queued' : 'open';
+}
+
+/** "11 min 20 s", "18 min", "2 h 4 min": a duration as the card's lines read it; '' when there is none. */
+export function durationText(ms: number): string {
+    if (!Number.isFinite(ms) || ms < 0) return '';
+    const s = Math.round(ms / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const rest = s % 60;
+    if (h > 0) return m > 0 ? `${h} h ${m} min` : `${h} h`;
+    if (m > 0) return rest > 0 && m < 10 ? `${m} min ${rest} s` : `${m} min`;
+    return `${rest} s`;
+}
+
+/** "1h 12m", "18m", "45s": the compact form of the budget line. */
+export function shortDuration(ms: number): string {
+    const s = Math.max(0, Math.round(ms / 1000));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m`;
+    return `${s}s`;
+}
+
+/** "~12 min left": the estimated rest of a running step, rounded up to whole minutes. */
+export const leftText = (ms: number): string => `~${Math.max(0, Math.ceil(ms / 60000))} min left`;
+
+/** How long a step has been running; '' without a start.
+ */
+export function stepRuntime(step: PlanStep, now: number): string {
+    const started = step.started_at ? Date.parse(step.started_at) : NaN;
+    return Number.isNaN(started) ? '' : durationText(now - started);
+}
+
+/**
+ * The line under a step's progress bar (design): the runtime and, with an estimate of the gateway, the time left.
+ * Without an estimate it says so instead of guessing.
+ */
+export function stepTimeLine(step: PlanStep, now: number): string {
+    const runtime = stepRuntime(step, now);
+    if (!runtime) return '';
+    const eta = step.eta ? Date.parse(step.eta) : NaN;
+    return Number.isNaN(eta) ? `Runtime ${runtime} · time left unknown` : `Runtime ${runtime} · ${leftText(eta - now)}`;
+}
+
+/** The one line above the runtime: what the platform reported, else the design's waiting line. */
+export function stepMessage(step: PlanStep): string {
+    const msg = (step.progress_msg ?? '').trim();
+    if (msg) return msg;
+    return step.state === 'waiting' ? 'Waiting for the platform · no progress reported' : '';
+}
+
+/** The end of an autonomous plan, as a time; NaN while it has none or the time is unusable. */
+function planEndsAt(plan: Plan): number {
+    const secs = plan.budget?.max_duration_s ?? 0;
+    const from = plan.decided_at ? Date.parse(plan.decided_at) : Date.parse(plan.created_at);
+    if (Number.isNaN(from) || secs <= 0) return NaN;
+    return from + secs * 1000;
+}
+
+/** Local time hh:mm, as the card's budget line reads it. */
+const clockText = (t: number) =>
+    new Date(t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+/** The lead of the budget line: the time left, or when and how the plan ended (design). */
+function budgetLead(plan: Plan, now: number): string {
+    const ended = plan.ended_at ? Date.parse(plan.ended_at) : NaN;
+    if (!Number.isNaN(ended)) {
+        if (plan.state === 'completed') {
+            const began = plan.decided_at ? Date.parse(plan.decided_at) : NaN;
+            const took = Number.isNaN(began) ? '' : ` · ${durationText(ended - began)}`;
+            return `Finished ${clockText(ended)}${took}`;
+        }
+        if (plan.state === 'failed') return `Stopped ${clockText(ended)}`;
+        if (plan.state === 'cancelled') return `Cancelled ${clockText(ended)}`;
+    }
+    const ends = planEndsAt(plan);
+    return !Number.isNaN(ends) && ends > now ? `${shortDuration(ends - now)} left` : '';
+}
+
+const money = (v: number) => v.toFixed(2);
+
+/**
+ * The compact budget line of the card's header (D4.5, design): "1h 12m left · 0.42/1.50 USD · 3/20 turns", plus
+ * "1/2 compute calls" while the chat has used some. Parts without data are left out; '' when there is none.
+ */
+export function budgetLine(plan: Plan, now: number): string {
+    if (!isAutonomous(plan)) return '';
+    const parts: string[] = [];
+    const lead = budgetLead(plan, now);
+    if (lead) parts.push(lead);
+    const budget = plan.budget;
+    const usage = plan.usage;
+    if (budget && budget.max_llm_cost > 0 && usage)
+        parts.push(`${money(usage.llm_cost)}/${money(budget.max_llm_cost)} USD`);
+    if (budget && budget.max_auto_turns > 0 && usage) parts.push(`${usage.auto_turns}/${budget.max_auto_turns} turns`);
+    if (usage && usage.compute_max > 0 && usage.compute_used > 0)
+        parts.push(`${usage.compute_used}/${usage.compute_max} compute calls`);
+    return parts.join(' · ');
+}
+
+/** What kind of object a step's output is, as the CREATED block names it (design: Dataset, Model, Image). */
+export type OutputKind = 'dataset' | 'model' | 'image';
+
+export function outputKind(output: WatchOutput): OutputKind | undefined {
+    const res = output.resource.toLowerCase();
+    if (res.startsWith('dataset')) return 'dataset';
+    if (res.startsWith('model')) return 'model';
+    if (res.startsWith('image') || res.startsWith('container')) return 'image';
+    return undefined;
+}
+
+/**
+ * The platform page an output of a step lives on (design: created objects as links). The dataset page selects a
+ * dataset with `/data?dataset=<id>`; a model has its own page; a container image has only the registry list. An
+ * unknown kind or a missing id: no link, so the caller shows plain text.
+ */
+export function outputLink(output: WatchOutput): string | undefined {
+    const id = (output.id ?? '').trim();
+    if (!id) return undefined;
+    switch (outputKind(output)) {
+        case 'dataset':
+            return `/data?dataset=${encodeURIComponent(id)}`;
+        case 'model':
+            return `/models/${encodeURIComponent(id)}`;
+        case 'image':
+            return '/container-images';
+        default:
+            return undefined;
+    }
+}
+
+/** The objects the plan has produced so far, in the order of its steps, without duplicates. */
+export function planOutputs(plan: Plan): WatchOutput[] {
+    const out: WatchOutput[] = [];
+    const seen = new Set<string>();
+    for (const step of plan.steps) {
+        for (const o of step.outputs ?? []) {
+            const key = `${outputKind(o) ?? o.resource}:${o.id}`;
+            if (!o.id || seen.has(key)) continue;
+            seen.add(key);
+            out.push(o);
+        }
+    }
+    return out;
+}
+
+/** The kinds of object a plan has produced, as the sentences name them: "Dataset and model"; '' without any. */
+export function createdSubject(plan: Plan): string {
+    const kinds = [...new Set(planOutputs(plan).map(outputKind))].filter((k): k is OutputKind => !!k);
+    if (kinds.length === 0) return '';
+    const names = kinds.map((k) => (k === 'dataset' ? 'Dataset' : k === 'model' ? 'model' : 'image'));
+    const last = names[names.length - 1];
+    const head = names.slice(0, -1).join(', ');
+    return head ? `${head} and ${last}` : last;
+}
+
+/** Whether that subject names one kind, so its verb is singular. */
+export const createdSingular = (plan: Plan): boolean =>
+    planOutputs(plan).length > 0 && [...new Set(planOutputs(plan).map(outputKind))].filter(Boolean).length === 1;
+
+/** The effect class of a rule of the raw grant; an unknown action counts as a read. */
+function effectOfAction(action: string): GrantEntry['effect'] {
+    return action === 'write' || action === 'compute' || action === 'irreversible' ? action : 'read';
+}
+
+/**
+ * The rights of a proposed plan as its block lists them, one row per right (L13). The gateway's `grant_summary`
+ * wins where it sends one; a gateway of E1 sends the raw grant instead, and the rows are formed from its rules
+ * then ("write dataset", "read everything"). An unreadable grant leaves the block empty, so the card leaves it
+ * out rather than showing rights it cannot vouch for.
+ */
+export function grantRows(plan: Plan): GrantEntry[] {
+    if (plan.grant_summary && plan.grant_summary.length > 0) return plan.grant_summary;
+    const rules = plan.grant?.rules ?? [];
+    return rules
+        .filter((r) => typeof r?.action === 'string' && typeof r?.resource === 'string')
+        .map((r) => {
+            const all = (r.ids ?? []).length === 0 || (r.ids ?? []).includes('*');
+            const ids = all ? '' : ` (${(r.ids ?? []).join(', ')})`;
+            const text = r.action === 'read' && all ? 'read everything' : `${r.action} ${r.resource}${ids}`;
+            return { effect: effectOfAction(r.action), text };
+        });
+}
+
+/** "Dataset and model stay." / "Dataset stays." — '' when the plan produced nothing (L10). */
+export function createdStay(plan: Plan): string {
+    const subject = createdSubject(plan);
+    if (!subject) return '';
+    return `${subject} ${createdSingular(plan) ? 'stays' : 'stay'}.`;
 }
