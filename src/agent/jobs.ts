@@ -45,6 +45,12 @@ export type WatchJob = {
     started_at?: string;
     checked_at?: string;
     ended_at?: string;
+    /**
+     * The address the user can open for this job, as the gateway built it (own code C-E4): the kind `notebook_run`
+     * writes the run in the user's JupyterHub there, every other kind leaves the field empty. A card never builds
+     * such an address of its own; without it, it offers no link.
+     */
+    link?: string;
 };
 
 /** Job states of the gateway. */

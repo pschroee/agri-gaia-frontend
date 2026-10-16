@@ -22,6 +22,7 @@ import { placePlans, plansByPart, pendingIdsOf } from '../plan';
 import type { PlacedPlan, Plan } from '../plan';
 import { useJobs } from '../jobs';
 import type { WatchJob } from '../jobs';
+import { notebookApprovalOf, notebookJobsOf } from '../notebook';
 import { useAgentOptional } from '../AgentContext';
 import type { CommandNotice } from '../commands';
 import type { SubagentNavItem } from '../subagents';
@@ -30,7 +31,7 @@ import { resumeAnchor, resumeRunning } from '../resume';
 import type { ResumeView } from '../resume';
 import { showIdleBar } from '../runState';
 import { abortLineText, liveParts } from '../transcript';
-import type { TranscriptItem } from '../transcript';
+import type { Step, TranscriptItem } from '../transcript';
 import type { ChatStream } from '../useChatStream';
 import { compactionReason, formatTokens } from '../usage';
 import { AgentFileMessage, MessageAttachments } from './Attachments';
@@ -40,6 +41,8 @@ import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
 import type { StepControls } from './StepList';
 import SubagentCard from './SubagentCard';
+import NotebookRunApproval from './NotebookRunApproval';
+import NotebookRunCard from './NotebookRunCard';
 import PlanCard from './PlanCard';
 import ThinkingBlock from './ThinkingBlock';
 import WorkingIndicator, { WorkingBar } from './WorkingIndicator';
@@ -185,6 +188,25 @@ export function AgentBlock({
         />
     );
     const subagents = controls?.subagents;
+    // runs in the chat's notebook server (own code C-E4): the decided approval of the run as one line, right below it
+    // the card of the run itself. Both hang on the tool call that started them (jobs.ts, `jobByToolCall`), so they
+    // stand where the call stands in the answer.
+    const notebookRuns = (steps: Step[]) => {
+        const runs = notebookJobsOf(planEnv?.jobs ?? [], steps.map((s) => s.id));
+        if (runs.length === 0) return null;
+        const layout = planEnv?.layout ?? (dense ? 'panel' : 'page');
+        return runs.map((job) => {
+            const approval = notebookApprovalOf(approvals, job);
+            return (
+                <Box key={job.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                    {approval?.notebook && approval.state !== 'pending' && (
+                        <NotebookRunApproval approval={approval} data={approval.notebook} layout={layout} />
+                    )}
+                    <NotebookRunCard job={job} layout={layout} data={approval?.notebook} />
+                </Box>
+            );
+        });
+    };
     const runs = useMemo(() => {
         if (!subagents) return [];
         const seen = new Set<string>();
@@ -237,6 +259,7 @@ export function AgentBlock({
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
+                        {notebookRuns(p.steps)}
                         {files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
                         {cards}
                     </Fragment>
