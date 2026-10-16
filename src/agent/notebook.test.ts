@@ -32,6 +32,7 @@ import {
     notebookJobsOf,
     orderFiles,
     outputName,
+    outputSize,
     runFacts,
     runHeadTime,
     runSeconds,
@@ -39,6 +40,7 @@ import {
     shortLog,
     shortSha,
     startingNote,
+    stoppedByText,
     timeoutNote,
 } from './notebook';
 import type { NotebookApprovalData, NotebookDataset } from './notebook';
@@ -302,6 +304,27 @@ describe('the facts of a run', () => {
         expect(runFacts(job({ state: 'starting' }), data(), NOW)).toEqual([]);
     });
 
+    it('names who stopped a run, and nothing when the job does not say (gap L14, gateway issue #92)', () => {
+        const stopped = job({
+            state: 'failed',
+            message: 'stopped while it went',
+            started_at: '2026-10-16T14:05:00.000Z',
+            ended_at: '2026-10-16T14:07:15.000Z',
+            stopped_by: 'user',
+        });
+        expect(runFacts(stopped, data(), NOW).map(factText)).toEqual(['2 min 15 s', 'started 14:05', 'stopped by you']);
+        expect(runFacts({ ...stopped, stopped_by: 'agent' }, data(), NOW).map(factText)).toContain('stopped by the agent');
+        // without the field the card claims nothing: the state could have been reached either way
+        expect(runFacts({ ...stopped, stopped_by: undefined }, data(), NOW).map(factText)).toEqual([
+            '2 min 15 s',
+            'started 14:05',
+        ]);
+        expect(stoppedByText('user')).toBe('you');
+        expect(stoppedByText('agent')).toBe('the agent');
+        expect(stoppedByText(undefined)).toBeUndefined();
+        expect(stoppedByText('nobody')).toBeUndefined();
+    });
+
     it('shows the time limit of a timed out run in its head', () => {
         expect(runHeadTime(job({ state: 'failed', message: 'exit 124' }), data(), NOW)).toBe('120 min');
         expect(runHeadTime(job({ state: 'running', started_at: '2026-10-16T14:05:00.000Z' }), data(), NOW)).toBe('5:08');
@@ -380,5 +403,11 @@ describe('finding a job and its approval', () => {
         expect(outputName({ label: 'metrics.json' })).toBe('metrics.json');
         expect(outputName({ id: 'outputs/a/b.csv' })).toBe('a/b.csv');
         expect(outputName({})).toBe('');
+    });
+
+    it('takes the size of a result file, and nothing from a kind that reports none (gateway issue #92)', () => {
+        expect(outputSize({ size: 16357785 })).toBe(16357785);
+        expect(outputSize({ size: 0 })).toBeUndefined();
+        expect(outputSize({})).toBeUndefined();
     });
 });

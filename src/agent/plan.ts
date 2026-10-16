@@ -54,8 +54,11 @@ export type GrantRule = { action: string; resource: string; ids?: string[] };
 /** The grant as the gateway sends it (E1): the rules, without a structured summary in words. */
 export type PlanGrant = { rules?: GrantRule[]; expires_at?: string };
 
-/** An object a platform job produced (gateway A-E2), as the observer read it. */
-export type WatchOutput = { resource: string; id: string; label?: string };
+/**
+ * An object a platform job produced (gateway A-E2), as the observer read it. `size` is in bytes where the kind knows
+ * it (the result files of a notebook run, own code C-E4) and missing where it does not.
+ */
+export type WatchOutput = { resource: string; id: string; label?: string; size?: number };
 
 export type PlanStep = {
     idx: number;

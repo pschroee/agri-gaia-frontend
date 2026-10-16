@@ -107,6 +107,27 @@ describe('the state of a run', () => {
         expect(screen.getByTestId('agent-notebook-run').getAttribute('data-state')).toBe('stopped');
     });
 
+    it('names who stopped the run when the job says so (gap L14, gateway issue #92)', () => {
+        const stopJob = (stopped_by: 'user' | 'agent' | undefined) =>
+            job({
+                state: 'failed',
+                message: 'stopped while it went',
+                ended_at: '2026-10-16T14:07:15.000Z',
+                stopped_by,
+            });
+        const { unmount } = render(<NotebookRunCard job={stopJob('user')} layout="panel" data={data()} />);
+        expect(screen.getByTestId('agent-notebook-run-facts').textContent).toContain('stopped by you');
+        unmount();
+
+        const { unmount: unmount2 } = render(<NotebookRunCard job={stopJob('agent')} layout="page" data={data()} />);
+        expect(screen.getByText('Stopped by')).toBeTruthy();
+        expect(screen.getByText('the agent')).toBeTruthy();
+        unmount2();
+
+        render(<NotebookRunCard job={stopJob(undefined)} layout="panel" data={data()} />);
+        expect(screen.getByTestId('agent-notebook-run-facts').textContent).not.toContain('stopped by');
+    });
+
     it('names the state in a word, never by the colour alone', () => {
         const words = new Set<string>();
         for (const j of [job(), finished(), job({ state: 'failed', message: 'exit 1' })]) {
@@ -152,6 +173,26 @@ describe('the log of a run', () => {
 });
 
 describe('the result files', () => {
+    it('shows the size of each result file the job reports (gateway issue #92)', () => {
+        render(
+            <NotebookRunCard
+                job={finished({
+                    outputs: [
+                        { resource: 'notebook_file', id: 'r1/outputs/model.onnx', label: 'outputs/model.onnx', size: 16357785 },
+                        { resource: 'notebook_file', id: 'r1/outputs/metrics.json', label: 'outputs/metrics.json', size: 1126 },
+                        { resource: 'notebook_file', id: 'r1/outputs/checkpoint.pt', label: 'outputs/checkpoint.pt', size: 0 },
+                    ],
+                })}
+                layout="page"
+                data={data()}
+            />,
+        );
+        expect(screen.getByText('15.6 MB')).toBeTruthy();
+        expect(screen.getByText('1.1 KB')).toBeTruthy();
+        // a size of 0 means the kind does not know one: the card then shows none instead of "0 B"
+        expect(screen.queryByText('0 B')).toBeNull();
+    });
+
     it('lists what the run left in outputs/, or says that nothing is there', () => {
         const { unmount } = render(
             <NotebookRunCard

@@ -45,6 +45,8 @@ const data = (over: Partial<NotebookApprovalData> = {}): NotebookApprovalData =>
     ...over,
 });
 
+const NOTE = 'Trains an EfficientNet-B0 image classifier on mnist-mini for 8 epochs.';
+
 describe('the pending approval', () => {
     it('shows the title, the effect chip, the note and the datasets', () => {
         render(<NotebookRunApproval approval={approval()} data={data()} layout="panel" />);
@@ -55,6 +57,26 @@ describe('the pending approval', () => {
         expect(screen.getByText('2 CPUs · 8 GB · no internet · max 120 min')).toBeTruthy();
         expect(screen.getByText('Datasets')).toBeTruthy();
         expect(screen.getByText('Limits')).toBeTruthy();
+    });
+
+    it('shows the agent note in a block of its own, marked as not verified (gateway issue #92)', () => {
+        render(<NotebookRunApproval approval={approval()} data={data({ note: NOTE })} layout="panel" />);
+        const block = screen.getByTestId('agent-notebook-approval-note');
+        expect(block.textContent).toContain("Agent's note – not verified");
+        expect(block.textContent).toContain(NOTE);
+    });
+
+    it('shows no note block while the agent wrote none', () => {
+        render(<NotebookRunApproval approval={approval()} data={data()} layout="panel" />);
+        expect(screen.queryByTestId('agent-notebook-approval-note')).toBeNull();
+    });
+
+    it('sets the agent note as plain text, never as markup', () => {
+        const { container } = render(
+            <NotebookRunApproval approval={approval()} data={data({ note: '<b>bold</b>' })} layout="panel" />,
+        );
+        expect(container.querySelector('b')).toBeNull();
+        expect(screen.getByText('<b>bold</b>')).toBeTruthy();
     });
 
     it('lists the files as tabs with the entry file first and marked', () => {
@@ -183,6 +205,14 @@ describe('the expand dialog', () => {
         expect(onApprove).toHaveBeenCalledTimes(1);
     });
 
+    it('shows the agent note and no technical details (gaps L2/L6)', async () => {
+        render(<NotebookRunApproval approval={approval()} data={data({ note: NOTE })} layout="panel" />);
+        fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+        const dialog = await screen.findByRole('dialog');
+        expect(within(dialog).getByTestId('agent-notebook-approval-note').textContent).toContain(NOTE);
+        expect(within(dialog).queryByTestId('agent-approval-technical')).toBeNull();
+    });
+
     it('closes on Escape without deciding anything', async () => {
         const onApprove = vi.fn(async () => undefined);
         const onReject = vi.fn(async () => undefined);
@@ -228,6 +258,19 @@ describe('a decided approval', () => {
         fireEvent.click(screen.getByLabelText(/^Approved: Run train\.py/));
         expect(screen.getByText('print("epoch 1")')).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    });
+
+    it('shows the agent note again in the opened decision (gap L2)', () => {
+        render(
+            <NotebookRunApproval
+                approval={approval({ state: 'approved', decided_at: '2026-10-16T14:58:00.000Z' })}
+                data={data({ note: NOTE })}
+                layout="panel"
+            />,
+        );
+        expect(screen.queryByTestId('agent-notebook-approval-note')).toBeNull();
+        fireEvent.click(screen.getByLabelText(/^Approved: Run train\.py/));
+        expect(screen.getByTestId('agent-notebook-approval-note').textContent).toContain(NOTE);
     });
 
     it('says that a rejected run did not run, and that an expired one was not decided in time', () => {

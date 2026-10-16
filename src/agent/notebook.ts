@@ -39,7 +39,16 @@ export type NotebookApprovalData = {
     files: NotebookFile[];
     datasets: NotebookDataset[];
     limits: NotebookLimits;
+    /**
+     * The agent's own note to the user about what the run is for (at most 500 characters, escaped for display). It is
+     * the agent's text, **not** something the gateway read or checked: the card shows it in a block of its own, marked
+     * "not verified" (gateway issue #92). Missing while the agent wrote none.
+     */
+    note?: string;
 };
+
+/** The label of the agent's note: it names who wrote it and that nobody verified it (gateway issue #92). */
+export const AGENT_NOTE_LABEL = "Agent's note – not verified";
 
 /** The state a run card shows, derived from the observed job (`runViewOf`). */
 export type NotebookRunView = 'starting' | 'running' | 'finished' | 'failed' | 'timeout' | 'stopped';
@@ -63,9 +72,6 @@ export const isLive = (view: NotebookRunView): boolean => view === 'starting' ||
 // ---------------------------------------------------------------------------------------------------------------
 // The approval: files, code and the texts built from the gateway's data
 // ---------------------------------------------------------------------------------------------------------------
-
-/** Whether an approval carries the structured data of a run (the gateway's field `notebook`). */
-export const hasNotebook = (a: { notebook?: NotebookApprovalData } | undefined): boolean => !!a?.notebook;
 
 /**
  * The files with the entry file first, the rest in the order the gateway sent them. A missing entry keeps the
@@ -175,6 +181,21 @@ export const datasetsValue = (datasets: NotebookDataset[]): string =>
 export const outputName = (o: { label?: string; id?: string }): string => {
     const p = o.label || o.id || '';
     return p.startsWith('outputs/') ? p.slice('outputs/'.length) : p;
+};
+
+/** The size a result file reports, when the kind knows it (gateway issue #92; 0 means it does not). */
+export const outputSize = (o: { size?: number }): number | undefined =>
+    typeof o.size === 'number' && o.size > 0 ? o.size : undefined;
+
+/**
+ * Who stopped a run, in the words the design uses (gap L14, gateway issue #92): "you" for the user's own stop over
+ * the job route, "the agent" for the agent's own `notebook_stop`. Undefined while nobody stopped it — the card then
+ * leaves the row out instead of guessing.
+ */
+export const stoppedByText = (stoppedBy: string | undefined): string | undefined => {
+    if (stoppedBy === 'user') return 'you';
+    if (stoppedBy === 'agent') return 'the agent';
+    return undefined;
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -300,11 +321,11 @@ export type RunFact = { label: string; value: string; tone?: 'error' | 'warning'
 
 /**
  * The facts of a run, as the design's grid on the page and its one line in the panel shows them (gaps L11): the exit
- * code, the duration and the start after the end, the start and the limits while it runs. The datasets and the time
- * limit come from the run's approval (the job itself carries neither).
+ * code, the duration and the start after the end, who stopped it, the start and the limits while it runs. The datasets
+ * and the time limit come from the run's approval (the job itself carries neither).
  */
 export function runFacts(
-    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at' | 'log_tail'>,
+    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at' | 'log_tail' | 'stopped_by'>,
     data: NotebookApprovalData | undefined,
     now = Date.now(),
 ): RunFact[] {
@@ -325,6 +346,9 @@ export function runFacts(
         out.push({ label: 'Exit code', value: String(code), tone: code === 124 ? 'warning' : code === 0 ? undefined : 'error' });
     if (duration) out.push({ label: 'Duration', value: duration });
     if (started) out.push({ label: 'Started', value: started });
+    // who stopped it stands in the job (gateway issue #92); without the field nothing is claimed (gap L14)
+    const by = stoppedByText(job.stopped_by);
+    if (by) out.push({ label: 'Stopped by', value: by });
     return out;
 }
 

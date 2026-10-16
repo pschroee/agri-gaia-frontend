@@ -45,6 +45,7 @@ import { useAgentOptional } from '../AgentContext';
 import { formatBytes } from '../files';
 import { formatClock } from '../format';
 import {
+    AGENT_NOTE_LABEL,
     approvalDeadline,
     approvalDecision,
     codeLines,
@@ -61,7 +62,7 @@ import {
 import type { NotebookApprovalData, NotebookCell, NotebookFile } from '../notebook';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
-import { Technical } from './PlanCard';
+import { AgentText, Technical } from './PlanCard';
 import { agentColors, MONO } from './tokens';
 
 /** The size the card is drawn in: the panel, the chat column of /ai-agent, or the full-height dialog. */
@@ -278,6 +279,11 @@ function FileView({
     );
 }
 
+/** The agent's own note about the run: its text, apart and marked, never mixed into the gateway's facts (#92). */
+function Note({ data }: { data: NotebookApprovalData }) {
+    return data.note ? <AgentText label={AGENT_NOTE_LABEL} text={data.note} testId="agent-notebook-approval-note" /> : null;
+}
+
 /** Approve and Reject; both are locked while one of them runs. */
 function Actions({
     onApprove,
@@ -410,6 +416,8 @@ export default function NotebookRunApproval({
                 </ListItemButton>
                 <Collapse in={open} unmountOnExit>
                     <Box sx={{ px: 1.5, pb: 1.5, minWidth: 0 }}>
+                        {/* the note belongs here too (gap L2): it is what the run was for, also after the decision */}
+                        <Note data={data} />
                         <Facts data={data} size={layout} />
                         <FileView data={data} size={layout} tab={tab} onTab={setTab} />
                     </Box>
@@ -441,6 +449,7 @@ export default function NotebookRunApproval({
                 <Typography sx={{ fontSize: 12, color: 'text.secondary', display: 'block' }}>
                     Approval for every run
                 </Typography>
+                <Note data={data} />
                 <Facts data={data} size={layout} />
                 <FileView data={data} size={layout} tab={tab} onTab={setTab} />
                 <Technical
@@ -474,6 +483,7 @@ export default function NotebookRunApproval({
                     </IconButton>
                 </DialogTitle>
                 <DialogContent dividers ref={dialogBody} sx={{ minWidth: 0 }}>
+                    <Note data={data} />
                     <Facts data={data} size="dialog" />
                     <FileView data={data} size="dialog" tab={tab} onTab={setTab} />
                 </DialogContent>

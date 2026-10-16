@@ -51,6 +51,12 @@ export type WatchJob = {
      * such an address of its own; without it, it offers no link.
      */
     link?: string;
+    /**
+     * Who stopped this job (own code C-E4, the words the aborts of issue #120 use): `user` for the stop over
+     * `POST /api/chats/{id}/jobs/{job}/stop`, `agent` for a stop of the agent's own tools. Missing while nobody
+     * stopped it — a card then claims nothing about who did.
+     */
+    stopped_by?: 'user' | 'agent';
 };
 
 /** Job states of the gateway. */

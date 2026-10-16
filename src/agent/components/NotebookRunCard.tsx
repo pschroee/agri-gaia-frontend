@@ -42,6 +42,7 @@ import {
     isLive,
     midTrunc,
     outputName,
+    outputSize,
     runFacts,
     runHeadTime,
     runViewOf,
@@ -341,9 +342,7 @@ export default function NotebookRunCard({
                 )}
                 {showResults &&
                     (outputs.length > 0 ? (
-                        <ResultFiles
-                            files={outputs.map((o) => ({ name: outputName(o) }))}
-                        />
+                        <ResultFiles files={outputs.map((o) => ({ name: outputName(o), size: outputSize(o) }))} />
                     ) : (
                         <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>No files in outputs/.</Typography>
                     ))}
