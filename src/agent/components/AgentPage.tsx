@@ -2,18 +2,24 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
 import Fab from '@mui/material/Fab';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import ClearIcon from '@mui/icons-material/Clear';
+import SearchIcon from '@mui/icons-material/Search';
 import SyncIcon from '@mui/icons-material/Sync';
 
 import { useAgent } from '../AgentContext';
+import { historyGroups, searchChats } from '../chatSearch';
 import { chatTitle, formatRelativeDay } from '../format';
 import { AgentTab, agentTabOf } from '../panelCarry';
 import { runSince, runStateOf } from '../runState';
@@ -109,11 +115,71 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
     const sub = useSubagentNav();
     const groups = useChatSubagentGroups(chats);
     const rename = useRenameChat();
+    // the search field above the list (issue #122); the column shows every chat, so no limit is needed
+    const [query, setQuery] = useState('');
+    const result = useMemo(
+        () =>
+            searchChats(
+                chats.map((c) => ({ ...c, title: chatTitle(c) })),
+                query,
+                { chatId: sub.chatId, selectedChatId, subagents: sub.items, others: groups.known },
+                { limit: Infinity },
+            ),
+        [chats, query, sub.chatId, sub.items, groups.known, selectedChatId],
+    );
+    // the sub-entries under each chat: the search's matches (open), otherwise the groups the user opened (issue #60)
+    const listed = useMemo(
+        () =>
+            historyGroups(result, {
+                openChatId: sub.chatId,
+                openChat: { items: sub.items, open: sub.open },
+                other: (chatId) => {
+                    const chat = chats.find((c) => c.id === chatId);
+                    const g = chat ? groups.group(chat) : undefined;
+                    return { items: g?.items, open: !!g?.open };
+                },
+            }),
+        [result, sub.chatId, sub.items, sub.open, chats, groups.group],
+    );
     return (
         <Box sx={{ borderRight: 1, borderColor: 'divider', pr: 2.5, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
                 <NewChatButton fullWidth sx={{ mb: 2 }} />
                 <NewChatError sx={{ mb: 2 }} />
+                <TextField
+                    size="small"
+                    fullWidth
+                    placeholder="Search chats"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Escape') setQuery('');
+                    }}
+                    inputProps={{ 'aria-label': 'Search chats', 'data-testid': 'agent-history-search' }}
+                    sx={{ mt: 2, mb: 1.5 }}
+                    InputProps={{
+                        startAdornment: (
+                            <InputAdornment position="start">
+                                <SearchIcon fontSize="small" />
+                            </InputAdornment>
+                        ),
+                        endAdornment: query ? (
+                            <InputAdornment position="end">
+                                <Tooltip title="Clear search">
+                                    <IconButton
+                                        size="small"
+                                        edge="end"
+                                        aria-label="Clear search"
+                                        data-testid="agent-history-search-clear"
+                                        onClick={() => setQuery('')}
+                                    >
+                                        <ClearIcon fontSize="small" />
+                                    </IconButton>
+                                </Tooltip>
+                            </InputAdornment>
+                        ) : undefined,
+                    }}
+                />
                 <Typography
                     sx={{
                         fontSize: 11.5,
@@ -128,12 +194,19 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
                 {chats.length === 0 && (
                     <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>No chats yet.</Typography>
                 )}
-                {chats.map((c) => {
+                {chats.length > 0 && result.chats.length === 0 && (
+                    <Typography variant="body2" color="text.secondary" sx={{ px: 1.25, py: 2 }}>
+                        No chats match
+                    </Typography>
+                )}
+                {result.chats.map((c) => {
                     const on = c.id === selectedChatId;
                     const state = runStateOf(c);
-                    const withSubs = on && c.id === sub.chatId && sub.items.length > 0;
+                    const withSubs = c.id === sub.chatId && sub.items.length > 0;
                     // another chat with subagents: its group loads on the first expand, without waking it (issue #60)
                     const other = !withSubs && (c.subagents ?? 0) > 0 ? groups.group(c) : undefined;
+                    const group = listed[c.id];
+                    const groupOpen = !!group?.open;
                     const editing = rename.state.chatId === c.id;
                     const failure = rename.state.error?.chatId === c.id ? rename.state.error.text : undefined;
                     return (
@@ -215,21 +288,12 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
                                     {c.pending_approvals > 0 && state !== 'waiting' && (
                                         <span style={{ color: agentColors.amberText }}>{c.pending_approvals} waiting</span>
                                     )}
-                                    {withSubs && (
+                                    {(withSubs || other) && (
                                         <Box component="span" sx={{ ml: 'auto' }}>
                                             <GroupToggleButton
-                                                open={sub.open}
-                                                count={sub.items.length}
-                                                onToggle={sub.toggle}
-                                            />
-                                        </Box>
-                                    )}
-                                    {other && (
-                                        <Box component="span" sx={{ ml: 'auto' }}>
-                                            <GroupToggleButton
-                                                open={other.open}
-                                                count={c.subagents ?? 0}
-                                                onToggle={() => groups.toggle(c)}
+                                                open={groupOpen}
+                                                count={withSubs ? sub.items.length : c.subagents ?? 0}
+                                                onToggle={withSubs ? sub.toggle : () => groups.toggle(c)}
                                             />
                                         </Box>
                                     )}
@@ -247,19 +311,24 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
                                     </Box>
                                 )}
                             </Box>
-                            {withSubs && sub.open && (
-                                <HistorySubagents
-                                    items={sub.items}
-                                    selectedRunId={sub.selected?.runId}
-                                    onSelect={sub.select}
-                                />
-                            )}
-                            {other?.open &&
-                                (other.items?.length ? (
-                                    <HistorySubagents items={other.items} onSelect={(runId) => selectChat(c.id, runId)} />
+                            {groupOpen &&
+                                (group && group.subagents.length > 0 ? (
+                                    // the open chat's own subagents keep the selection; another chat's open that chat
+                                    c.id === sub.chatId ? (
+                                        <HistorySubagents
+                                            items={group.subagents}
+                                            selectedRunId={sub.selected?.runId}
+                                            onSelect={sub.select}
+                                        />
+                                    ) : (
+                                        <HistorySubagents
+                                            items={group.subagents}
+                                            onSelect={(runId) => selectChat(c.id, runId)}
+                                        />
+                                    )
                                 ) : (
                                     <Box sx={{ mb: 0.75 }}>
-                                        <GroupNote loading={other.loading} error={other.error} indent={1.5} />
+                                        <GroupNote loading={other?.loading} error={other?.error} indent={1.5} />
                                     </Box>
                                 ))}
                         </Fragment>
