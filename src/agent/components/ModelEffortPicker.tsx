@@ -66,13 +66,18 @@ function Trigger({
     hint?: string;
     title: string;
     disabled: boolean;
-    maxWidth: number;
+    /**
+     * Upper bound for the button in px; without one it takes the room its label needs and gives way when the row
+     * runs out (the panel gives the model name no fixed width, issue L6/#123).
+     */
+    maxWidth?: number;
     onClick: (e: MouseEvent<HTMLElement>) => void;
 }) {
+    const free = maxWidth === undefined;
     return (
         <Tooltip title={hint ?? title}>
             {/* span: a disabled button fires no events, the tooltip needs a live wrapper */}
-            <Box component="span" sx={{ display: 'inline-flex', minWidth: 0 }}>
+            <Box component="span" sx={{ display: 'inline-flex', minWidth: 0, ...(free ? { flex: '0 1 auto' } : null) }}>
                 <Button
                     size="small"
                     variant="text"
@@ -83,7 +88,7 @@ function Trigger({
                     onClick={onClick}
                     aria-label={`${title}: ${label}`}
                     aria-haspopup="menu"
-                    sx={{ ...triggerSx, maxWidth }}
+                    sx={{ ...triggerSx, ...(free ? { flex: '0 1 auto', maxWidth: '100%' } : { maxWidth }) }}
                 >
                     <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {label}
@@ -170,7 +175,7 @@ export default function ModelEffortPicker({
                 icon={<MemoryOutlinedIcon />}
                 hint={state.modelHint}
                 disabled={state.modelDisabled}
-                maxWidth={dense ? 170 : 240}
+                maxWidth={dense ? undefined : 240}
                 onClick={(e) => setModelAnchor(e.currentTarget)}
             />
             <Trigger
