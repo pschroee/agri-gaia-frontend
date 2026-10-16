@@ -92,6 +92,11 @@ export type ChatStream = {
     partials: Record<string, string>;
     /** Resumes (and starts) of the chat seen live in this view (SSE "resume"), in order. */
     resumes: ResumeView[];
+    /**
+     * Counts the plan events of this chat (SSE "plan", autonomy E1). A plan changes when the user pauses, resumes
+     * or cancels it — an event the plans themselves carry; the views reload their plans when this number moves.
+     */
+    planVersion: number;
     /** Sent outside the queue, not stored yet (e.g. while the chat is being resumed). */
     pending?: PendingSend;
     /** Compaction running right now (SSE compaction_start until compaction_end), seen live in this view. */
@@ -195,6 +200,8 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     queueRef.current = queueState;
     const [queueError, setQueueError] = useState<string>();
     const [resumes, setResumes] = useState<ResumeView[]>([]);
+    // a plan event does not carry the plans themselves into this state: a count keeps the views reloading them
+    const [planVersion, setPlanVersion] = useState(0);
     const [pending, setPending] = useState<PendingSend>();
     const [compacting, setCompacting] = useState<Compacting>();
     const [commands, setCommands] = useState<Command[]>([]);
@@ -400,6 +407,11 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     }
                     case 'approval':
                         setApprovals((l) => upsert(l, ev.data as Approval, (a) => a.id));
+                        break;
+                    case 'plan':
+                        // the plan card reloads its plans on this (autonomy E1/E4): a pause, resume or cancel
+                        // changes the plan without touching an approval
+                        setPlanVersion((n) => n + 1);
                         break;
                     case 'artifact': {
                         const a = ev.data as Artifact;
@@ -804,6 +816,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         loaded,
         error,
         connected,
+        planVersion,
         reload,
         applyChat,
         send,
