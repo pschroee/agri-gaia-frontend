@@ -28,6 +28,7 @@ import {
 } from '../files';
 import type { FreshChat } from '../newChat';
 import type { Artifact, Command } from '../types';
+import { QUEUE_HINT } from '../queue';
 import { abortErrorText, inputControls, isRunning } from '../runState';
 import type { RunState } from '../runState';
 import { sendTipIdle, sendTipReducer } from '../sendTooltip';
@@ -274,7 +275,7 @@ export default function ChatInput({
     const roundSx = { width: 36, height: 36, flex: 'none' } as const;
     const sendButton = controls.buttons.some((b) => b !== 'stop') && (
         <Tooltip
-            title={queueing ? 'Queue message (goes to the agent when the current run ends)' : 'Send (Enter)'}
+            title={queueing ? `Queue message (${QUEUE_HINT})` : 'Send (Enter)'}
             open={sendTip.open}
             onOpen={(e) => sendTipEvent({ type: 'open', by: e.type.startsWith('mouse') ? 'hover' : 'focus' })}
             onClose={() => sendTipEvent({ type: 'close' })}
