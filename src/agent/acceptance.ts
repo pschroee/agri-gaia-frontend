@@ -181,8 +181,11 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
  * The summary line after "Acceptance report": criteria satisfied of those that apply (in the error colour when one is
  * not satisfied), changed files, commands by result (failed ones as a piece of their own in the error colour). Risks,
  * tests and notes show only when opened, so the line stays short in the 400 px panel.
+ *
+ * With `dense` (the panel) only the first piece stands — the criteria where there are any —; the block marks the
+ * rest with "…" and shows all of it when opened (issue L6/#123, decision DL6.6).
  */
-export function acceptanceSummary(r: AcceptanceReport): SummaryPart[] {
+export function acceptanceSummary(r: AcceptanceReport, opts: { dense?: boolean } = {}): SummaryPart[] {
     const out: SummaryPart[] = [];
     const counted = r.criteria.filter((c) => c.status !== 'not-applicable');
     if (counted.length > 0) {
@@ -200,7 +203,8 @@ export function acceptanceSummary(r: AcceptanceReport): SummaryPart[] {
         out.push({ text: passed > 0 ? `${failed} failed` : `${plural(failed, 'command')} failed`, error: true });
     if (notRun > 0)
         out.push({ text: passed + failed > 0 ? `${notRun} not run` : `${plural(notRun, 'command')} not run` });
-    return out;
+    // The panel keeps one piece; the rest is behind the opened report.
+    return opts.dense ? out.slice(0, 1) : out;
 }
 
 /** The summary as plain text, e.g. "2/2 criteria satisfied · 4 files changed · 5 commands passed". */

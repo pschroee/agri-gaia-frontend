@@ -30,6 +30,8 @@ type Props = {
     /** The block is still being written (answer streaming, fence not closed). */
     pending?: boolean;
     gap?: number;
+    /** The 400 px panel: one piece of the summary line, the rest behind "…" (decision DL6.6). */
+    dense?: boolean;
 };
 
 /** Raw text that wraps instead of scrolling sideways (the panel is 400 px wide). */
@@ -174,17 +176,20 @@ function ReportDetails({ report }: { report: AcceptanceReport }) {
  * An acceptance report of a subagent (issue #53) as one collapsed line "Acceptance report · 2/2 criteria satisfied ·
  * …"; opened, short wrapping lists and "Show raw JSON". A body that does not parse stays code, but collapsed too.
  */
-export default function AcceptanceReportBlock({ body, pending = false, gap = 1 }: Props) {
+export default function AcceptanceReportBlock({ body, pending = false, gap = 1, dense = false }: Props) {
     const [open, setOpen] = useState(false);
     const [raw, setRaw] = useState(false);
     const report = useMemo(() => (pending ? undefined : parseAcceptanceReport(body)), [body, pending]);
-    const parts = report ? acceptanceSummary(report) : [];
+    const parts = report ? acceptanceSummary(report, { dense }) : [];
+    // The panel shows one piece only; "…" says the rest comes with the opened report (DL6.6, issue L6/#123).
+    const truncated = !!report && !pending && acceptanceSummary(report).length > parts.length;
 
     // The pieces wrap between each other, never inside, so the line breaks at a separator in the 400 px panel.
     let pieces: { text: string; error?: boolean }[];
     if (pending) pieces = [{ text: 'being written …' }];
     else if (!report) pieces = [{ text: 'not valid JSON, shown as code' }];
-    else pieces = parts.length ? parts : [{ text: 'no details' }];
+    else if (!parts.length) pieces = [{ text: 'no details' }];
+    else pieces = truncated ? [...parts, { text: '…' }] : parts;
     const detail = pieces.map((p, i) => (
         <Fragment key={i}>
             {' · '}
