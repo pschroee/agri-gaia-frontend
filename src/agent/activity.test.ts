@@ -7,6 +7,8 @@ import { describe, expect, it } from 'vitest';
 import {
     activityChatName,
     activityFigures,
+    activityLinkOf,
+    activityParams,
     activityQuery,
     activityRows,
     formatDuration,
@@ -63,6 +65,39 @@ describe('activityQuery', () => {
     });
     it('leaves out what does not filter', () => {
         expect(activityQuery({ period: 'all', outcome: '', limit: 5 }, now)).toBe('?limit=5');
+    });
+    it("carries the chat and the tool call of a step detail's link (F6, issue L6/#123)", () => {
+        const q = new URLSearchParams(activityQuery({ period: 'all', chat: 'c-1', call: 'tc-9' }, now));
+        expect(q.get('chat')).toBe('c-1');
+        expect(q.get('call')).toBe('tc-9');
+        expect(new URLSearchParams(activityQuery({ period: 'all', call: 'tc-9' }, now)).has('chat')).toBe(false);
+    });
+});
+
+describe('the link into the activity', () => {
+    it('names the tab and both filter values', () => {
+        expect(activityLinkOf('c-1', 'tc-9')).toBe('/ai-agent?tab=activity&chat=c-1&call=tc-9');
+    });
+    it('leaves out what is missing and escapes the values', () => {
+        expect(activityLinkOf('c-1')).toBe('/ai-agent?tab=activity&chat=c-1');
+        expect(activityLinkOf('', 'tc-9')).toBe('/ai-agent?tab=activity&call=tc-9');
+        expect(activityLinkOf('c 1', 'a/b&c')).toBe('/ai-agent?tab=activity&chat=c+1&call=a%2Fb%26c');
+    });
+});
+
+describe('activityParams', () => {
+    it('reads the chat and the tool call of a link', () => {
+        expect(activityParams('?tab=activity&chat=c-1&call=tc-9')).toEqual({ chat: 'c-1', call: 'tc-9' });
+        expect(activityParams('chat=c-1')).toEqual({ chat: 'c-1', call: undefined });
+        expect(activityParams('')).toEqual({ chat: undefined, call: undefined });
+        expect(activityParams('?tab=activity')).toEqual({ chat: undefined, call: undefined });
+        expect(activityParams('?chat=%20c-1%20&call=tc-9')).toEqual({ chat: 'c-1', call: 'tc-9' });
+    });
+    it('drops a tool call the gateway would refuse (no error from a hand-made link)', () => {
+        expect(activityParams('?call=').call).toBeUndefined();
+        expect(activityParams('?call=' + 'x'.repeat(257)).call).toBeUndefined();
+        expect(activityParams('?call=tc%20with%20space').call).toBeUndefined();
+        expect(activityParams('?call=' + 'x'.repeat(256)).call).toBe('x'.repeat(256));
     });
 });
 

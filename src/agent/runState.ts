@@ -148,3 +148,39 @@ export type PendingSend = { key: string; text: string; afterSeq: number; files?:
 export function pendingSettled(p: PendingSend, messages: StoredMessage[]): boolean {
     return messages.some((m) => m.role === 'user' && m.seq > p.afterSeq);
 }
+
+/**
+ * Whether the quiet bar stands below the running answer (F8, issue L6/#123): the turn runs and an answer of it is
+ * already shown, but nothing of that answer moves right now — the model finished a step and has not written
+ * anything of the next one yet. In that moment the chat looks idle, though the agent is working.
+ *
+ * `answerShown` false is the other case: without an answer of this turn `WorkingIndicator` stands there with a
+ * text of its own. Text that arrives, a thinking block that runs, a running command, a waiting approval and a chat
+ * being loaded all show themselves, so the bar stays away then.
+ */
+export function showIdleBar(o: {
+    /** The chat runs (pi works on a turn). */
+    running: boolean;
+    /** A message of the user is on its way; its greyed bubble shows that. */
+    pending: boolean;
+    /** An answer of this turn is shown. */
+    answerShown: boolean;
+    /** Text of it arrives, or a thinking block of it runs. */
+    streaming: boolean;
+    /** A foreground command runs; its step row carries the stop button. */
+    toolRunning: boolean;
+    /** The turn waits for the user's approval; the card shows that. */
+    approvalWaiting: boolean;
+    /** The chat is being loaded (starting or resuming) or compacts; those lines show themselves. */
+    loadingOrCompacting: boolean;
+}): boolean {
+    return (
+        o.running &&
+        !o.pending &&
+        o.answerShown &&
+        !o.streaming &&
+        !o.toolRunning &&
+        !o.approvalWaiting &&
+        !o.loadingOrCompacting
+    );
+}

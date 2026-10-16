@@ -8,10 +8,14 @@ import {
     clipText,
     exitCodeOf,
     formatResponse,
+    isSecretKey,
     partialsReducer,
     platformCallsInCommand,
     platformStatus,
     prettyJson,
+    REDACTED,
+    redactSecrets,
+    SECRET_KEYS,
     shellWords,
     stepDetail,
 } from './stepDetail';
@@ -59,7 +63,7 @@ const approval = (extra: Partial<Approval> = {}): Approval => ({
     state: 'approved',
     created_at: '2026-10-07T10:00:00Z',
     decided_at: '2026-10-07T10:00:05Z',
-    preview: 'DELETE /datasets/5\n{\n  "key": "k",\n  "csrftoken": "[redacted by the orchestrator]"\n}',
+    preview: 'DELETE /datasets/5\n{\n  "key": "k",\n  "csrftoken": "[redacted]"\n}',
     tool_call_id: 'c1',
     ...extra,
 });
@@ -173,7 +177,8 @@ describe('platform calls', () => {
             approval: { id: 'ap1' },
         });
         // the gateway's redacted body wins over the command's text
-        expect(p.request.body).toContain('[redacted by the orchestrator]');
+        expect(p.request.body).toContain('[redacted]');
+        expect(p.request.body).not.toContain('"t"');
         expect(ofType(d.blocks, 'code').map((c) => c.label)).toEqual(['Command', 'Response']);
         expect(ofType(d.blocks, 'code')[1].text).toBe('HTTP 200\n{\n  "ok": true\n}');
         // the approval shows with its request, not again on its own
@@ -346,5 +351,83 @@ describe('helpers', () => {
         expect(s).toEqual({ c1: 'a\nb\n' });
         expect(partialsReducer(s, { type: 'message_update' })).toBe(s);
         expect(partialsReducer(s, { type: 'tool_execution_end', toolCallId: 'c1' })).toEqual({});
+    });
+});
+
+describe('redactSecrets', () => {
+    it('replaces the value of a secret key in JSON, nested too (F23, issue L6/#123)', () => {
+        expect(redactSecrets('{"name":"x","password":"pw"}')).toBe(`{"name":"x","password":"${REDACTED}"}`);
+        expect(redactSecrets('{\n  "connector": {\n    "api_key": "AK-1"\n  }\n}')).toBe(
+            `{\n  "connector": {\n    "api_key": "${REDACTED}"\n  }\n}`,
+        );
+        // an escaped quote inside the value is part of it
+        expect(redactSecrets('{"token":"a\\"b"}')).toBe(`{"token":"${REDACTED}"}`);
+    });
+    it('replaces key=value and key: value, with or without a flag dash', () => {
+        expect(redactSecrets('curl -d password=hunter2 https://x')).toBe(`curl -d password=${REDACTED} https://x`);
+        expect(redactSecrets('agw-platform request GET /x?api_key=AK-1')).toBe(
+            `agw-platform request GET /x?api_key=${REDACTED}`,
+        );
+        expect(redactSecrets('--private-key=/tmp/k.pem')).toBe(`--private-key=${REDACTED}`);
+        expect(redactSecrets('--edge-key=EK-1 other')).toBe(`--edge-key=${REDACTED} other`);
+        expect(redactSecrets('client_secret: s3cr3t, name: fine')).toBe(`client_secret: ${REDACTED}, name: fine`);
+    });
+    it('reads the keys case-insensitively and with a dash', () => {
+        expect(redactSecrets('{"Password":"pw"}')).toBe(`{"Password":"${REDACTED}"}`);
+        expect(redactSecrets('{"EDGE-KEY":"EK"}')).toBe(`{"EDGE-KEY":"${REDACTED}"}`);
+        expect(redactSecrets('{"git_access_token":"t"}')).toBe(`{"git_access_token":"${REDACTED}"}`);
+    });
+    it('leaves harmless keys, numbers and plain text alone', () => {
+        const plain = 'ls -la /workspace && echo ok';
+        expect(redactSecrets(plain)).toBe(plain);
+        expect(redactSecrets('{"name":"x","count":3,"key":"k"}')).toBe('{"name":"x","count":3,"key":"k"}');
+        expect(redactSecrets('')).toBe('');
+        expect(redactSecrets('SELECT * FROM tokens')).toBe('SELECT * FROM tokens');
+    });
+    it("knows the gateway's key list", () => {
+        expect(SECRET_KEYS).toEqual([
+            'password',
+            'passwd',
+            'secret',
+            'token',
+            'api_key',
+            'apikey',
+            'edge_key',
+            'private_key',
+            'credential',
+        ]);
+        for (const k of SECRET_KEYS) expect(isSecretKey(k)).toBe(true);
+        expect(isSecretKey('API-Key')).toBe(true);
+        expect(isSecretKey('name')).toBe(false);
+        expect(redactSecrets('{"credentials":"c"}')).toBe(`{"credentials":"${REDACTED}"}`);
+    });
+    it('redacts the command of a step and the platform body written into it', () => {
+        const d = stepDetail(
+            step({
+                name: 'bash',
+                args: {
+                    command: "agw-platform request POST /datasets --body '{\"metadata\":\"m\",\"password\":\"pw\"}'",
+                },
+                result: { text: 'HTTP 201', isError: false },
+                executions: [exec({ exit_code: 0 })],
+                platformCalls: [sock('POST /datasets', 'ok 201')],
+            }),
+        );
+        const code = ofType(d.blocks, 'code').find((c) => c.label === 'Command');
+        expect(code?.text).toContain(`"password":"${REDACTED}"`);
+        expect(code?.text).not.toContain('pw');
+        const [p] = ofType(d.blocks, 'platform');
+        expect(p.request.body).toContain(`"password": "${REDACTED}"`);
+        expect(p.request.body).toContain('"metadata": "m"');
+    });
+    it('redacts secrets in the arguments of an MCP platform call', () => {
+        const d = stepDetail(
+            step({
+                name: 'mcp_platform_create_dataset',
+                args: { name: 'x', api_key: 'AK-1' },
+            }),
+        );
+        const code = ofType(d.blocks, 'code')[0];
+        expect(code.text).toContain(`"api_key": "${REDACTED}"`);
     });
 });

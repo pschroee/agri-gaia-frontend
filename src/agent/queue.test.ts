@@ -15,6 +15,7 @@ import {
     queuePreview,
     queueReducer,
     queueRows,
+    QUEUE_HINT,
     queueStatusText,
     removeErrorText,
     sendArrived,
@@ -613,5 +614,15 @@ describe('settling after repeated reloads', () => {
         expect(s.delivered.map((d) => d.ids)).toEqual([['q2']]);
         s = queueReducer(s, { type: 'messages', messages: [...msgs, userMsg(5, 'rewritten again', { trigger: 'queue' })] });
         expect(s.delivered).toEqual([]);
+    });
+});
+
+describe('the wording when a queued message reaches the agent', () => {
+    // F10, issue L6/#123 (DL6.5): the tooltip of the send button and the header of the queue name the same moment,
+    // from one constant. The tooltip read "when the current run ends", which is not what the gateway does.
+    it('is one constant for the queue header and the send tooltip', () => {
+        expect(QUEUE_HINT).toBe('goes to the agent after its current step');
+        const running = { queue_held: false, running: true, hold_reason: undefined };
+        expect(queueStatusText(running)).toBe(QUEUE_HINT);
     });
 });

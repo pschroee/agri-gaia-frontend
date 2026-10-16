@@ -181,6 +181,7 @@ export default function Markdown({
                         body={fence.body}
                         pending={streaming && !fence.closed}
                         gap={gap}
+                        dense={dense}
                     />,
                 );
                 continue;

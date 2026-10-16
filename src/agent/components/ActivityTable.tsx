@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { Fragment, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Collapse from '@mui/material/Collapse';
@@ -372,14 +372,17 @@ function CallLog({ row, sent }: { row: ActivityRow; sent?: LlmLoad }) {
 
 /**
  * Platform calls of the agent with effect, result and duration, and internet switches; a row expands to its call
- * log.
+ * log. A row named by a link from a step detail (focus, issue L6/#123) opens by itself and is scrolled into view.
  */
 export default function ActivityTable({
     rows,
     emptyText = 'The agent has not called the platform yet.',
+    focus,
 }: {
     rows: ActivityRow[];
     emptyText?: string;
+    /** Chat and tool call a step detail linked to; without a tool call nothing opens by itself. */
+    focus?: { chat?: string; call?: string };
 }) {
     const [open, setOpen] = useState<number>();
     // Model calls per chat, loaded when a platform row of the chat is first expanded (gateway issue #69).
@@ -393,6 +396,25 @@ export default function ActivityTable({
             () => setSent((s) => ({ ...s, [chatId]: 'error' })),
         );
     };
+
+    // The row of the linked tool call: opened without a click. `open` stays undefined until the user clicks, so the
+    // link keeps working while the table reloads; 0 means the user closed everything.
+    const focusRow = focus?.call
+        ? rows.find(
+              (r) => r.call.tool_call_id === focus.call && (!focus.chat || (r.call.chat_id ?? '') === focus.chat),
+          ) ?? rows.find((r) => r.call.tool_call_id === focus.call)
+        : undefined;
+    const openId = open ?? focusRow?.call.id;
+    const rowRef = useRef<HTMLTableRowElement | null>(null);
+    const scrolled = useRef<number>();
+    useEffect(() => {
+        if (focusRow === undefined) return;
+        // Scrolling happens once: a later refresh of the same link must not pull the view up again.
+        if (scrolled.current === focusRow.call.id) return;
+        scrolled.current = focusRow.call.id;
+        if (kindOf(focusRow.call) !== 'internet') loadSent(focusRow.chat.id);
+        rowRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, [focusRow?.call.id]);
 
     if (rows.length === 0) {
         return <Typography sx={{ color: 'text.secondary', fontSize: 14, py: 3 }}>{emptyText}</Typography>;
@@ -422,13 +444,14 @@ export default function ActivityTable({
                         const internet = kindOf(call) === 'internet' ? internetEvent(call) : undefined;
                         const systemRead = isSystemRead(call);
                         const effect = internet || systemRead ? undefined : callEffect(call);
-                        const expanded = open === call.id;
+                        const expanded = openId === call.id;
                         return (
                             <Fragment key={call.id}>
                                 <TableRow
                                     hover
+                                    ref={expanded ? rowRef : null}
                                     onClick={() => {
-                                        setOpen(expanded ? undefined : call.id);
+                                        setOpen(expanded ? 0 : call.id);
                                         if (!expanded && !internet) loadSent(chat.id);
                                     }}
                                     sx={{

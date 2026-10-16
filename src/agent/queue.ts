@@ -389,13 +389,19 @@ export function holdReasonText(reason: HoldReason | undefined): string | undefin
     }
 }
 
+/**
+ * When a queued message reaches the agent. One wording for the header of the queue and the tooltip of the send
+ * button, which queues while the agent works (issue L6/#123).
+ */
+export const QUEUE_HINT = 'goes to the agent after its current step';
+
 /** Status line of the queue header. */
 export function queueStatusText(chat: Pick<Chat, 'queue_held' | 'running' | 'hold_reason'> | undefined): string {
     if (isHeld(chat)) {
         const why = holdReasonText(chat?.hold_reason);
         return `${why ? `${why}, ` : ''}goes along with your next message`;
     }
-    return 'goes to the agent after its current step';
+    return QUEUE_HINT;
 }
 
 /** Message for a failed removal. */

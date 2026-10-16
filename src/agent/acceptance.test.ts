@@ -190,6 +190,27 @@ describe('acceptanceSummary', () => {
         const one = parse('{"criteriaSatisfied": [{"id": "a", "status": "met"}]}');
         expect(acceptanceSummaryText(one)).toBe('1/1 criterion satisfied');
     });
+
+    it('keeps one piece in the panel, the criteria (DL6.6, issue L6/#123)', () => {
+        const r = parse(
+            JSON.stringify({
+                criteriaSatisfied: [{ id: 'a', status: 'not-satisfied' }],
+                changedFiles: ['x.ts', 'y.ts'],
+                commandsRun: [
+                    { command: 'a', result: 'passed' },
+                    { command: 'b', result: 'failed' },
+                ],
+            }),
+        );
+        expect(acceptanceSummary(r, { dense: true })).toEqual([{ text: '0/1 criterion satisfied', error: true }]);
+        // without criteria the first piece is what stands there
+        const files = parse('{"changed_files": ["x.ts"]}');
+        expect(acceptanceSummary(files, { dense: true })).toEqual([{ text: '1 file changed' }]);
+        // the full line stays what it was, and an empty report stays empty
+        expect(acceptanceSummary(r, { dense: false })).toHaveLength(4);
+        expect(acceptanceSummary(r)).toHaveLength(4);
+        expect(acceptanceSummary(parse('{}'), { dense: true })).toEqual([]);
+    });
 });
 
 describe('prettyJson', () => {
