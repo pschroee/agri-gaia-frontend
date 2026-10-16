@@ -15,6 +15,10 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
 import { answerSteps } from '../answer';
+import { annotationCardsIn, cardsTrigger, mergeAnnotation, useAnnotation } from '../annotation';
+import type { AnnotationItem } from '../annotation';
+import { checkCardsIn, mergeChecks, useChecks } from '../assess';
+import type { CheckItem } from '../assess';
 import { backgroundByCall } from '../background';
 import { noticeAnchor } from '../commands';
 import { deploymentCardsIn } from '../deploymentCard';
@@ -38,6 +42,7 @@ import { compactionReason, formatTokens } from '../usage';
 import { AgentFileMessage, MessageAttachments } from './Attachments';
 import Markdown from './Markdown';
 import BackgroundNoteLine from './BackgroundNoteLine';
+import { AnnotationCards } from './AnnotationCard';
 import DeploymentCard from './DeploymentCard';
 import ResumeBlock from './ResumeBlock';
 import StepList from './StepList';
@@ -126,6 +131,11 @@ export type PlanEnv = {
     layout: 'panel' | 'page';
     /** The user allowed browser notifications for a plan (D4.4); absent where the view cannot store it. */
     onNotify?: (planId: string, on: boolean) => void;
+    /** The runs and jobs of pre-annotation and the result checks of the chat (issue #112), each at its tool call. */
+    annotation?: AnnotationItem[];
+    checks?: CheckItem[];
+    /** The CVAT base of the chat (`cvat_url` of the annotation route); without it a card offers no link. */
+    cvatBase?: string;
 };
 
 /**
@@ -260,6 +270,9 @@ export function AgentBlock({
                 const files = placed.byPart.get(i);
                 // the state of an edge deployment starts behind the group of calls that reported it (edge D-E4)
                 const deployments = deploymentCardsIn(p.steps, planEnv?.jobs ?? []);
+                // the cards of pre-annotation and of the result checks stand at the call that started them (V4)
+                const annotations = annotationCardsIn(p.steps, planEnv?.annotation ?? []);
+                const checkCards = checkCardsIn(p.steps, planEnv?.checks ?? []);
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
@@ -272,6 +285,12 @@ export function AgentBlock({
                                 layout={dense ? 'panel' : 'page'}
                             />
                         ))}
+                        <AnnotationCards
+                            items={annotations.map((a) => a.item)}
+                            checks={checkCards.map((c) => c.item)}
+                            base={planEnv?.cvatBase}
+                            layout={dense ? 'panel' : 'page'}
+                        />
                         {files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
                         {cards}
                     </Fragment>
@@ -447,11 +466,26 @@ export default function Conversation({
     const { chat, live, resumes, pending } = stream;
     // the observed platform jobs of this chat (A-E2) and what the plan cards of this view need (A-E4)
     const jobs = useJobs(stream.chat?.id);
+    // the runs and jobs of pre-annotation and the result checks (V4, issue #112): both routes are loaded again
+    // whenever an observed run or check changes, so a card follows the watcher without a poll of its own
+    const trigger = useMemo(() => cardsTrigger(jobs), [jobs]);
+    const annotation = useAnnotation(stream.chat?.id, [trigger]);
+    const checks = useChecks(stream.chat?.id, [trigger]);
+    const annotationItems = useMemo(() => mergeAnnotation(annotation, jobs), [annotation, jobs]);
+    const checkItems = useMemo(() => mergeChecks(checks, jobs), [checks, jobs]);
     const pendingIds = useMemo(() => pendingIdsOf(stream.approvals), [stream.approvals]);
     const setPlanNotify = useAgentOptional()?.setPlanNotify;
     const planEnv: PlanEnv = useMemo(
-        () => ({ approvals: stream.approvals, jobs, pending: pendingIds, layout: dense ? 'panel' : 'page' }),
-        [stream.approvals, jobs, pendingIds, dense],
+        () => ({
+            approvals: stream.approvals,
+            jobs,
+            pending: pendingIds,
+            layout: dense ? 'panel' : 'page',
+            annotation: annotationItems,
+            checks: checkItems,
+            cvatBase: annotation.cvat_url,
+        }),
+        [stream.approvals, jobs, pendingIds, dense, annotationItems, checkItems, annotation.cvat_url],
     );
     const liveP = useMemo(() => liveParts(live), [live]);
     // Open state chosen per thinking block and per tool step (collapsed until opened); kept here so it survives the
