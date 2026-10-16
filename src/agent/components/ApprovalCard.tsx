@@ -16,6 +16,7 @@ import { approvalEffect } from '../effect';
 import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
+import NotebookRunApproval from './NotebookRunApproval';
 import type { Plan } from '../plan';
 import { summaryChanged, summaryParts } from '../plan';
 import { useShownPlanCards } from '../planRegistry';
@@ -313,11 +314,14 @@ export default function ApprovalCard({
     approvals,
     onDecide,
     plans,
+    layout = 'panel',
 }: {
     approvals: Approval[];
     onDecide: (approval: Approval, approve: boolean) => Promise<void>;
     /** The chat's plans: a plan approval whose card the view shows becomes a reference line (gateway issue #72). */
     plans?: Plan[];
+    /** The width the cards are drawn in (own code C-E4): the 400 px panel or the chat column of /ai-agent. */
+    layout?: 'panel' | 'page';
 }) {
     const [busy, setBusy] = useState(false);
     const shown = useShownPlanCards();
@@ -355,6 +359,17 @@ export default function ApprovalCard({
                     <InternetItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ) : a.kind === 'artifact_upload' ? (
                     <ArtifactItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                ) : a.notebook ? (
+                    // a run in the chat's notebook server (own code C-E4): the gateway's structured data replaces the
+                    // text preview — the code of the run, file by file
+                    <NotebookRunApproval
+                        key={a.id}
+                        approval={a}
+                        data={a.notebook}
+                        layout={layout}
+                        onApprove={() => onDecide(a, true)}
+                        onReject={() => onDecide(a, false)}
+                    />
                 ) : (
                     <ApprovalItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ),

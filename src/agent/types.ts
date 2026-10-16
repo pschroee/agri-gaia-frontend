@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { PageContext } from './pageContext';
+import type { NotebookApprovalData } from './notebook';
 // Subset of the agent gateway API types (agri-gaia-agent-gateway, API.md and web/src/api/types.ts),
 // limited to what the platform UI shows.
 
@@ -286,6 +287,12 @@ export type Approval = {
      */
     summary_proposed?: string;
     summary_changed_at?: string;
+    /**
+     * platform_write of a run in the chat's notebook server (own code C-E4): the code of the run file by file, for
+     * the card instead of the text of the preview. Everything in it comes from the gateway (the call and the files
+     * the socket read), never from the agent's text; missing on older entries and on every other call.
+     */
+    notebook?: NotebookApprovalData;
 };
 
 /**

@@ -45,6 +45,18 @@ export type WatchJob = {
     started_at?: string;
     checked_at?: string;
     ended_at?: string;
+    /**
+     * The address the user can open for this job, as the gateway built it (own code C-E4): the kind `notebook_run`
+     * writes the run in the user's JupyterHub there, every other kind leaves the field empty. A card never builds
+     * such an address of its own; without it, it offers no link.
+     */
+    link?: string;
+    /**
+     * Who stopped this job (own code C-E4, the words the aborts of issue #120 use): `user` for the stop over
+     * `POST /api/chats/{id}/jobs/{job}/stop`, `agent` for a stop of the agent's own tools. Missing while nobody
+     * stopped it — a card then claims nothing about who did.
+     */
+    stopped_by?: 'user' | 'agent';
 };
 
 /** Job states of the gateway. */

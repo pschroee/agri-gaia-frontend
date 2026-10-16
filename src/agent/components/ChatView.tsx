@@ -327,7 +327,12 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                                     plans={plans}
                                 />
                             )}
-                            <ApprovalCard approvals={pending} onDecide={stream.decide} plans={plans} />
+                            <ApprovalCard
+                                approvals={pending}
+                                onDecide={stream.decide}
+                                plans={plans}
+                                layout={dense ? 'panel' : 'page'}
+                            />
                         </Box>
                     </Box>
                     {!stuck && (
