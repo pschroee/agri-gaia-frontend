@@ -246,7 +246,9 @@ export function rollbackText(line: RollbackLine): string {
     return `Rolled back ${fmtNum(line.deleted)} auto annotations · ${fmtNum(line.frames_emptied)} images emptied${kept}`;
 }
 
-const seg = (text: string, mono = false): Seg => ({ text, mono });
+// `mono` stays off the piece when it is false: the field is optional, and the cards' tests compare the pieces as they
+// are written down.
+const seg = (text: string, mono = false): Seg => (mono ? { text, mono } : { text });
 
 /** `CVAT task #{id}`: the one line a card of a run can build (the frame count is not stored). */
 export function taskLine(taskID: number): string {

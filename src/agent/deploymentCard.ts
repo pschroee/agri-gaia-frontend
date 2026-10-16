@@ -20,9 +20,12 @@ export type DeploymentTool = 'status' | 'start' | 'undeploy';
 
 /**
  * The names the tools answer to: the MCP name as the transcript shortens it (`platform.status`), the raw name pi calls
- * it (with the `mcp_` prefix) and the subcommand of the command line tool.
+ * it (with the `mcp_` prefix) and the subcommand of the command line tool. The tool's own name stands there too, because
+ * deploymentCardsIn hands deploymentCardOf the kind it read out of the step (`status`, `start`).
  */
 const TOOL_NAMES: Record<string, DeploymentTool> = {
+    status: 'status',
+    start: 'start',
     'platform.deployment_status': 'status',
     platform_deployment_status: 'status',
     mcp_platform_deployment_status: 'status',

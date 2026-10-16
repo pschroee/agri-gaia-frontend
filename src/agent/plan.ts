@@ -498,7 +498,8 @@ export function durationText(ms: number): string {
     const m = Math.floor((s % 3600) / 60);
     const rest = s % 60;
     if (h > 0) return m > 0 ? `${h} h ${m} min` : `${h} h`;
-    if (m > 0) return rest > 0 && m < 10 ? `${m} min ${rest} s` : `${m} min`;
+    // the seconds are always named when they are there; the design reads "Runtime 11 min 20 s" (A-E4).
+    if (m > 0) return rest > 0 ? `${m} min ${rest} s` : `${m} min`;
     return `${rest} s`;
 }
 

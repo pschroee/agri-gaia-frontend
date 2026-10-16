@@ -609,7 +609,9 @@ export type Seg = { text: string; mono?: boolean };
 /** The subtitle of a card: one or two lines, and whether the deployment runs on a simulated device. */
 export type Subtitle = { lines: Seg[][] };
 
-const seg = (text: string, mono = false): Seg => ({ text, mono });
+// `mono` stays off the piece when it is false: the field is optional, and the cards' tests compare the pieces as they
+// are written down.
+const seg = (text: string, mono = false): Seg => (mono ? { text, mono } : { text });
 const shortSha = (sha: string) => (sha.length > 8 ? `${sha.slice(0, 4)}…${sha.slice(-4)}` : sha);
 
 /** The figures of a check, read as the type its kind carries; undefined while no report stands. */
@@ -652,7 +654,8 @@ export function checkSubtitle(check: AssessCheck): Subtitle {
     const f = fig as TrainingFigures | undefined;
     const first: Seg[] = [];
     if (f?.model?.name) first.push(seg(`${f.model.name} (#${f.model.id})`, true));
-    else if (check.subject.startsWith('model:')) first.push(seg(`model #${check.subject.slice(6)}`));
+    // the id is a name like the ones above, so it stands in monospace
+    else if (check.subject.startsWith('model:')) first.push(seg(`model #${check.subject.slice(6)}`, true));
     const second: Seg[] = [];
     if (f?.eval_dataset) second.push(seg('on '), seg(`${f.eval_dataset.name} (#${f.eval_dataset.id})`, true));
     return { lines: second.length ? [first, second] : [first] };

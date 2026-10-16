@@ -334,7 +334,10 @@ export function runFacts(
     const secs = runSeconds(job, now);
     const duration = secs === undefined ? undefined : formatDuration(secs);
     const out: RunFact[] = [];
-    if (view === 'running' || view === 'starting') {
+    // While it starts the card carries no figures, only the sentence that the entry file starts as soon as the server is
+    // ready (design, notebook run: `facts: []` for `starting`).
+    if (view === 'starting') return out;
+    if (view === 'running') {
         if (started) out.push({ label: 'Started', value: started });
         if (data) out.push({ label: 'Time limit', value: `${data.limits.timeout_min} min` });
         const ds = datasetsValue(data?.datasets ?? []);
