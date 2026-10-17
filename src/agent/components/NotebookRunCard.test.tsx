@@ -181,6 +181,9 @@ describe('the result files', () => {
                         { resource: 'notebook_file', id: 'r1/outputs/model.onnx', label: 'outputs/model.onnx', size: 16357785 },
                         { resource: 'notebook_file', id: 'r1/outputs/metrics.json', label: 'outputs/metrics.json', size: 1126 },
                         { resource: 'notebook_file', id: 'r1/outputs/checkpoint.pt', label: 'outputs/checkpoint.pt', size: 0 },
+                        // the gateway lists the whole run directory: the entry and the markers are no results (gap L12)
+                        { resource: 'notebook_file', id: 'r1/helper.py', label: 'helper.py', size: 900 },
+                        { resource: 'notebook_file', id: 'r1/.agw/run.sh', label: '.agw/run.sh', size: 279 },
                     ],
                 })}
                 layout="page"
@@ -189,6 +192,8 @@ describe('the result files', () => {
         );
         expect(screen.getByText('15.6 MB')).toBeTruthy();
         expect(screen.getByText('1.1 KB')).toBeTruthy();
+        expect(screen.queryByText('helper.py')).toBeNull();
+        expect(screen.queryByText('.agw/run.sh')).toBeNull();
         // a size of 0 means the kind does not know one: the card then shows none instead of "0 B"
         expect(screen.queryByText('0 B')).toBeNull();
     });

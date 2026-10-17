@@ -40,6 +40,7 @@ import {
     formatTime,
     fullLog,
     isLive,
+    isResultFile,
     midTrunc,
     outputName,
     outputSize,
@@ -192,7 +193,9 @@ export default function NotebookRunCard({
     const facts = runFacts(job, data, now);
     const short = shortLog(view, job.log_tail);
     const full = fullLog(job.log_tail);
-    const outputs = (job.outputs ?? []).filter((o) => !o.resource || o.resource === 'notebook_file');
+    const outputs = (job.outputs ?? []).filter(
+        (o) => (!o.resource || o.resource === 'notebook_file') && isResultFile(o),
+    );
     const showResults = outputs.length > 0 || view === 'finished';
     const note =
         view === 'starting'

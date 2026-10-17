@@ -179,9 +179,24 @@ export const datasetsValue = (datasets: NotebookDataset[]): string =>
 
 /** A file of a run as a result: the gateway names the path below `outputs/` (its `Output.label`). */
 export const outputName = (o: { label?: string; id?: string }): string => {
-    const p = o.label || o.id || '';
+    const p = outputPath(o);
     return p.startsWith('outputs/') ? p.slice('outputs/'.length) : p;
 };
+
+/** The path of an output inside the run directory: `label`, else the part of `id` after the run id. */
+const outputPath = (o: { label?: string; id?: string }): string => {
+    if (o.label) return o.label;
+    const id = o.id ?? '';
+    const slash = id.indexOf('/');
+    return slash >= 0 ? id.slice(slash + 1) : id;
+};
+
+/**
+ * Whether a file of the run directory is a result the card lists: only `outputs/` (design, gap L12). The gateway's
+ * file list holds every file of the run, including the entry and the `.agw/` markers of the launcher, so the card
+ * filters instead of presenting those as results.
+ */
+export const isResultFile = (o: { label?: string; id?: string }): boolean => outputPath(o).startsWith('outputs/');
 
 /** The size a result file reports, when the kind knows it (gateway issue #92; 0 means it does not). */
 export const outputSize = (o: { size?: number }): number | undefined =>
@@ -458,4 +473,32 @@ export function notebookApprovalOf<T extends { tool_call_id?: string; notebook?:
 ): T | undefined {
     if (!job.tool_call_id) return undefined;
     return approvals?.find((a) => a.tool_call_id === job.tool_call_id && !!a.notebook);
+}
+
+/**
+ * The decided approvals of a run that never started a job (rejected or expired): no run card follows, but the
+ * one-line approval stands at its tool call all the same (design, gap L8). Approvals whose call has a job are left
+ * to the run's block, pending ones to the approval group; an approval of a call outside these steps is not shown.
+ */
+export function decidedWithoutJob<
+    A extends { id: string; state: string; tool_call_id?: string; notebook?: NotebookApprovalData },
+>(
+    approvals: A[] | undefined,
+    jobCalls: Iterable<string | undefined>,
+    stepIds: Iterable<string>,
+): { approval: A; data: NotebookApprovalData }[] {
+    const ran = new Set(jobCalls);
+    const steps = new Set(stepIds);
+    const out: { approval: A; data: NotebookApprovalData }[] = [];
+    for (const a of approvals ?? []) {
+        if (
+            a.notebook &&
+            a.state !== 'pending' &&
+            !!a.tool_call_id &&
+            steps.has(a.tool_call_id) &&
+            !ran.has(a.tool_call_id)
+        )
+            out.push({ approval: a, data: a.notebook });
+    }
+    return out;
 }
