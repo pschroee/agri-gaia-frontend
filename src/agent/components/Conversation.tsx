@@ -141,6 +141,19 @@ export type PlanEnv = {
 };
 
 /**
+ * The plan cards' environment (A-E4): what the view knows about the chat's approvals and jobs, plus the notify
+ * choice of this user. Without the two notify entries the checkbox of a proposed plan renders but its click has
+ * nowhere to go — the live finding of 17.10.2026.
+ */
+export function planEnvOf(
+    base: Omit<PlanEnv, 'onNotify' | 'notifyOptIn'>,
+    onNotify?: (planId: string, on: boolean) => void,
+    notifyOptIn?: (planId: string) => boolean,
+): PlanEnv {
+    return { ...base, onNotify, notifyOptIn };
+}
+
+/**
  * One answer of the agent: its parts in the order they happened, live as they arrive (issue #57, as before #54): text
  * as Markdown, each thinking block as one collapsed "Thinking · 3 s", each run of tool calls as a step list with its
  * controls, and right after it the file message with the files those calls sent (issue #62; nothing of them inside the
@@ -479,16 +492,31 @@ export default function Conversation({
     const setPlanNotify = agent?.setPlanNotify;
     const planNotifyOptIn = agent?.planNotifyOptIn;
     const planEnv: PlanEnv = useMemo(
-        () => ({
-            approvals: stream.approvals,
+        () =>
+            planEnvOf(
+                {
+                    approvals: stream.approvals,
+                    jobs,
+                    pending: pendingIds,
+                    layout: dense ? 'panel' : 'page',
+                    annotation: annotationItems,
+                    checks: checkItems,
+                    cvatBase: annotation.cvat_url,
+                },
+                setPlanNotify,
+                planNotifyOptIn,
+            ),
+        [
+            stream.approvals,
             jobs,
-            pending: pendingIds,
-            layout: dense ? 'panel' : 'page',
-            annotation: annotationItems,
-            checks: checkItems,
-            cvatBase: annotation.cvat_url,
-        }),
-        [stream.approvals, jobs, pendingIds, dense, annotationItems, checkItems, annotation.cvat_url],
+            pendingIds,
+            dense,
+            annotationItems,
+            checkItems,
+            annotation.cvat_url,
+            setPlanNotify,
+            planNotifyOptIn,
+        ],
     );
     const liveP = useMemo(() => liveParts(live), [live]);
     // Open state chosen per thinking block and per tool step (collapsed until opened); kept here so it survives the
