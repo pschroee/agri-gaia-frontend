@@ -966,8 +966,12 @@ export type AssessReport = {
 export type ImageReview = {
     done: boolean;
     model?: string;
+    /** How many misclassified validation images the review should look at (R4); 0 otherwise. */
+    of?: number;
     /** How many images the review gave a verdict for; 0 when no model looked at any. */
     checked?: number;
+    /** How many checked images look mislabelled (R4); it never changes the verdict of the check. */
+    flagged?: number;
     /** The share of the checked images the review complained about. */
     flagged_share?: number;
     /** Why no model looked at the images; empty when one did. */
@@ -977,12 +981,27 @@ export type ImageReview = {
 /** What the agent may do about a questionable result (`assess.Suggestion`). */
 export type SuggestionText = { id: string; text: string };
 
+/** One step of a running check (`assess.ProgressStep`, R4): what it has counted and how long it ran. */
+export type AssessProgressStep = {
+    name: string;
+    done: boolean;
+    /** How long the step has run so far. */
+    seconds?: number;
+    /** The counted part ("image 3 of 12"). */
+    k?: number;
+    m?: number;
+};
+
 /** What a running check reports about itself (`assess.Progress`). */
 export type AssessProgress = {
     /** The set it measures (holdout, validation, synthetic). */
     set?: string;
     images?: number;
     note?: string;
+    /** The model of the image review while it runs (R4); empty: no image review runs. */
+    review_model?: string;
+    /** The steps of the check card, in order (R4); empty: the card shows an indeterminate bar. */
+    steps?: AssessProgressStep[];
 };
 
 /** One line of GET /api/chats/{id}/assessments (`internal/api/assess.go`). */
