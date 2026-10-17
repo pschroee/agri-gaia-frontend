@@ -459,3 +459,31 @@ export function notebookApprovalOf<T extends { tool_call_id?: string; notebook?:
     if (!job.tool_call_id) return undefined;
     return approvals?.find((a) => a.tool_call_id === job.tool_call_id && !!a.notebook);
 }
+
+/**
+ * The decided approvals of a run that never started a job (rejected or expired): no run card follows, but the
+ * one-line approval stands at its tool call all the same (design, gap L8). Approvals whose call has a job are left
+ * to the run's block, pending ones to the approval group; an approval of a call outside these steps is not shown.
+ */
+export function decidedWithoutJob<
+    A extends { id: string; state: string; tool_call_id?: string; notebook?: NotebookApprovalData },
+>(
+    approvals: A[] | undefined,
+    jobCalls: Iterable<string | undefined>,
+    stepIds: Iterable<string>,
+): { approval: A; data: NotebookApprovalData }[] {
+    const ran = new Set(jobCalls);
+    const steps = new Set(stepIds);
+    const out: { approval: A; data: NotebookApprovalData }[] = [];
+    for (const a of approvals ?? []) {
+        if (
+            a.notebook &&
+            a.state !== 'pending' &&
+            !!a.tool_call_id &&
+            steps.has(a.tool_call_id) &&
+            !ran.has(a.tool_call_id)
+        )
+            out.push({ approval: a, data: a.notebook });
+    }
+    return out;
+}

@@ -15,6 +15,7 @@ import {
     codeLines,
     datasetLabel,
     datasetsValue,
+    decidedWithoutJob,
     entryTitle,
     exitCodeOf,
     expiryMinutes,
@@ -409,5 +410,20 @@ describe('finding a job and its approval', () => {
         expect(outputSize({ size: 16357785 })).toBe(16357785);
         expect(outputSize({ size: 0 })).toBeUndefined();
         expect(outputSize({})).toBeUndefined();
+    });
+
+    it('shows a decided approval without a run at its call, and only that one (gap L8)', () => {
+        const approvals = [
+            { id: 'rej', state: 'rejected', tool_call_id: 't2', notebook: data() },
+            { id: 'exp', state: 'expired', tool_call_id: 't3', notebook: data() },
+            { id: 'ran', state: 'approved', tool_call_id: 't1', notebook: data() },
+            { id: 'pending', state: 'pending', tool_call_id: 't4', notebook: data() },
+            { id: 'other', state: 'rejected', tool_call_id: 't9', notebook: data() },
+            { id: 'plain', state: 'rejected', tool_call_id: 't5' },
+        ];
+        const decided = decidedWithoutJob(approvals, ['t1'], ['t1', 't2', 't3', 't4', 't5']);
+        expect(decided.map((d) => d.approval.id)).toEqual(['rej', 'exp']);
+        expect(decided[0].data.entry).toBe('train.py');
+        expect(decidedWithoutJob(undefined, [], [])).toEqual([]);
     });
 });

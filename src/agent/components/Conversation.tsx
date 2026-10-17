@@ -27,7 +27,7 @@ import { placePlans, plansByPart, pendingIdsOf } from '../plan';
 import type { PlacedPlan, Plan } from '../plan';
 import { useJobs } from '../jobs';
 import type { WatchJob } from '../jobs';
-import { notebookApprovalOf, notebookJobsOf } from '../notebook';
+import { decidedWithoutJob, notebookApprovalOf, notebookJobsOf } from '../notebook';
 import { useAgentOptional } from '../AgentContext';
 import type { CommandNotice } from '../commands';
 import type { SubagentNavItem } from '../subagents';
@@ -218,25 +218,35 @@ export function AgentBlock({
     const subagents = controls?.subagents;
     // runs in the chat's notebook server (own code C-E4): the decided approval of the run as one line, right below it
     // the card of the run itself. Both hang on the tool call that started them (jobs.ts, `jobByToolCall`), so they
-    // stand where the call stands in the answer.
+    // stand where the call stands in the answer. A rejected or expired approval never starts a job, so it has no run
+    // card; its one line stands at the call all the same (design, gap L8).
     const notebookRuns = (steps: Step[]) => {
-        const runs = notebookJobsOf(
-            planEnv?.jobs ?? [],
+        const runs = notebookJobsOf(planEnv?.jobs ?? [], steps.map((s) => s.id));
+        const decided = decidedWithoutJob(
+            approvals,
+            runs.map((j) => j.tool_call_id),
             steps.map((s) => s.id),
         );
-        if (runs.length === 0) return null;
+        if (runs.length === 0 && decided.length === 0) return null;
         const layout = planEnv?.layout ?? (dense ? 'panel' : 'page');
-        return runs.map((job) => {
-            const approval = notebookApprovalOf(approvals, job);
-            return (
-                <Box key={job.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
-                    {approval?.notebook && approval.state !== 'pending' && (
-                        <NotebookRunApproval approval={approval} data={approval.notebook} layout={layout} />
-                    )}
-                    <NotebookRunCard job={job} layout={layout} data={approval?.notebook} />
-                </Box>
-            );
-        });
+        return (
+            <>
+                {runs.map((job) => {
+                    const approval = notebookApprovalOf(approvals, job);
+                    return (
+                        <Box key={job.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+                            {approval?.notebook && approval.state !== 'pending' && (
+                                <NotebookRunApproval approval={approval} data={approval.notebook} layout={layout} />
+                            )}
+                            <NotebookRunCard job={job} layout={layout} data={approval?.notebook} />
+                        </Box>
+                    );
+                })}
+                {decided.map((d) => (
+                    <NotebookRunApproval key={d.approval.id} approval={d.approval} data={d.data} layout={layout} />
+                ))}
+            </>
+        );
     };
     const runs = useMemo(() => {
         if (!subagents) return [];
