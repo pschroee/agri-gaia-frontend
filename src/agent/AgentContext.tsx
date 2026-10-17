@@ -18,7 +18,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { AgentApiError, agentApi, approvalEventsUrl, silentLogin } from './api';
 import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './approvalFeed';
 import { AGENT_ROUTE } from './expand';
-import { showNotification, shouldNotify } from './notify';
+import { browserNotify, effectiveOptIn, isOn, permissionOf, showNotification, shouldNotify } from './notify';
 import { onAgentPage } from './panelCarry';
 import {
     alertKey,
@@ -163,6 +163,33 @@ function store(key: string, value: string | undefined) {
     }
 }
 
+/** The per-plan choice of the browser notification (A-E4, D4.4); absent means "as the permission says". */
+const NOTIFY_KEY = 'agentPlanNotify';
+
+/** The stored choices; an unreadable entry is ignored instead of breaking the page. */
+function loadNotifyPlans(): Record<string, boolean> {
+    try {
+        const raw = localStorage.getItem(NOTIFY_KEY);
+        const parsed = raw ? (JSON.parse(raw) as unknown) : undefined;
+        if (!parsed || typeof parsed !== 'object') return {};
+        const out: Record<string, boolean> = {};
+        for (const [planId, on] of Object.entries(parsed as Record<string, unknown>)) {
+            if (typeof on === 'boolean') out[planId] = on;
+        }
+        return out;
+    } catch {
+        return {};
+    }
+}
+
+function storeNotifyPlans(choices: Record<string, boolean>) {
+    try {
+        localStorage.setItem(NOTIFY_KEY, JSON.stringify(choices));
+    } catch {
+        // storage unavailable (private window): the choice then holds for this tab only
+    }
+}
+
 /**
  * Session at the agent gateway, the user's chats and the selected chat, shared by the context panel and
  * the agent page. The session is checked once; on 401 a silent login runs, then the check is repeated.
@@ -197,8 +224,9 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [pending, dispatchPending] = useReducer(pendingReducer, emptyPending);
     const [approvalsLive, setApprovalsLive] = useState(false);
     const [planAlerts, setPlanAlerts] = useState<QueuedAlert[]>([]);
-    // the browser notification is per plan (E4, D4.4) and lives in this tab; the gateway stores no field for it
-    const [notifyPlans, setNotifyPlans] = useState<ReadonlySet<string>>(() => new Set<string>());
+    // The browser notification is per plan (E4, D4.4). The gateway stores no field for it, so the user's choice
+    // lives in this browser: true/false per plan, absent means "as the browser permission says" (notify.ts).
+    const [notifyPlans, setNotifyPlans] = useState<Record<string, boolean>>(() => loadNotifyPlans());
     const notifyPlansRef = useRef(notifyPlans);
     notifyPlansRef.current = notifyPlans;
     const navigate = useNavigate();
@@ -275,9 +303,12 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             onAlert: (a) => {
                 setPlanAlerts((q) => pushAlert(q, a));
                 // a system notification only with the user's permission for this plan and only while the tab
-                // is hidden; the in-app snackbar carries everything else (D4.4)
+                // is hidden; the in-app snackbar carries everything else (D4.4). Without a stored choice the
+                // browser's permission decides — a permission granted earlier notifies by itself.
                 const hidden = typeof document !== 'undefined' && document.hidden;
-                if (shouldNotify(a, hidden, notifyPlansRef.current.has(a.plan_id))) showNotification(a);
+                const permission = permissionOf(browserNotify());
+                const opted = effectiveOptIn(notifyPlansRef.current[a.plan_id], permission) && isOn(permission);
+                if (shouldNotify(a, hidden, opted)) showNotification(a);
             },
             isUnauthorized: (e) => e instanceof AgentApiError && e.status === 401,
             onUnauthorized: () => setStatus('signed-out'),
@@ -475,17 +506,19 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     );
 
     const setPlanNotify = useCallback(
-        (planId: string, on: boolean) =>
-            setNotifyPlans((s) => {
-                const next = new Set(s);
-                if (on) next.add(planId);
-                else next.delete(planId);
-                return next;
-            }),
+        (planId: string, on: boolean) => setNotifyPlans((m) => ({ ...m, [planId]: on })),
         [],
     );
 
-    const planNotifyOptIn = useCallback((planId: string) => notifyPlans.has(planId), [notifyPlans]);
+    const planNotifyOptIn = useCallback(
+        (planId: string) => effectiveOptIn(notifyPlans[planId], permissionOf(browserNotify())),
+        [notifyPlans],
+    );
+
+    // the choice survives a reload of the page; the browser permission itself is the browser's business
+    useEffect(() => {
+        storeNotifyPlans(notifyPlans);
+    }, [notifyPlans]);
 
     // a plan that needs input keeps its alert until the user opened the chat or closed it (D4.4)
     const planNeedsInput = useMemo(() => planAlerts.filter(alertSticky).length, [planAlerts]);

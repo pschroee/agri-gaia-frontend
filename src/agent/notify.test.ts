@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
     canAsk,
+    defaultOptIn,
+    effectiveOptIn,
     isOn,
     notificationBody,
     notifyCheckbox,
@@ -95,6 +97,20 @@ describe('shouldNotify (D4.4)', () => {
     });
 });
 
+describe('the choice of a plan (D4.4)', () => {
+    it('without a stored choice the browser permission decides: a granted one means on', () => {
+        expect(defaultOptIn('granted')).toBe(true);
+        for (const p of ['default', 'denied', 'unsupported'] as const) expect(defaultOptIn(p)).toBe(false);
+        expect(effectiveOptIn(undefined, 'granted')).toBe(true);
+        expect(effectiveOptIn(undefined, 'default')).toBe(false);
+    });
+
+    it('a stored choice wins over the permission', () => {
+        expect(effectiveOptIn(false, 'granted')).toBe(false);
+        expect(effectiveOptIn(true, 'default')).toBe(true);
+    });
+});
+
 describe('canAsk and isOn', () => {
     it('the browser is asked while it has not decided and notifies once it allowed it', () => {
         expect(canAsk('default')).toBe(true);
@@ -140,10 +156,14 @@ describe('notifyCheckbox (L26)', () => {
         expect(notifyCheckbox('default', true).checked).toBe(true);
     });
 
-    it('is on and locked once the browser allowed it', () => {
-        const s = notifyCheckbox('granted', false);
-        expect(s).toMatchObject({ checked: true, disabled: true, blocked: false });
-        expect(s.help).toContain('On · completes, fails, needs input');
+    it('is on but stays switchable once the browser allowed it', () => {
+        const on = notifyCheckbox('granted', true);
+        expect(on).toMatchObject({ checked: true, disabled: false, blocked: false });
+        expect(on.help).toContain('On · completes, fails, needs input');
+        // one plan kept quiet: the box is off and offers the normal hint again
+        const off = notifyCheckbox('granted', false);
+        expect(off).toMatchObject({ checked: false, disabled: false, blocked: false });
+        expect(off.help).not.toContain('On ·');
     });
 
     it('is locked with the explanation once the browser blocked it', () => {

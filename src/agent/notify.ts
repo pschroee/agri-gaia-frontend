@@ -47,6 +47,21 @@ export const canAsk = (permission: NotifyPermission): boolean => permission === 
 export const isOn = (permission: NotifyPermission): boolean => permission === 'granted';
 
 /**
+ * What a plan does without a stored choice of the user (D4.4): it notifies as soon as the browser allows it.
+ * Without this default a permission granted earlier would leave the checkbox saying "On" while nothing was ever
+ * sent — the live finding of 17.10.2026.
+ */
+export const defaultOptIn = (permission: NotifyPermission): boolean => permission === 'granted';
+
+/**
+ * The choice that counts for one plan: the user's stored answer for that plan, else the default above. Stored
+ * `false` keeps the plan quiet although the browser allows notifications; stored `true` cannot override a
+ * permission the browser refused (showNotification checks the permission itself).
+ */
+export const effectiveOptIn = (stored: boolean | undefined, permission: NotifyPermission): boolean =>
+    stored ?? defaultOptIn(permission);
+
+/**
  * Asks the browser for the permission, but only while it has not decided (a decided permission cannot be asked
  * for again, and asking would be a no-op the user does not see). Returns the state afterwards.
  */
@@ -101,18 +116,16 @@ export type NotifyCheckboxState = {
 };
 
 /**
- * The checkbox in a proposed plan (design, L26): unchecked while the browser has not decided, on with a green
- * note once it allowed it, and locked with an explanation once it blocked it.
+ * The checkbox in a proposed plan (design, L26): unchecked while the browser has not decided, on with the "On"
+ * note once it allowed it — and still switchable, so that the user can keep one plan quiet. Only a permission
+ * the browser refused locks it, with the explanation of what to do.
  */
 export function notifyCheckbox(permission: NotifyPermission, optedIn: boolean): NotifyCheckboxState {
-    switch (permission) {
-        case 'granted':
-            return { checked: true, disabled: true, help: NOTIFY_ON_TEXT, blocked: false };
-        case 'denied':
-            return { checked: false, disabled: true, help: NOTIFY_BLOCKED_TEXT, blocked: true };
-        case 'unsupported':
-            return { checked: false, disabled: true, help: NOTIFY_BLOCKED_TEXT, blocked: true };
-        default:
-            return { checked: optedIn, disabled: false, help: NOTIFY_HINT, blocked: false };
+    if (permission === 'denied' || permission === 'unsupported') {
+        return { checked: false, disabled: true, help: NOTIFY_BLOCKED_TEXT, blocked: true };
     }
+    if (permission === 'granted') {
+        return { checked: optedIn, disabled: false, help: optedIn ? NOTIFY_ON_TEXT : NOTIFY_HINT, blocked: false };
+    }
+    return { checked: optedIn, disabled: false, help: NOTIFY_HINT, blocked: false };
 }
