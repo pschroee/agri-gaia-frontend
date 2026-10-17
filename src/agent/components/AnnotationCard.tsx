@@ -384,21 +384,32 @@ function SectionView({ section, layout, title }: { section: Section; layout: 'pa
             );
         case 'sample':
             return (
-                <Stack direction="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap={0.25}>
-                    {section.icon === 'send' ? (
-                        <SendOutlinedIcon sx={{ fontSize: 20, color: 'action.active' }} />
-                    ) : (
-                        <PhotoLibraryOutlinedIcon sx={{ fontSize: 20, color: 'action.active' }} />
-                    )}
-                    <Typography variant="subtitle1" sx={{ fontSize: 14, fontWeight: 500 }}>
-                        {section.text}
-                    </Typography>
-                    {section.sub && (
-                        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                            {section.sub}
+                <Box>
+                    <Stack direction="row" flexWrap="wrap" alignItems="center" columnGap={1} rowGap={0.25}>
+                        {section.icon === 'send' ? (
+                            <SendOutlinedIcon sx={{ fontSize: 20, color: 'action.active' }} />
+                        ) : (
+                            <PhotoLibraryOutlinedIcon sx={{ fontSize: 20, color: 'action.active' }} />
+                        )}
+                        <Typography variant="subtitle1" sx={{ fontSize: 14, fontWeight: 500 }}>
+                            {section.text}
                         </Typography>
-                    )}
-                </Stack>
+                        {section.sub && (
+                            <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                {section.sub}
+                            </Typography>
+                        )}
+                    </Stack>
+                    {section.captions?.map((caption) => (
+                        <Typography
+                            key={caption}
+                            variant="caption"
+                            sx={{ display: 'block', color: 'text.secondary', mt: 0.25 }}
+                        >
+                            {caption}
+                        </Typography>
+                    ))}
+                </Box>
             );
         case 'mode': {
             const line = (

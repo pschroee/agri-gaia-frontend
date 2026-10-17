@@ -126,6 +126,30 @@ const deployment = (): AssessCheck => ({
     },
 });
 
+/** A training check (R4): interim, so the image review may look at misclassified validation images. */
+const training = (over: Partial<AssessCheck> = {}): AssessCheck => ({
+    check_id: 'chk-t1',
+    kind: 'training_model',
+    subject: 'model:7',
+    final: false,
+    state: 'finished',
+    created_at: '2026-10-16T11:00:00Z',
+    started_at: '2026-10-16T11:00:00Z',
+    ended_at: '2026-10-16T11:01:05Z',
+    report: {
+        kind: 'training_model',
+        verdict: 'questionable',
+        final: false,
+        set: 'validation',
+        measured_images: 12,
+        image_review: { done: true, model: 'deepseek-flash', of: 12, checked: 4, flagged: 2 },
+        reasons: ['not better than the majority baseline (0.55 vs 0.50, p = 0.42)'],
+        header: 'Result: questionable (validation images, interim, image review with deepseek-flash)',
+        note: 'validation split held back from the weights',
+    },
+    ...over,
+});
+
 describe('AnnotationCard', () => {
     it('shows the head of a running run and nothing to press', () => {
         const { container } = render(
@@ -246,5 +270,95 @@ describe('AnnotationCard', () => {
         );
         expect(screen.getByTestId('agent-error-block-text').textContent).toBe('CVAT returned 502 Bad Gateway');
         expect(screen.getByTestId('agent-annotation-card').getAttribute('data-state')).toBe('failed');
+    });
+
+    it('shows the image review of a finished check', () => {
+        const { container } = render(<AnnotationCard view={checkCard(training(), undefined, NOW)} layout="panel" />);
+        expect(container.textContent).toContain('Image review: 4 of 12 misclassified validation images checked, 2 flagged');
+        expect(container.textContent).toContain('Statistics and image review (deepseek-flash)');
+        expect(container.textContent).toContain('Measured on 12 validation images');
+        // the gateway's note stays under the sample
+        expect(container.textContent).toContain('validation split held back from the weights');
+    });
+
+    it('names the reason when no image review was allowed', async () => {
+        const view = training();
+        const { container } = render(
+            <AnnotationCard
+                view={checkCard(
+                    {
+                        ...view,
+                        report: { ...view.report!, image_review: { done: false, reason: 'the dataset name is not allowed' } },
+                    },
+                    undefined,
+                    NOW,
+                )}
+                layout="panel"
+            />,
+        );
+        expect(container.textContent).not.toContain('Image review:');
+        expect(container.textContent).toContain('Statistics only, no image review');
+        fireEvent.mouseOver(screen.getByText('Statistics only, no image review'));
+        expect((await screen.findByRole('tooltip')).textContent).toBe('the dataset name is not allowed');
+    });
+
+    it('leaves the image review out when none ran', () => {
+        // a hold-out check never shows images to a model; its report carries done:false and no figures
+        const view = training();
+        const { container } = render(
+            <AnnotationCard
+                view={checkCard(
+                    {
+                        ...view,
+                        final: true,
+                        report: {
+                            ...view.report!,
+                            final: true,
+                            image_review: { done: false, reason: 'the held-out images are never shown to a model' },
+                        },
+                    },
+                    undefined,
+                    NOW,
+                )}
+                layout="panel"
+            />,
+        );
+        expect(container.textContent).not.toContain('Image review:');
+        expect(container.textContent).toContain('Statistics only, no image review');
+    });
+
+    it('shows the steps of the image review while the check runs', () => {
+        const { container } = render(
+            <AnnotationCard
+                view={checkCard(
+                    {
+                        ...training(),
+                        state: 'running',
+                        report: null,
+                        ended_at: undefined,
+                        progress: {
+                            set: 'validation',
+                            images: 12,
+                            review_model: 'deepseek-flash',
+                            steps: [
+                                { name: 'statistics', done: true, seconds: 41, k: 12, m: 12 },
+                                { name: 'image_review', done: false, k: 5, m: 12 },
+                            ],
+                        },
+                    },
+                    undefined,
+                    NOW,
+                )}
+                layout="panel"
+            />,
+        );
+        expect(container.textContent).toContain('Measured on 12 validation images');
+        expect(container.textContent).toContain('Statistics and image review (deepseek-flash)');
+        expect(container.textContent).toContain('Statistics · 12 validation images');
+        expect(container.textContent).toContain('0:41');
+        expect(container.textContent).toContain('Image review (deepseek-flash)');
+        expect(container.textContent).toContain('image 5 of 12');
+        const bar = screen.getByRole('progressbar', { name: 'Model check · Trained model progress' });
+        expect(bar.getAttribute('aria-valuenow')).toBe('42');
     });
 });

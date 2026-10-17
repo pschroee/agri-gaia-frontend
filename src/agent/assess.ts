@@ -21,6 +21,8 @@ import type { Step } from './transcript';
 import type {
     AssessCheck,
     AssessKind,
+    AssessProgress,
+    AssessProgressStep,
     AssessVerdict,
     BaselineFigures,
     BasicFigures,
@@ -215,15 +217,14 @@ export function sampleText(set: string | undefined, n: number): string {
 }
 
 /**
- * The line under the sample of a check card: while the check compares rounds it says so, and otherwise the
- * gateway's own note stands there verbatim (D6) — the card never formulates anything about the measurement.
+ * The lines under the sample of a check card: while the check compares rounds it says so, and the gateway's own
+ * note follows verbatim (D6) — the card never formulates anything about the measurement.
  */
-export function checkSampleCaption(report: AssessReport): string | undefined {
-    if (report.set === 'validation') {
-        const interim = 'interim – the final check uses other images';
-        return report.note ? `${interim} · ${report.note}` : interim;
-    }
-    return report.note || undefined;
+export function checkSampleCaptions(report: AssessReport): string[] {
+    const out: string[] = [];
+    if (report.set === 'validation') out.push('interim – the final check uses other images');
+    if (report.note) out.push(report.note);
+    return out;
 }
 
 /** The mode line of a check: whether a model looked at the pictures, and the tooltip of a missing review. */
@@ -236,9 +237,9 @@ export function modeLine(report: AssessReport): ModeLine {
 }
 
 /**
- * The image review line next to the sample (D9): the review looks at the images of the source, never at the
- * hold-out set the verdict rests on. `checked` and `flagged_share` come with R4 (issue #117); without them the
- * line is left out rather than guessed.
+ * The image review line under the sample of a pre-annotation check (D9): the review looks at the images of the
+ * source, never at the hold-out set the verdict rests on. `checked` and `flagged_share` come with V3d (#111);
+ * without them the line is left out rather than guessed.
  */
 export function imageReviewLine(report: AssessReport): string | undefined {
     const r = report.image_review;
@@ -247,6 +248,18 @@ export function imageReviewLine(report: AssessReport): string | undefined {
         ? `, ${fmtNum(Math.round(r.checked * r.flagged_share))} flagged`
         : '';
     return `Image review: ${fmtNum(r.checked)} filled images checked${flagged}`;
+}
+
+/**
+ * The image review line of a result check (R4, #117): the model looked at misclassified validation images. The
+ * card leaves the line out when no review ran (`done: false`) or the gateway named no figures — "0 of 0" would
+ * claim a review that never happened.
+ */
+export function checkImageReviewLine(report: AssessReport): string | undefined {
+    const r = report.image_review;
+    if (!r?.done || !r.checked || !r.of) return undefined;
+    const flagged = r.flagged ? `, ${fmtNum(r.flagged)} flagged` : '';
+    return `Image review: ${fmtNum(r.checked)} of ${fmtNum(r.of)} misclassified validation images checked${flagged}`;
 }
 
 /**
@@ -722,7 +735,7 @@ export type ImageRow = {
 /** One section of a card, in the order the design fixes. */
 export type Section =
     | { kind: 'verdict'; view: VerdictView; header: string }
-    | { kind: 'sample'; text: string; sub?: string; icon?: 'image' | 'send' }
+    | { kind: 'sample'; text: string; sub?: string; captions?: string[]; icon?: 'image' | 'send' }
     | { kind: 'mode'; text: string; icon: 'stats' | 'image'; reason?: string }
     | { kind: 'basic'; items: BasicCheck[] }
     | { kind: 'progress'; percent: number | null; left: string; right: string }
@@ -862,13 +875,17 @@ export function checkCard(check: AssessCheck, watch: WatchJob | undefined, now: 
 
     if (report && verdict && verdict.verdict !== 'not_measured') {
         // the sample size is the most prominent figure of the card (W5); the caption is the gateway's note (D6)
-        if (report.measured_images)
+        if (report.measured_images) {
+            const captions = checkSampleCaptions(report);
             sections.push({
                 kind: 'sample',
                 text: sampleText(report.set, report.measured_images),
-                sub: checkSampleCaption(report),
+                // the image review stands next to the sample, the gateway's captions below it (D9, D6)
+                sub: deployment ? undefined : checkImageReviewLine(report),
+                captions: captions.length ? captions : undefined,
                 icon: deployment ? 'send' : 'image',
             });
+        }
         // a deployment check needs no real image and never sends one (R3); the other kinds say what they did
         const mode = modeLine(report);
         sections.push(
@@ -879,12 +896,29 @@ export function checkCard(check: AssessCheck, watch: WatchJob | undefined, now: 
     }
 
     if (running) {
+        // while a check runs the gateway reports the sample and the steps (D7, D8); without progress the
+        // card shows only the bar and the watcher's line
+        const progress = check.progress;
+        if (progress && !deployment) {
+            if (progress.set && progress.images)
+                sections.push({ kind: 'sample', text: sampleText(progress.set, progress.images), icon: 'image' });
+            sections.push(
+                progress.review_model
+                    ? { kind: 'mode', text: `Statistics and image review (${progress.review_model})`, icon: 'image' }
+                    : { kind: 'mode', text: 'Statistics only, no image review', icon: 'stats' },
+            );
+            const steps = progressStepRows(progress);
+            if (steps.length) sections.push({ kind: 'steps', items: steps });
+        }
         // the state of a running check comes from the watcher; the card shows a bar and what the check said
+        const reviewPercent = reviewStepPercent(progress);
         const left = deployment
             ? 'Sending test requests …'
-            : check.progress?.note ?? (state === 'queued' ? 'Waiting for a free check container' : '');
+            : (reviewPercent !== null ? progressReviewText(progress) : undefined) ??
+              check.progress?.note ??
+              (state === 'queued' ? 'Waiting for a free check container' : '');
         const right = state === 'queued' ? `queued ${fmtDuration(seconds ?? 0)}` : `${fmtDuration(seconds ?? 0)} elapsed`;
-        sections.push({ kind: 'progress', percent: jobPercent(watch), left, right });
+        sections.push({ kind: 'progress', percent: reviewPercent ?? jobPercent(watch), left, right });
     }
 
     if (verdict && verdict.verdict !== 'not_measured') {
@@ -954,6 +988,69 @@ export function checkCard(check: AssessCheck, watch: WatchJob | undefined, now: 
 /** The percent the watcher published for a check, while it runs. */
 function jobPercent(watch: WatchJob | undefined): number | null {
     return typeof watch?.progress === 'number' ? Math.round(watch.progress) : null;
+}
+
+/** The image review step of a running check, if the gateway reports one with a counted set (R4, D8). */
+function reviewStep(progress: AssessProgress | undefined): AssessProgressStep | undefined {
+    return progress?.steps?.find((s) => s.name === 'image_review' && (s.m ?? 0) > 0);
+}
+
+/** The percent of the image review step; null while it has no counted set (the bar stays indeterminate). */
+function reviewStepPercent(progress: AssessProgress | undefined): number | null {
+    const step = reviewStep(progress);
+    if (!step) return null;
+    return Math.min(100, Math.max(0, Math.round(((step.k ?? 0) / (step.m ?? 1)) * 100)));
+}
+
+/** The line left of the progress bar while the image review counts its images (design T-03). */
+export function progressReviewText(progress: AssessProgress | undefined): string | undefined {
+    const step = reviewStep(progress);
+    if (!step) return undefined;
+    return `image ${fmtNum(step.k ?? 0)} of ${fmtNum(step.m ?? 0)}`;
+}
+
+/** The word the set of a check is named with in a step line ("12 validation images"). */
+function setImagesWord(set: string | undefined): string {
+    switch (set) {
+        case 'validation':
+            return 'validation images';
+        case 'holdout':
+            return 'held-out images';
+        case 'synthetic':
+            return 'test requests';
+        default:
+            return 'images';
+    }
+}
+
+/**
+ * The steps of a running check as the card shows them (design T-03): the statistics step names the counted set
+ * and its duration, the image review step the model and "image k of m". Only the gateway's own steps stand here;
+ * the card invents none.
+ */
+export function progressStepRows(progress: AssessProgress): StepRow[] {
+    return (progress.steps ?? []).map((s) => {
+        const right = s.seconds !== undefined && s.seconds > 0 ? fmtDuration(Math.round(s.seconds)) : undefined;
+        if (s.name === 'image_review') {
+            const model = progress.review_model ? ` (${progress.review_model})` : '';
+            return {
+                text: `Image review${model}`,
+                right: s.m ? `image ${fmtNum(s.k ?? 0)} of ${fmtNum(s.m)}` : right,
+                done: s.done,
+                running: !s.done,
+            };
+        }
+        if (s.name === 'statistics') {
+            const counted = s.m ?? progress.images;
+            return {
+                text: counted ? `Statistics · ${fmtNum(counted)} ${setImagesWord(progress.set)}` : 'Statistics',
+                right,
+                done: s.done,
+                running: !s.done,
+            };
+        }
+        return { text: s.name, right, done: s.done, running: !s.done };
+    });
 }
 
 /** The word a card names a check's kind with (design *expired*). */

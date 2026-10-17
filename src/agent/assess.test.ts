@@ -12,6 +12,7 @@ import {
     checkCard,
     checkCardState,
     checkIdOfStep,
+    checkImageReviewLine,
     checkSubtitle,
     classRows,
     compareRows,
@@ -28,6 +29,8 @@ import {
     modelCheckText,
     platformFigure,
     preprocessText,
+    progressReviewText,
+    progressStepRows,
     sampleText,
     verdictView,
     visibleReasons,
@@ -182,6 +185,30 @@ describe('the shell of a report', () => {
         expect(imageReviewLine({ ...report, image_review: { done: true, checked: 12, flagged_share: 0.25 } })).toBe(
             'Image review: 12 filled images checked, 3 flagged',
         );
+    });
+
+    it('leaves the image review line of a result check out when no review ran', () => {
+        const report = trainingCheck().report!;
+        // done: false carries a reason for the mode line, never a line of its own — no "0 of 0"
+        expect(checkImageReviewLine(report)).toBeUndefined();
+        expect(
+            checkImageReviewLine({ ...report, image_review: { done: false, reason: 'the dataset name is not allowed' } }),
+        ).toBeUndefined();
+        // a report without the figures of the review is not guessed either
+        expect(checkImageReviewLine({ ...report, image_review: { done: true, checked: 4 } })).toBeUndefined();
+    });
+
+    it('names what the image review of a result check found', () => {
+        const report = trainingCheck().report!;
+        expect(
+            checkImageReviewLine({
+                ...report,
+                image_review: { done: true, model: 'deepseek-flash', of: 12, checked: 4, flagged: 2 },
+            }),
+        ).toBe('Image review: 4 of 12 misclassified validation images checked, 2 flagged');
+        expect(
+            checkImageReviewLine({ ...report, image_review: { done: true, model: 'deepseek-flash', of: 4, checked: 4 } }),
+        ).toBe('Image review: 4 of 4 misclassified validation images checked');
     });
 });
 
@@ -523,5 +550,77 @@ describe('the card of a check', () => {
         expect(progress.percent).toBe(21);
         expect(progress.left).toBe('images 5 of 24');
         expect(progress.right).toBe('0:41 elapsed');
+    });
+
+    it('shows the image review of a finished check next to the sample', () => {
+        const base = trainingCheck();
+        const view = checkCard(
+            {
+                ...base,
+                report: {
+                    ...base.report!,
+                    image_review: { done: true, model: 'deepseek-flash', of: 12, checked: 4, flagged: 2 },
+                },
+            },
+            undefined,
+            Date.parse('2026-10-16T12:00:00Z'),
+        );
+        expect(section(view, 'sample')?.sub).toBe(
+            'Image review: 4 of 12 misclassified validation images checked, 2 flagged',
+        );
+        expect(section(view, 'mode')).toMatchObject({ text: 'Statistics and image review (deepseek-flash)', icon: 'image' });
+    });
+
+    it('looks as before when no image review ran', () => {
+        const base = trainingCheck();
+        const view = checkCard(base, undefined, Date.parse('2026-10-16T12:00:00Z'));
+        expect(section(view, 'sample')?.sub).toBeUndefined();
+        expect(section(view, 'sample')?.captions?.[0]).toContain('Images of dataset mnist-check-120');
+        expect(section(view, 'mode')).toMatchObject({ text: 'Statistics only, no image review', icon: 'stats' });
+        expect(section(view, 'mode')?.reason).toBe('no vision model in this chat');
+    });
+
+    it('shows the steps and the model of the image review while a check runs', () => {
+        const view = checkCard(
+            check({
+                state: 'running',
+                started_at: '2026-10-16T10:00:00Z',
+                progress: {
+                    set: 'validation',
+                    images: 12,
+                    review_model: 'deepseek-flash',
+                    steps: [
+                        { name: 'statistics', done: true, seconds: 41, k: 12, m: 12 },
+                        { name: 'image_review', done: false, k: 5, m: 12 },
+                    ],
+                },
+            }),
+            watch(),
+            Date.parse('2026-10-16T10:02:01Z'),
+        );
+        expect(view.status).toBe('running · 2:01');
+        expect(section(view, 'sample')?.text).toBe('Measured on 12 validation images');
+        expect(section(view, 'mode')).toMatchObject({ text: 'Statistics and image review (deepseek-flash)', icon: 'image' });
+        const steps = section(view, 'steps')!.items;
+        expect(steps[0]).toMatchObject({ text: 'Statistics · 12 validation images', right: '0:41', done: true });
+        expect(steps[1]).toMatchObject({ text: 'Image review (deepseek-flash)', right: 'image 5 of 12', running: true });
+        const progress = section(view, 'progress')!;
+        expect(progress.percent).toBe(42);
+        expect(progress.left).toBe('image 5 of 12');
+        expect(progress.right).toBe('2:01 elapsed');
+    });
+
+    it('shows only the statistics step while no image review is allowed', () => {
+        const progress = { set: 'validation', images: 12, steps: [{ name: 'statistics', done: true, seconds: 41, k: 12, m: 12 }] };
+        expect(progressStepRows(progress)).toEqual([{ text: 'Statistics · 12 validation images', right: '0:41', done: true, running: false }]);
+        expect(progressReviewText(progress)).toBeUndefined();
+        const view = checkCard(
+            check({ state: 'running', started_at: '2026-10-16T10:00:00Z', progress }),
+            watch(),
+            Date.parse('2026-10-16T10:00:41Z'),
+        );
+        expect(section(view, 'mode')).toMatchObject({ text: 'Statistics only, no image review', icon: 'stats' });
+        expect(section(view, 'progress')?.percent).toBeNull();
+        expect(section(view, 'progress')?.left).toBe('');
     });
 });
