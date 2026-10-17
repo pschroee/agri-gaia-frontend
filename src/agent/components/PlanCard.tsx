@@ -67,7 +67,7 @@ import ViewInArOutlinedIcon from '@mui/icons-material/ViewInArOutlined';
 import { agentApi } from '../api';
 import { jobOfStep } from '../jobs';
 import type { WatchJob } from '../jobs';
-import { notifyCheckbox, permissionOf, browserNotify, requestPermission } from '../notify';
+import { defaultOptIn, notifyCheckbox, permissionOf, browserNotify, requestPermission } from '../notify';
 import type { NotifyPermission } from '../notify';
 import {
     agentNote,
@@ -1010,12 +1010,19 @@ function RightsBlock({ plan }: { plan: Plan }) {
 }
 
 /** The checkbox that lets this plan notify in the browser (design, D4.4, L26). */
-function NotifyCheckbox({ onOptIn }: { onOptIn: (on: boolean) => void }) {
+function NotifyCheckbox({
+    optedIn,
+    onOptIn,
+}: {
+    /** The choice that counts for this plan (stored choice, else the browser permission); undefined without one. */
+    optedIn?: boolean;
+    onOptIn: (on: boolean) => void;
+}) {
     const [permission, setPermission] = useState<NotifyPermission>(() => permissionOf(browserNotify()));
-    const [asked, setAsked] = useState(false);
     // the browser may only be asked on a gesture, and only while it has not decided yet (D4.4)
     const ask = async () => setPermission(await requestPermission());
-    const state = notifyCheckbox(permission, asked);
+    // a permission the browser granted earlier counts as "on": the checkbox must not promise what it never does
+    const state = notifyCheckbox(permission, optedIn ?? defaultOptIn(permission));
     return (
         <Box sx={{ mt: 1.25 }}>
             <FormControlLabel
@@ -1025,7 +1032,6 @@ function NotifyCheckbox({ onOptIn }: { onOptIn: (on: boolean) => void }) {
                         checked={state.checked}
                         disabled={state.disabled}
                         onChange={(_, checked) => {
-                            setAsked(checked);
                             onOptIn(checked);
                             if (checked) void ask();
                         }}
@@ -1034,12 +1040,14 @@ function NotifyCheckbox({ onOptIn }: { onOptIn: (on: boolean) => void }) {
                 }
                 label={<Typography sx={{ fontSize: 12.5 }}>{NOTIFY_LABEL}</Typography>}
             />
-            {!state.disabled ? (
-                <FormHelperText sx={{ mt: 0 }}>{state.help}</FormHelperText>
-            ) : (
+            {state.blocked ? (
                 <Alert severity="info" sx={{ mt: 0.5, fontSize: 12 }} data-testid="agent-plan-notify-state">
                     {state.help}
                 </Alert>
+            ) : (
+                <FormHelperText sx={{ mt: 0 }} data-testid="agent-plan-notify-state">
+                    {state.help}
+                </FormHelperText>
             )}
         </Box>
     );
@@ -1112,6 +1120,7 @@ export default function PlanCard({
     pending,
     onControl,
     onNotify,
+    notifyOptIn,
 }: {
     plan: Plan;
     approval?: Approval;
@@ -1131,6 +1140,8 @@ export default function PlanCard({
     onControl?: (action: 'pause' | 'resume' | 'cancel' | 'stop', step?: number) => Promise<void>;
     /** The user allowed browser notifications for a plan (E4, D4.4). */
     onNotify?: (on: boolean) => void;
+    /** The choice that counts for a plan (the stored one, else the browser permission), from the agent context. */
+    notifyOptIn?: (planId: string) => boolean;
 }) {
     useRegisterPlanCard(plan.id, register);
     const now = Date.now();
@@ -1225,7 +1236,9 @@ export default function PlanCard({
 
                 {plan.state === 'proposed' && auto && <BudgetBlock plan={plan} now={now} />}
                 {plan.state === 'proposed' && auto && <RightsBlock plan={plan} />}
-                {plan.state === 'proposed' && auto && onNotify && <NotifyCheckbox onOptIn={onNotify} />}
+                {plan.state === 'proposed' && auto && onNotify && (
+                    <NotifyCheckbox optedIn={notifyOptIn?.(plan.id)} onOptIn={onNotify} />
+                )}
 
                 <Box
                     component="ol"

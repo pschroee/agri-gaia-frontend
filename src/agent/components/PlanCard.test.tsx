@@ -17,6 +17,20 @@ import PlanCard from './PlanCard';
 
 afterEach(cleanup);
 
+/** Puts a Notification interface of the given permission into the window for one test. */
+function withPermission(permission: 'granted' | 'denied' | 'default') {
+    const g = window as unknown as { Notification?: unknown };
+    const before = g.Notification;
+    const requestPermission = vi.fn(async () => permission);
+    g.Notification = Object.assign(vi.fn(), { permission, requestPermission });
+    return {
+        requestPermission,
+        restore: () => {
+            g.Notification = before;
+        },
+    };
+}
+
 const step = (over: Partial<PlanStep> = {}): PlanStep => ({
     idx: 1,
     method: 'POST',
@@ -287,5 +301,64 @@ describe('the card as a group', () => {
         const card = screen.getByTestId('agent-plan-card');
         expect(card.getAttribute('aria-label')).toBe('Plan, 2 steps: Paused');
         expect(card.getAttribute('data-plan-state')).toBe('paused');
+    });
+});
+
+describe('the browser notification checkbox (D4.4)', () => {
+    const proposed = () => plan({ state: 'proposed', decided_at: undefined });
+
+    it('a permission granted earlier shows "On" and counts as opted in', () => {
+        const browser = withPermission('granted');
+        try {
+            const onNotify = vi.fn();
+            render(<PlanCard plan={proposed()} onNotify={onNotify} onControl={vi.fn()} />);
+            // the checkbox says On from the permission alone, and it stays switchable (one plan may stay quiet)
+            expect(screen.getByTestId('agent-plan-notify-state').textContent).toContain('On · completes, fails');
+            expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(true);
+            expect((screen.getByRole('checkbox') as HTMLInputElement).disabled).toBe(false);
+            expect(onNotify).not.toHaveBeenCalled();
+        } finally {
+            browser.restore();
+        }
+    });
+
+    it('a blocked permission says so instead of pretending "On"', () => {
+        const browser = withPermission('denied');
+        try {
+            render(<PlanCard plan={proposed()} onNotify={vi.fn()} onControl={vi.fn()} />);
+            const state = screen.getByTestId('agent-plan-notify-state');
+            expect(state.textContent).toContain('Notifications are blocked');
+            expect(state.textContent).not.toContain('On ·');
+            expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+        } finally {
+            browser.restore();
+        }
+    });
+
+    it("the user's own click is reported, and the browser is asked only while it has not decided", () => {
+        const browser = withPermission('default');
+        try {
+            const onNotify = vi.fn();
+            render(<PlanCard plan={proposed()} onNotify={onNotify} onControl={vi.fn()} />);
+            fireEvent.click(screen.getByRole('checkbox'));
+            expect(onNotify).toHaveBeenCalledWith(true);
+            expect(browser.requestPermission).toHaveBeenCalledTimes(1);
+        } finally {
+            browser.restore();
+        }
+    });
+
+    it('a plan switched off shows off although the browser allows it, and can be switched on again', () => {
+        const browser = withPermission('granted');
+        try {
+            const onNotify = vi.fn();
+            render(<PlanCard plan={proposed()} onNotify={onNotify} notifyOptIn={() => false} onControl={vi.fn()} />);
+            // the permission is there, but this plan was switched off: the box shows off and the click reports it
+            expect((screen.getByRole('checkbox') as HTMLInputElement).checked).toBe(false);
+            fireEvent.click(screen.getByRole('checkbox'));
+            expect(onNotify).toHaveBeenCalledWith(true);
+        } finally {
+            browser.restore();
+        }
     });
 });

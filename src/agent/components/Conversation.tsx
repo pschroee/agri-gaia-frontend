@@ -131,6 +131,8 @@ export type PlanEnv = {
     layout: 'panel' | 'page';
     /** The user allowed browser notifications for a plan (D4.4); absent where the view cannot store it. */
     onNotify?: (planId: string, on: boolean) => void;
+    /** The choice that counts for a plan: stored choice, else the browser permission. */
+    notifyOptIn?: (planId: string) => boolean;
     /** The runs and jobs of pre-annotation and the result checks of the chat (issue #112), each at its tool call. */
     annotation?: AnnotationItem[];
     checks?: CheckItem[];
@@ -195,6 +197,7 @@ export function AgentBlock({
             pending={planEnv?.pending}
             layout={planEnv?.layout}
             onNotify={planEnv ? (on) => planEnv.onNotify?.(p.id, on) : undefined}
+            notifyOptIn={planEnv?.notifyOptIn}
             onDecide={onDecide}
             dense={dense}
         />
@@ -204,7 +207,10 @@ export function AgentBlock({
     // the card of the run itself. Both hang on the tool call that started them (jobs.ts, `jobByToolCall`), so they
     // stand where the call stands in the answer.
     const notebookRuns = (steps: Step[]) => {
-        const runs = notebookJobsOf(planEnv?.jobs ?? [], steps.map((s) => s.id));
+        const runs = notebookJobsOf(
+            planEnv?.jobs ?? [],
+            steps.map((s) => s.id),
+        );
         if (runs.length === 0) return null;
         const layout = planEnv?.layout ?? (dense ? 'panel' : 'page');
         return runs.map((job) => {
@@ -278,12 +284,7 @@ export function AgentBlock({
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
                         {notebookRuns(p.steps)}
                         {deployments.map((d) => (
-                            <DeploymentCard
-                                key={d.key}
-                                data={d.data}
-                                job={d.job}
-                                layout={dense ? 'panel' : 'page'}
-                            />
+                            <DeploymentCard key={d.key} data={d.data} job={d.job} layout={dense ? 'panel' : 'page'} />
                         ))}
                         <AnnotationCards
                             items={annotations.map((a) => a.item)}
@@ -474,7 +475,9 @@ export default function Conversation({
     const annotationItems = useMemo(() => mergeAnnotation(annotation, jobs), [annotation, jobs]);
     const checkItems = useMemo(() => mergeChecks(checks, jobs), [checks, jobs]);
     const pendingIds = useMemo(() => pendingIdsOf(stream.approvals), [stream.approvals]);
-    const setPlanNotify = useAgentOptional()?.setPlanNotify;
+    const agent = useAgentOptional();
+    const setPlanNotify = agent?.setPlanNotify;
+    const planNotifyOptIn = agent?.planNotifyOptIn;
     const planEnv: PlanEnv = useMemo(
         () => ({
             approvals: stream.approvals,
@@ -539,6 +542,7 @@ export default function Conversation({
                 pending={pendingIds}
                 layout={dense ? 'panel' : 'page'}
                 onNotify={setPlanNotify ? (on) => setPlanNotify(p.id, on) : undefined}
+                notifyOptIn={planNotifyOptIn}
                 onDecide={stream.decide}
                 dense={dense}
             />
@@ -721,9 +725,7 @@ export default function Conversation({
                 running,
                 pending: !!pending,
                 answerShown: !!activeKey,
-                streaming: liveP.some(
-                    (p) => p.type === 'text' || (p.type === 'thinking' && p.liveSince !== undefined),
-                ),
+                streaming: liveP.some((p) => p.type === 'text' || (p.type === 'thinking' && p.liveSince !== undefined)),
                 toolRunning: runningTools.size > 0,
                 approvalWaiting: waitingApproval,
                 loadingOrCompacting: resuming || !!chat?.starting || !!stream.compacting,
