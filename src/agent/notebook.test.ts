@@ -25,6 +25,7 @@ import {
     fullLog,
     isLive,
     isPreviewable,
+    isResultFile,
     limitsLine,
     logLines,
     midTrunc,
@@ -404,6 +405,15 @@ describe('finding a job and its approval', () => {
         expect(outputName({ label: 'metrics.json' })).toBe('metrics.json');
         expect(outputName({ id: 'outputs/a/b.csv' })).toBe('a/b.csv');
         expect(outputName({})).toBe('');
+    });
+
+    it('lists only files in outputs/ as results, not the entry or the launcher markers (gap L12)', () => {
+        expect(isResultFile({ label: 'outputs/model.pt' })).toBe(true);
+        expect(isResultFile({ id: 'r1/outputs/metrics.json' })).toBe(true);
+        expect(isResultFile({ label: 'acceptance_run.py' })).toBe(false);
+        expect(isResultFile({ label: '.agw/run.sh' })).toBe(false);
+        expect(isResultFile({ label: 'run.log' })).toBe(false);
+        expect(isResultFile({})).toBe(false);
     });
 
     it('takes the size of a result file, and nothing from a kind that reports none (gateway issue #92)', () => {

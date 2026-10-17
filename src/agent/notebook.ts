@@ -179,9 +179,24 @@ export const datasetsValue = (datasets: NotebookDataset[]): string =>
 
 /** A file of a run as a result: the gateway names the path below `outputs/` (its `Output.label`). */
 export const outputName = (o: { label?: string; id?: string }): string => {
-    const p = o.label || o.id || '';
+    const p = outputPath(o);
     return p.startsWith('outputs/') ? p.slice('outputs/'.length) : p;
 };
+
+/** The path of an output inside the run directory: `label`, else the part of `id` after the run id. */
+const outputPath = (o: { label?: string; id?: string }): string => {
+    if (o.label) return o.label;
+    const id = o.id ?? '';
+    const slash = id.indexOf('/');
+    return slash >= 0 ? id.slice(slash + 1) : id;
+};
+
+/**
+ * Whether a file of the run directory is a result the card lists: only `outputs/` (design, gap L12). The gateway's
+ * file list holds every file of the run, including the entry and the `.agw/` markers of the launcher, so the card
+ * filters instead of presenting those as results.
+ */
+export const isResultFile = (o: { label?: string; id?: string }): boolean => outputPath(o).startsWith('outputs/');
 
 /** The size a result file reports, when the kind knows it (gateway issue #92; 0 means it does not). */
 export const outputSize = (o: { size?: number }): number | undefined =>
