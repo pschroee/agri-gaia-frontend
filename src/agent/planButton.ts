@@ -20,7 +20,7 @@ function approvedValid(plan: Plan, now: number): boolean {
 export function planMark(plan: Plan, now: number): PlanMark {
     switch (plan.state) {
         case 'proposed':
-            return 'approval';
+            return plan.approving ? 'running' : 'approval';
         case 'approved':
             return approvedValid(plan, now) ? 'running' : 'plain';
         case 'completed':
@@ -60,6 +60,7 @@ export function currentPlan(plans: Plan[], now: number): Plan | undefined {
 
 /** One short word for the plan's state, for the button label. */
 export function planStateWord(plan: Plan, now: number): string {
+    if (plan.state === 'proposed' && plan.approving) return 'Approving…';
     switch (planMark(plan, now)) {
         case 'approval':
             return 'Waiting';

@@ -359,14 +359,24 @@ export function ProposedSummary({ summary, testId }: { summary: string; testId?:
 const DECISION_TEXT =
     'Approving runs these steps in this order with exactly these parameters, for 30 minutes. Steps marked irreversible still ask you on their own.';
 
-function Decision({ explain, onDecide }: { explain?: string; onDecide: (approve: boolean) => Promise<void> }) {
-    const [busy, setBusy] = useState(false);
+function Decision({
+    explain,
+    approving = false,
+    onDecide,
+}: {
+    explain?: string;
+    /** The approval is on its way (the plan is marked by the client, issue #166). */
+    approving?: boolean;
+    onDecide: (approve: boolean) => Promise<void>;
+}) {
+    const [pressed, setBusy] = useState<'approve' | 'reject'>();
+    const busy = pressed !== undefined || approving;
     const decide = async (approve: boolean) => {
-        setBusy(true);
+        setBusy(approve ? 'approve' : 'reject');
         try {
             await onDecide(approve);
         } finally {
-            setBusy(false);
+            setBusy(undefined);
         }
     };
     return (
@@ -376,7 +386,7 @@ function Decision({ explain, onDecide }: { explain?: string; onDecide: (approve:
             </Typography>
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
-                    Approve plan
+                    {pressed === 'approve' || approving ? 'Approving…' : 'Approve plan'}
                 </Button>
                 <Button
                     size="small"
@@ -402,6 +412,8 @@ function StateChip({ plan, layout, pending }: { plan: Plan; layout: 'panel' | 'p
             ? 'success'
             : plan.state === 'cancelled'
             ? 'default'
+            : plan.state === 'proposed' && plan.approving
+            ? 'primary'
             : plan.state === 'paused' || plan.state === 'proposed'
             ? 'warning'
             : needsInput(plan, pending)
@@ -1286,6 +1298,7 @@ export default function PlanCard({
                 )}
                 {canDecide && approval && onDecide && (
                     <Decision
+                        approving={plan.approving}
                         explain={auto ? approvalExplain(plan) : undefined}
                         onDecide={(approve) => onDecide(approval, approve)}
                     />

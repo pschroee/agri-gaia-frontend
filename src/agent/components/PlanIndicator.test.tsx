@@ -96,3 +96,15 @@ describe('the click', () => {
         expect(onShow).toHaveBeenCalledTimes(1);
     });
 });
+
+describe('a plan being approved (issue #166)', () => {
+    it('is shown while the approval is on its way, and hidden when merely proposed', () => {
+        const shown = render(
+            <PlanIndicator plan={plan({ state: 'proposed', approving: true })} variant="panel" onShow={vi.fn()} />,
+        );
+        expect(shown.container.firstChild).not.toBeNull();
+        cleanup();
+        const hidden = render(<PlanIndicator plan={plan({ state: 'proposed' })} variant="panel" onShow={vi.fn()} />);
+        expect(hidden.container.firstChild).toBeNull();
+    });
+});

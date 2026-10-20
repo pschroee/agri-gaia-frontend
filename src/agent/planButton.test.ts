@@ -140,3 +140,12 @@ describe('the entries of the plan list', () => {
         expect(planEntrySub(plan({ state: 'completed', steps: [step()] }), NOW)).toBe('Completed · 1 step');
     });
 });
+
+describe('a plan whose approval is on its way (issue #166)', () => {
+    it('counts as running and says "Approving…"', () => {
+        const p = plan({ state: 'proposed', approving: true });
+        expect(planMark(p, NOW)).toBe('running');
+        expect(planStateWord(p, NOW)).toBe('Approving…');
+        expect(planStateWord(plan({ state: 'proposed' }), NOW)).toBe('Waiting');
+    });
+});

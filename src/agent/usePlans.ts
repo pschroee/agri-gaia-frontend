@@ -4,37 +4,16 @@
 
 import { useEffect, useState } from 'react';
 
-import { fetchPlans, Plan } from './plan';
+import type { Plan } from './plan';
 
 const MAX_TIMER_MS = 2147483647;
 
 /**
- * The plans of a chat, loaded again on every change of `trigger` (the caller passes the approvals, the socket calls and
- * whether the chat runs: a plan moves with them). A failed load keeps the plans known so far. While an approved plan is
- * valid, the hook re-renders when its validity ends, so its label turns to "Expired" on time.
+ * The plans of a chat as the stream holds them (issue #166). While an approved plan is valid, the hook re-renders when
+ * its validity ends, so its label turns to "Expired" on time.
  */
-export function usePlans(chatId: string | undefined, trigger: unknown[]): Plan[] {
-    const [plans, setPlans] = useState<Plan[]>([]);
+export function usePlans(plans: Plan[]): Plan[] {
     const [tick, setTick] = useState(0);
-
-    useEffect(() => {
-        if (!chatId) {
-            setPlans([]);
-            return undefined;
-        }
-        let cancelled = false;
-        fetchPlans(chatId)
-            .then((list) => {
-                if (!cancelled) setPlans(list);
-            })
-            .catch(() => {
-                // keep the plans known so far
-            });
-        return () => {
-            cancelled = true;
-        };
-        // trigger has a fixed length (the caller's list of changing values)
-    }, [chatId, ...trigger]);
 
     useEffect(() => {
         const now = Date.now();

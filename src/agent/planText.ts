@@ -50,7 +50,7 @@ const dayClock = (t: number): string =>
 export function planChip(plan: Plan, layout: 'panel' | 'page', pending: ReadonlySet<string>): string {
     switch (plan.state) {
         case 'proposed':
-            return 'Needs approval';
+            return plan.approving ? 'Approving…' : 'Needs approval';
         case 'approved':
             if (plan.steps.some((s) => !!s.parked_approval && pending.has(s.parked_approval as string))) {
                 return 'Needs input';

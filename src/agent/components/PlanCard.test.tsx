@@ -362,3 +362,34 @@ describe('the browser notification checkbox (D4.4)', () => {
         }
     });
 });
+
+describe('approving a plan (issue #166)', () => {
+    const proposed = plan({
+        state: 'proposed',
+        mode: 'interactive',
+        approval_id: 'a1',
+        budget: undefined,
+        usage: undefined,
+        steps: [step({ idx: 1 })],
+    });
+    const planApproval = approval({ kind: 'plan' });
+
+    it('turns the button into a disabled "Approving…" at the click', async () => {
+        let finish: () => void = () => undefined;
+        const onDecide = vi.fn(() => new Promise<void>((r) => (finish = r)));
+        render(<PlanCard plan={proposed} approval={planApproval} onDecide={onDecide} onControl={vi.fn()} />);
+        fireEvent.click(screen.getByText('Approve plan'));
+        const button = await screen.findByText('Approving…');
+        expect((button.closest('button') as HTMLButtonElement).disabled).toBe(true);
+        finish();
+    });
+
+    it('returns to "Approve plan" when the approval fails', async () => {
+        const onDecide = vi.fn(async () => {
+            throw new Error('nope');
+        });
+        render(<PlanCard plan={proposed} approval={planApproval} onDecide={(a, b) => onDecide().catch(() => undefined)} onControl={vi.fn()} />);
+        fireEvent.click(screen.getByText('Approve plan'));
+        expect(await screen.findByText('Approve plan')).toBeTruthy();
+    });
+});
