@@ -30,7 +30,7 @@ export type NotebookFile = {
 export type NotebookDataset = { id: number; name?: string };
 
 /** What a run of this instance gets (gateway `notebook.limits`). */
-export type NotebookLimits = { cpus: number; mem_gb: number; timeout_min: number; internet: boolean };
+export type NotebookLimits = { cpus: number; mem_gb: number; timeout_min: number; internet: boolean; gpu?: boolean };
 
 /** The structured data of the approval of a run: the gateway's field `notebook` (own code C-E4). */
 export type NotebookApprovalData = {
@@ -161,11 +161,12 @@ export function midTrunc(name: string, max: number): string {
 export const entryTitle = (entry: string, max = 0): string =>
     `Run ${max > 0 ? midTrunc(entry, max) : entry} in your notebook server`;
 
-/** The limits as one line: "2 CPUs · 8 GB · no internet · max 120 min". */
+/** The limits as one line: "2 CPUs · 8 GB · GPU · no internet · max 120 min". */
 export const limitsLine = (l: NotebookLimits): string =>
     [
         `${l.cpus} CPUs`,
         `${l.mem_gb} GB`,
+        ...(l.gpu === undefined ? [] : [l.gpu ? 'GPU' : 'no GPU']),
         l.internet ? 'internet' : 'no internet',
         `max ${l.timeout_min} min`,
     ].join(' · ');
