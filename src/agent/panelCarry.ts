@@ -12,10 +12,10 @@ import { AGENT_ROUTE } from './expand';
 /** The agent page itself (it has the full chat; the panel and the floating button are not shown there). */
 export const onAgentPage = (pathname: string) => pathname === AGENT_ROUTE || pathname.startsWith(`${AGENT_ROUTE}/`);
 
-export type AgentTab = 'chat' | 'activity' | 'status';
+export type AgentTab = 'chat' | 'activity' | 'status' | 'experiments';
 
 /** Tab of the agent page from `?tab=`; anything else is the Chat tab. */
-export const agentTabOf = (v: string | null): AgentTab => (v === 'activity' || v === 'status' ? v : 'chat');
+export const agentTabOf = (v: string | null): AgentTab => (v === 'activity' || v === 'status' || v === 'experiments' ? v : 'chat');
 
 const tabOfSearch = (search: string) => agentTabOf(new URLSearchParams(search).get('tab'));
 

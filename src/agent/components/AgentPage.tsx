@@ -33,6 +33,7 @@ import { scrollToPlanCard } from '../planRegistry';
 import { useTrashActions } from '../useTrash';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
+import ExperimentsTab from './search/ExperimentsTab';
 import ChatView from './ChatView';
 import { GroupNote } from './ChatSelector';
 import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename';
@@ -433,7 +434,7 @@ function ChatHeader() {
 }
 
 
-/** Page "Agent" (/ai-agent) with the tabs Chat, Activity and Status; its menus leave the page scroll alone. */
+/** Page "Agent" (/ai-agent) with the tabs Chat, Activity, Status and Experiments; its menus leave the page scroll alone. */
 export default function AgentPage() {
     return (
         <AgentMenuTheme>
@@ -499,6 +500,7 @@ function AgentPageContent() {
                 <Tab value="chat" label="Chat" />
                 <Tab value="activity" label="Activity" />
                 <Tab value="status" label="Status" />
+                <Tab value="experiments" label="Experiments" />
             </Tabs>
             {status !== 'ready' ? (
                 <SignInNotice />
@@ -565,6 +567,10 @@ function AgentPageContent() {
             ) : tab === 'activity' ? (
                 <Box sx={{ mt: 3, pb: 4 }}>
                     <ActivityView refreshKey={refreshKey} />
+                </Box>
+            ) : tab === 'experiments' ? (
+                <Box sx={{ mt: 3, pb: 4 }}>
+                    <ExperimentsTab onOpenChat={openChat} />
                 </Box>
             ) : (
                 <Box sx={{ mt: 3, pb: 4 }}>
