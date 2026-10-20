@@ -6,7 +6,7 @@
 // Smoke tests of the approval "Start a training search" and of the question about changed code (gateway issue #168):
 // the terms the user hands over, both ways, the decided line, and the diff of the code change. Run in phase B.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { mockCodeChange, mockProposal } from '../../searchMock';
@@ -65,13 +65,15 @@ describe('the proposal', () => {
         expect(screen.getByText('Waiting for you · 9 min left')).toBeTruthy();
     });
 
-    it('calls the decision', () => {
+    it('calls the decision', async () => {
         const onApprove = vi.fn().mockResolvedValue(undefined);
         const onReject = vi.fn().mockResolvedValue(undefined);
         render(<SearchApproval approval={approval()} data={mockProposal()} layout="page" onApprove={onApprove} onReject={onReject} />);
+        // Both buttons are disabled while a decision is sent, so the second click comes after the first settled.
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-        fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
         expect(onApprove).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect((screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement).disabled).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
         expect(onReject).toHaveBeenCalledTimes(1);
     });
 
@@ -123,7 +125,7 @@ describe('the code change', () => {
         expect(screen.getByText('per trial')).toBeTruthy();
         expect(screen.getByRole('region', { name: 'Changes in train.py' })).toBeTruthy();
         expect(screen.getByText('old line')).toBeTruthy();
-        expect(screen.getByLabelText('added', { selector: 'span' })).toBeTruthy();
+        expect(screen.getAllByLabelText('added', { selector: 'span' }).length).toBeGreaterThan(0);
         expect(screen.getByText('Approving makes version 2 the code of the following trials. Trials 1–5 keep version 1.')).toBeTruthy();
     });
 

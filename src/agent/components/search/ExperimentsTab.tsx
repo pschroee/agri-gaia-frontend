@@ -7,7 +7,7 @@
 // budget and the controls, the comparison, the table of the trials and the detail of the selected one; once a search
 // ended, the final result. Data and stream come from `useExperiments`; the words from `searchView`/`experimentsTab`.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 import Alert from '@mui/material/Alert';
@@ -77,7 +77,11 @@ export default function ExperimentsTab({ onOpenChat }: { onOpenChat?: (chatId: s
     const [want, setWant] = useState<string | undefined>(params.get('search') ?? undefined);
     const [selectedId, setSelectedId] = useState<string>();
     const [error, setError] = useState<string>();
+    // Another chat clears the choice; the first render keeps what ?search= asked for.
+    const shownChat = useRef(chatId);
     useEffect(() => {
+        if (shownChat.current === chatId) return;
+        shownChat.current = chatId;
         setWant(undefined);
         setSelectedId(undefined);
     }, [chatId]);

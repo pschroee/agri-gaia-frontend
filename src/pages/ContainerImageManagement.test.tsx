@@ -15,7 +15,8 @@ import ContainerImageManagement from './ContainerImageManagement';
 const httpGet = vi.fn();
 
 vi.mock('../api', () => ({ httpGet: (...a: unknown[]) => httpGet(...a) }));
-vi.mock('../contexts/KeycloakContext', () => ({ default: () => ({ authenticated: true }) }));
+const kc = vi.hoisted(() => ({ authenticated: true }));
+vi.mock('../contexts/KeycloakContext', () => ({ default: () => kc }));
 vi.mock('../components/containers-images/List', () => ({
     default: (p: { containerImages: { id: number; repository: string; tag: string }[] }) => (
         <ul>

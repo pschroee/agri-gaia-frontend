@@ -22,9 +22,8 @@ vi.mock('../api', () => ({
     httpGet: (...a: unknown[]) => httpGet(...a),
     httpPatch: vi.fn(),
 }));
-vi.mock('../contexts/KeycloakContext', () => ({
-    default: () => ({ authenticated: true, loadUserProfile: () => Promise.resolve({ username: 'u' }) }),
-}));
+const kc = vi.hoisted(() => ({ authenticated: true, loadUserProfile: () => Promise.resolve({ username: 'u' }) }));
+vi.mock('../contexts/KeycloakContext', () => ({ default: () => kc }));
 vi.mock('../components/common/AgrovocSearchbar', () => ({
     default: (p: { handleResponse: (r: DS[]) => void; resetResult: () => void }) => (
         <>
@@ -100,7 +99,7 @@ describe('DataManagement and platform_changed', () => {
         await screen.findByText('1 Dataset selected');
         server = [server[1]];
         act(() => notifyPlatformChange('datasets'));
-        await waitFor(() => expect(screen.queryByText('alpha')).toBeNull(), { timeout: 3000 });
-        expect(screen.queryByText('1 Dataset selected')).toBeNull();
+        await waitFor(() => expect(screen.queryByText('1 Dataset selected')).toBeNull(), { timeout: 3000 });
+        expect(screen.queryByText(/alpha/)).toBeNull();
     });
 });

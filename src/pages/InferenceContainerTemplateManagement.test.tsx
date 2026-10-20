@@ -15,7 +15,8 @@ import InferenceContainerTemplateManagement from './InferenceContainerTemplateMa
 const httpGet = vi.fn();
 
 vi.mock('../api', () => ({ httpGet: (...a: unknown[]) => httpGet(...a) }));
-vi.mock('../contexts/KeycloakContext', () => ({ default: () => ({ authenticated: true }) }));
+const kc = vi.hoisted(() => ({ authenticated: true }));
+vi.mock('../contexts/KeycloakContext', () => ({ default: () => kc }));
 vi.mock('../components/common/Loading', () => ({
     default: (p: { isLoading: boolean }) => (p.isLoading ? <div>loading…</div> : null),
 }));

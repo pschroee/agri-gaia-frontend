@@ -57,7 +57,7 @@ describe('the code change', () => {
         const rows = diffRows(mockCodeChange().files[0].diff);
         expect(rows).toEqual([
             { kind: 'line', n: 7, sign: '', text: 'context' },
-            { kind: 'line', n: 7, sign: '−', text: 'old line' },
+            { kind: 'line', n: 8, sign: '−', text: 'old line' },
             { kind: 'line', n: 8, sign: '+', text: 'new line' },
             { kind: 'line', n: 9, sign: '+', text: 'second new line' },
             { kind: 'line', n: 10, sign: '', text: 'tail' },

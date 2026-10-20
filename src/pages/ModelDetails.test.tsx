@@ -16,7 +16,8 @@ import ModelDetails from './ModelDetails';
 const httpGet = vi.fn();
 
 vi.mock('../api', () => ({ httpGet: (...a: unknown[]) => httpGet(...a) }));
-vi.mock('../contexts/KeycloakContext', () => ({ default: () => ({ authenticated: true }) }));
+const kc = vi.hoisted(() => ({ authenticated: true }));
+vi.mock('../contexts/KeycloakContext', () => ({ default: () => kc }));
 vi.mock('../components/models/ModelDetailsGrid', () => ({
     default: (p: { model: { name: string } }) => <div>grid {p.model.name}</div>,
 }));
