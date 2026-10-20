@@ -28,7 +28,9 @@ import PlanCard, {
     SummaryDetails,
     Technical,
 } from './PlanCard';
+import UploadFiles from './UploadFiles';
 import { agentColors, blockSx, MONO } from './tokens';
+import { LISTED_FILES } from '../uploads';
 
 function describe(a: Approval): { title: string; subject: string; body?: string } {
     switch (a.kind) {
@@ -182,7 +184,15 @@ function ArtifactItem({ approval, onDecide }: { approval: Approval; onDecide: (a
     );
 }
 
-function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (approve: boolean) => Promise<void> }) {
+function ApprovalItem({
+    approval,
+    onDecide,
+    layout = 'panel',
+}: {
+    approval: Approval;
+    onDecide: (approve: boolean) => Promise<void>;
+    layout?: 'panel' | 'page';
+}) {
     const { busy, decide } = useDecide(onDecide);
     const { title, subject, body } = describe(approval);
     // Gateway issue #63: the class comes from the gateway; an irreversible call is shown in red, in full.
@@ -206,7 +216,7 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                 ...(irreversible ? { bgcolor: agentColors.redTint, boxShadow: `inset 3px 0 0 ${agentColors.red}` } : {}),
             }}
         >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5, minWidth: 0 }}>
                 <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>{title}</Typography>
                 {effect && <EffectChip effect={effect} />}
             </Box>
@@ -214,7 +224,7 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                 <>
                     <Typography
                         data-testid="agent-approval-summary"
-                        sx={{ fontSize: 13, fontWeight: 500, overflowWrap: 'anywhere' }}
+                        sx={{ fontSize: 13, fontWeight: 500, overflowWrap: 'anywhere', whiteSpace: 'normal' }}
                     >
                         {summary.head}
                     </Typography>
@@ -222,6 +232,11 @@ function ApprovalItem({ approval, onDecide }: { approval: Approval; onDecide: (a
                 </>
             ) : (
                 <Typography sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'anywhere' }}>{subject}</Typography>
+            )}
+            {/* Up to LISTED_FILES the summary lists the files itself; above it the card shows the folders and the
+                collapsed list of every file (gateway issue #164). */}
+            {approval.uploads && approval.uploads.files > LISTED_FILES && (
+                <UploadFiles data={approval.uploads} chatId={approval.chat_id} approvalId={approval.id} layout={layout} />
             )}
             {irreversible && (
                 <Typography sx={{ fontSize: 12, color: agentColors.red, mt: 0.5 }}>
@@ -341,7 +356,7 @@ export default function ApprovalCard({
     };
 
     return (
-        <Box sx={{ ...blockSx, borderLeft: `3px solid ${agentColors.amber}` }}>
+        <Box sx={{ ...blockSx, minWidth: 0, borderLeft: `3px solid ${agentColors.amber}` }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1 }}>
                 <Typography sx={{ fontSize: 13, fontWeight: 500 }}>Waiting for your approval</Typography>
                 <Typography sx={{ ml: 'auto', fontSize: 11.5, color: 'text.secondary' }}>{approvals.length}</Typography>
@@ -371,7 +386,7 @@ export default function ApprovalCard({
                         onReject={() => onDecide(a, false)}
                     />
                 ) : (
-                    <ApprovalItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                    <ApprovalItem key={a.id} approval={a} layout={layout} onDecide={(approve) => onDecide(a, approve)} />
                 ),
             )}
             {approvals.filter((a) => a.kind !== 'plan').length > 1 && (
