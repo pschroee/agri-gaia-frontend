@@ -135,8 +135,41 @@ export function onPlatformChange(cb: Listener): () => void {
     };
 }
 
+type EventListener = (ev: PlatformChangedEvent) => void;
+
+const eventListeners = new Set<EventListener>();
+
+/**
+ * Listens for every event as it arrives, without the window of the areas (#173): the task widget needs the ids the
+ * event carries. The returned function stops listening.
+ */
+export function onPlatformChangedEvent(cb: EventListener): () => void {
+    eventListeners.add(cb);
+    return () => {
+        eventListeners.delete(cb);
+    };
+}
+
+/** Ids of the platform tasks an event reports as started: entries `task`/`create` with a positive whole id. */
+export function startedTaskIds(ev: PlatformChangedEvent): number[] {
+    const ids: number[] = [];
+    for (const c of ev.changes) {
+        if (c.resource !== 'task' || c.action !== 'create' || !c.id || !/^[0-9]+$/.test(c.id)) continue;
+        const id = Number(c.id);
+        if (Number.isSafeInteger(id) && id > 0 && !ids.includes(id)) ids.push(id);
+    }
+    return ids;
+}
+
 /** Entry for the feed: tells the open pages about every area the event touches. Returns the areas, for tests. */
 export function reportPlatformChanged(ev: PlatformChangedEvent): PlatformArea[] {
+    for (const cb of [...eventListeners]) {
+        try {
+            cb(ev);
+        } catch (e) {
+            console.error(e);
+        }
+    }
     const areas = new Set<PlatformArea>();
     for (const c of ev.changes) for (const a of areasOf(c, ev.path)) areas.add(a);
     for (const a of areas) notifyPlatformChange(a);
