@@ -156,6 +156,12 @@ describe('the texts of an approval', () => {
         expect(limitsLine({ cpus: 2, mem_gb: 8, timeout_min: 120, internet: false })).toBe(
             '2 CPUs · 8 GB · no internet · max 120 min',
         );
+        expect(limitsLine({ cpus: 2, mem_gb: 8, timeout_min: 120, internet: false, gpu: true })).toBe(
+            '2 CPUs · 8 GB · GPU · no internet · max 120 min',
+        );
+        expect(limitsLine({ cpus: 2, mem_gb: 8, timeout_min: 120, internet: false, gpu: false })).toBe(
+            '2 CPUs · 8 GB · no GPU · no internet · max 120 min',
+        );
     });
 
     it('shows a dataset with its name and id, or only the id when the name is missing', () => {
