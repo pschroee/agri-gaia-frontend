@@ -11,7 +11,7 @@
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link as RouterLink, useParams } from 'react-router-dom';
 import { httpGet } from '../api';
 import useKeycloak from '../contexts/KeycloakContext';
 
@@ -20,6 +20,8 @@ import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
+import Alert from '@mui/material/Alert';
+import Link from '@mui/material/Link';
 
 import ContainerDeploymentList from '../components/edge/ContainerDeploymentList';
 import EdgeDetailsGrid from '../components/edge/EdgeDetailsGrid';
@@ -28,6 +30,7 @@ import IEdgeDevice from '../types/IEdgeDevice';
 import { EDGE_DEVICES_PATH } from '../endpoints';
 import CircularProgress from '@mui/material/CircularProgress';
 import { usePublishPageSelection } from '../agent/pageSelection';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 
 export default function EdgeDetails() {
     const keycloak = useKeycloak();
@@ -36,13 +39,23 @@ export default function EdgeDetails() {
     const [edgeDevice, setEdgeDevice] = useState<IEdgeDevice>();
     const [isLoading, setIsLoading] = useState(false);
 
-    const fetchEdgeDevice = async (edgeId: string | undefined) => {
-        setIsLoading(true);
+    // set when the platform no longer knows the device (deleted, for example by the agent, #167)
+    const [gone, setGone] = useState(false);
+
+    // silent: load again without the loading state, so the page keeps its scroll position (#167)
+    const fetchEdgeDevice = async (edgeId: string | undefined, silent = false) => {
+        if (!silent) setIsLoading(true);
         httpGet(keycloak, `${EDGE_DEVICES_PATH}/${edgeId}`)
             .then((data) => {
                 setEdgeDevice(data);
+                setGone(false);
             })
             .catch((error) => {
+                if (error?.status === 404) {
+                    setEdgeDevice(undefined);
+                    setGone(true);
+                    return;
+                }
                 console.error(error);
             })
             .finally(() => {
@@ -54,6 +67,9 @@ export default function EdgeDetails() {
         fetchEdgeDevice(edgeId);
     }, [keycloak]);
 
+    // the agent changed a device or one of its deployments: load this one again without the loading state
+    useReloadOnPlatformChange('edge-devices', () => fetchEdgeDevice(edgeId, true));
+
     // the opened edge device is the agent's page context (name once loaded)
     usePublishPageSelection(edgeDevice ? { kind: 'edge_device', id: edgeDevice.id, name: edgeDevice.name } : undefined);
 
@@ -63,6 +79,17 @@ export default function EdgeDetails() {
                 <CircularProgress color="primary" />
                 Fetching Device Details...
             </span>
+        );
+    }
+
+    if (gone) {
+        return (
+            <Alert severity="info">
+                This edge device no longer exists.{' '}
+                <Link component={RouterLink} to="/edge">
+                    Back to edge devices
+                </Link>
+            </Alert>
         );
     }
 
