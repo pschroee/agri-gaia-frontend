@@ -32,6 +32,9 @@ import {
     placePlans,
     plansByPart,
     planLabel,
+    mergeFetchedPlans,
+    upsertPlan,
+    withApproving,
     Plan,
     PlacedPlan,
     PlanStep,
@@ -590,5 +593,41 @@ describe('grantRows (L13)', () => {
     it('without a readable grant the block stays empty', () => {
         expect(grantRows(auto())).toEqual([]);
         expect(grantRows(auto({ grant: { rules: [] } }))).toEqual([]);
+    });
+});
+
+describe('plan state from events (issue #166)', () => {
+    const mk = (id: string, createdAt: string, over: Partial<Plan> = {}): Plan =>
+        ({ id, chat_id: 'c1', via: 'cli', state: 'proposed', created_at: createdAt, steps: [], ...over }) as Plan;
+
+    it('upsertPlan replaces a plan by id and inserts a new one by creation time', () => {
+        const a = mk('a', '2026-10-17T10:00:00Z');
+        const c = mk('c', '2026-10-17T12:00:00Z');
+        const out = upsertPlan([a, c], mk('b', '2026-10-17T11:00:00Z'));
+        expect(out.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+        const replaced = upsertPlan(out, mk('b', '2026-10-17T11:00:00Z', { state: 'approved' }));
+        expect(replaced).toHaveLength(3);
+        expect(replaced[1].state).toBe('approved');
+    });
+
+    it('mergeFetchedPlans keeps touched plans and takes the fetch for the rest', () => {
+        const fetched = [mk('a', '2026-10-17T10:00:00Z', { state: 'proposed' }), mk('b', '2026-10-17T11:00:00Z')];
+        const current = [mk('a', '2026-10-17T10:00:00Z', { state: 'approved' }), mk('x', '2026-10-17T12:00:00Z')];
+        const out = mergeFetchedPlans(fetched, current, new Set(['a']));
+        expect(out.find((p) => p.id === 'a')?.state).toBe('approved');
+        expect(out.some((p) => p.id === 'x')).toBe(false);
+        expect(out.some((p) => p.id === 'b')).toBe(true);
+        expect(mergeFetchedPlans(fetched, current, new Set(['x'])).some((p) => p.id === 'x')).toBe(true);
+    });
+
+    it('withApproving marks only proposed plans whose approval is on its way', () => {
+        const p1 = mk('a', '2026-10-17T10:00:00Z', { approval_id: 'ap1' });
+        const p2 = mk('b', '2026-10-17T11:00:00Z', { approval_id: 'ap2' });
+        const p3 = mk('c', '2026-10-17T12:00:00Z', { approval_id: 'ap1', state: 'approved' });
+        const out = withApproving([p1, p2, p3], new Set(['ap1']));
+        expect(out[0].approving).toBe(true);
+        expect(out[1].approving).toBeUndefined();
+        expect(out[2].approving).toBeUndefined();
+        expect(planLabel(out[0], Date.now())).toBe('Approving…');
     });
 });

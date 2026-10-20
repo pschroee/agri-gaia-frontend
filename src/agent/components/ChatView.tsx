@@ -69,12 +69,7 @@ type Props = {
 export default function ChatView({ chatId, dense = false, placeholder, header, readOnly = false }: Props) {
     // the current chat's stream lives above page and panel, so it survives the move between them (issue #50)
     const stream = useSharedChatStream(chatId, readOnly);
-    const plans = usePlans(chatId, [
-        stream.approvals,
-        stream.socketCalls.length,
-        !!stream.chat?.running,
-        stream.planVersion,
-    ]);
+    const plans = usePlans(stream.plans);
     const draft = useChatDraft(chatId);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, partials, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');

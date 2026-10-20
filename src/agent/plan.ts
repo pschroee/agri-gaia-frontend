@@ -129,6 +129,8 @@ export type Plan = {
     tool_call_id?: string;
     via: string;
     state: PlanState;
+    /** Set by the client while the user's approval is on its way; never sent by the gateway (issue #166). */
+    approving?: boolean;
     created_at: string;
     decided_at?: string;
     expires_at?: string;
@@ -233,7 +235,7 @@ export function stepStatus(step: PlanStep): StepStatus {
 export function planLabel(plan: Plan, now: number): string {
     switch (plan.state) {
         case 'proposed':
-            return 'Waiting for your approval';
+            return plan.approving ? 'Approving…' : 'Waiting for your approval';
         case 'approved': {
             const until = plan.expires_at ? Date.parse(plan.expires_at) : NaN;
             if (Number.isNaN(until) || until <= now) return 'Expired';
@@ -257,6 +259,34 @@ export function planLabel(plan: Plan, now: number): string {
         default:
             return plan.state;
     }
+}
+
+/** The plan list with `p` set: replaces the plan of the same id, else inserts it by `created_at` (oldest first). */
+export function upsertPlan(list: Plan[], p: Plan): Plan[] {
+    const i = list.findIndex((x) => x.id === p.id);
+    if (i >= 0) return list.map((x, j) => (j === i ? p : x));
+    const at = Date.parse(p.created_at);
+    const out = [...list];
+    let pos = out.length;
+    while (pos > 0 && Date.parse(out[pos - 1].created_at) > at) pos -= 1;
+    out.splice(pos, 0, p);
+    return out;
+}
+
+/**
+ * The plans a fetch returned, merged with the ones the stream knows: for ids in `keep` (an event arrived since the fetch
+ * began) the current plan wins, also when the fetch lacks it; every other plan is the fetched one (issue #166).
+ */
+export function mergeFetchedPlans(fetched: Plan[], current: Plan[], keep: ReadonlySet<string>): Plan[] {
+    let out = fetched;
+    for (const c of current) if (keep.has(c.id)) out = upsertPlan(out, c);
+    return out;
+}
+
+/** Marks the proposed plans whose approval the user has just given (the POST is still on its way). */
+export function withApproving(plans: Plan[], approvalIds: ReadonlySet<string>): Plan[] {
+    if (approvalIds.size === 0) return plans;
+    return plans.map((p) => (p.state === 'proposed' && p.approval_id && approvalIds.has(p.approval_id) ? { ...p, approving: true } : p));
 }
 
 /**

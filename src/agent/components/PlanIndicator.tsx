@@ -25,6 +25,7 @@ type Tone = { color: string; text: string };
 
 /** The colour and the mark of the chip per state (design): running/waiting primary, paused/input amber, … */
 function toneOf(plan: Plan, pending: ReadonlySet<string>): Tone {
+    if (plan.state === 'proposed' && plan.approving) return { color: 'primary.main', text: 'primary' };
     if (plan.state === 'approved') {
         if (needsInput(plan, pending)) return { color: 'warning.main', text: 'warning' };
         return { color: 'primary.main', text: awaitingPlatform(plan) ? 'primary' : 'primary' };
@@ -54,7 +55,7 @@ export default function PlanIndicator({
 }) {
     // on a phone the panel fills the screen and the header has no room for the words (design)
     const narrow = useMediaQuery('(max-width: 599.95px)');
-    if (!plan || plan.state === 'proposed') return null;
+    if (!plan || (plan.state === 'proposed' && !plan.approving)) return null;
     const size: IndicatorVariant = narrow ? 'mobile' : variant;
     const pendingIds = pending ?? new Set<string>();
     const tooltip = indicatorTooltip(plan, pendingIds);

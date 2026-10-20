@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { fetchPlans, mergeFetchedPlans, upsertPlan, withApproving } from './plan';
+import type { Plan } from './plan';
 import type { PageContext } from './pageContext';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
@@ -105,7 +107,8 @@ export type ChatStream = {
      * Counts the plan events of this chat (SSE "plan", autonomy E1). A plan changes when the user pauses, resumes
      * or cancels it — an event the plans themselves carry; the views reload their plans when this number moves.
      */
-    planVersion: number;
+    /** The chat's plans, kept current by the stream's `plan` events (issue #166). */
+    plans: Plan[];
     /** Sent outside the queue, not stored yet (e.g. while the chat is being resumed). */
     pending?: PendingSend;
     /** Compaction running right now (SSE compaction_start until compaction_end), seen live in this view. */
@@ -229,8 +232,16 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     queueRef.current = queueState;
     const [queueError, setQueueError] = useState<string>();
     const [resumes, setResumes] = useState<ResumeView[]>([]);
-    // a plan event does not carry the plans themselves into this state: a count keeps the views reloading them
-    const [planVersion, setPlanVersion] = useState(0);
+    // the plans of the chat: loaded with the chat and set directly from the `plan` events (issue #166)
+    const [storedPlans, setStoredPlans] = useState<Plan[]>([]);
+    const plansRef = useRef<Plan[]>([]);
+    plansRef.current = storedPlans;
+    // approvals of plans the user has just approved, until the plans are read again
+    const [approvingIds, setApprovingIds] = useState<ReadonlySet<string>>(() => new Set());
+    // counts the plan events; planTouched holds the count at the last event of each plan, so a fetch that began
+    // earlier does not overwrite what an event said later
+    const planSeq = useRef(0);
+    const planTouched = useRef<Map<string, number>>(new Map());
     const [pending, setPending] = useState<PendingSend>();
     const [compacting, setCompacting] = useState<Compacting>();
     const [commands, setCommands] = useState<Command[]>([]);
@@ -263,8 +274,24 @@ export function useChatStream(chatId: string | undefined): ChatStream {
     const resumeDecided = useRef(false);
     const resumeAsked = useRef<number>();
 
+    const refreshPlans = useCallback(async () => {
+        if (!chatId) return;
+        const start = planSeq.current;
+        try {
+            const list = await fetchPlans(chatId);
+            const keep = new Set<string>();
+            planTouched.current.forEach((seq, id) => {
+                if (seq > start) keep.add(id);
+            });
+            setStoredPlans((cur) => mergeFetchedPlans(list, cur, keep));
+        } catch {
+            // keep the plans known so far
+        }
+    }, [chatId]);
+
     const load = useCallback(async (clearLive?: 'ended' | 'all') => {
         if (!chatId) return;
+        const plansLoaded = refreshPlans();
         try {
             const d = await agentApi.chat(chatId);
             setChat(d.chat);
@@ -307,12 +334,13 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         } catch (e) {
             setError(e instanceof Error ? e.message : String(e));
         }
+        await plansLoaded;
         try {
             setExecutions(await agentApi.toolExecutions(chatId));
         } catch {
             // without the execution log only the durations are missing
         }
-    }, [chatId]);
+    }, [chatId, refreshPlans]);
 
     const scheduleReload = useCallback(
         (clearLive?: 'ended' | 'all') => {
@@ -332,6 +360,9 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         setChat(undefined);
         setMessages([]);
         setApprovals([]);
+        setStoredPlans([]);
+        setApprovingIds(new Set());
+        planTouched.current = new Map();
         setSocketCalls([]);
         setExecutions([]);
         partialsRef.current = {};
@@ -443,9 +474,15 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                         setApprovals((l) => upsert(l, ev.data as Approval, (a) => a.id));
                         break;
                     case 'plan':
-                        // the plan card reloads its plans on this (autonomy E1/E4): a pause, resume or cancel
-                        // changes the plan without touching an approval
-                        setPlanVersion((n) => n + 1);
+                        // the event carries the whole plan (issue #166): set it, no new fetch needed
+                        {
+                            const p = ev.data as Plan;
+                            if (p?.id && p.chat_id === chatId) {
+                                planSeq.current += 1;
+                                planTouched.current.set(p.id, planSeq.current);
+                                setStoredPlans((l) => upsertPlan(l, p));
+                            }
+                        }
                         break;
                     case 'artifact': {
                         const a = ev.data as Artifact;
@@ -799,12 +836,26 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         [chatId],
     );
 
+    const plans = useMemo(() => withApproving(storedPlans, approvingIds), [storedPlans, approvingIds]);
+
     const runningTools = useMemo(() => controllableTools(running), [running]);
 
     const decide = useCallback(async (approval: Approval, approve: boolean) => {
+        const forPlan = approval.kind === 'plan' && approve;
+        const mark = (on: boolean) =>
+            setApprovingIds((s) => {
+                if (on === s.has(approval.id)) return s;
+                const n = new Set(s);
+                if (on) n.add(approval.id);
+                else n.delete(approval.id);
+                return n;
+            });
+        if (forPlan) mark(true);
         try {
             const a = await agentApi.decide(approval.id, approve);
             setApprovals((l) => upsert(l, a, (x) => x.id));
+            // the plan event normally came first; read the plans once more before the label drops (issue #166)
+            if (forPlan) await refreshPlans();
         } catch (e) {
             // The platform changed since the approval was proposed (gateway issue L2/#119): the gateway keeps the
             // approval open and answers with the newly read summary next to the one as proposed. The card shows both
@@ -815,8 +866,10 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                 return;
             }
             throw e;
+        } finally {
+            if (forPlan) mark(false);
         }
-    }, []);
+    }, [refreshPlans]);
 
     const sendSubagentMessage = useCallback(
         async (run: string, text: string) => {
@@ -931,7 +984,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
         loaded,
         error,
         connected,
-        planVersion,
+        plans,
         reload,
         applyChat,
         send,
