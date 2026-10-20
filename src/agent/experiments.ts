@@ -55,6 +55,8 @@ export type SearchBase = {
     category?: string;
     architecture?: string;
     dataset?: NamedObject;
+    /** The configuration every trial starts from; the searched keys are overridden per trial. */
+    config?: Record<string, unknown>;
 };
 
 /** The test set the agent never sees (gateway `SearchHoldout`). */
@@ -66,7 +68,8 @@ export type SearchHoldout = {
     final_state?: '' | 'pending' | 'started' | 'none';
     /** The result check of the final test (assessments route). */
     check_id?: string;
-    result?: unknown;
+    /** What the final test measured, copied by the gateway from the check once it has ended. */
+    result?: { state: 'finished' | 'failed'; accuracy?: number; images?: number; verdict?: string };
 };
 
 /** Ends of a search (gateway `end_reason`). */
@@ -97,6 +100,8 @@ export type Search = {
     holdout?: SearchHoldout;
     /** The agent's own note; shown as not verified. */
     note?: string;
+    /** The agent's closing note when it ended the search itself; shown as not verified. */
+    end_note?: string;
     end_reason?: EndReason | '';
     winner_idx?: number | null;
     tool_call_id?: string;

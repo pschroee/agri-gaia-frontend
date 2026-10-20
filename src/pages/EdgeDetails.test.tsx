@@ -16,7 +16,8 @@ import EdgeDetails from './EdgeDetails';
 const httpGet = vi.fn();
 
 vi.mock('../api', () => ({ httpGet: (...a: unknown[]) => httpGet(...a) }));
-vi.mock('../contexts/KeycloakContext', () => ({ default: () => ({ authenticated: true }) }));
+const kc = vi.hoisted(() => ({ authenticated: true }));
+vi.mock('../contexts/KeycloakContext', () => ({ default: () => kc }));
 vi.mock('../components/edge/EdgeDetailsGrid', () => ({ default: () => <div>device grid</div> }));
 vi.mock('../components/edge/ContainerDeploymentList', () => ({
     default: (p: { containerDeployments?: { id: number }[] }) => <div>deployments {p.containerDeployments?.length ?? 0}</div>,

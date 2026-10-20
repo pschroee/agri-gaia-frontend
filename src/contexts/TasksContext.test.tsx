@@ -15,9 +15,8 @@ import useApplicationTasks, { TasksProvider } from './TasksContext';
 const httpGet = vi.fn();
 
 vi.mock('../api', () => ({ httpGet: (...a: unknown[]) => httpGet(...a), httpDelete: vi.fn() }));
-vi.mock('./KeycloakContext', () => ({
-    default: () => ({ authenticated: true, loadUserProfile: () => Promise.resolve({ username: 'u' }) }),
-}));
+const kc = vi.hoisted(() => ({ authenticated: true, loadUserProfile: () => Promise.resolve({ username: 'u' }) }));
+vi.mock('./KeycloakContext', () => ({ default: () => kc }));
 
 const task = (id: number, over: Record<string, unknown> = {}) => ({
     id,
@@ -118,7 +117,7 @@ describe('TasksContext and platform_changed', () => {
             act(() => started('2'));
             await screen.findByTestId('t2');
             await act(async () => release([task(1, { status: 'completed' })]));
-            await waitFor(() => expect(screen.getByTestId('t1').textContent).toBe('1:completed'));
+            await waitFor(() => expect(screen.getByTestId('t1').textContent).toBe('1:completed:user'));
             expect(screen.getByTestId('t2')).toBeTruthy();
         } finally {
             vi.useRealTimers();

@@ -245,7 +245,8 @@ export default function SearchApproval({
     onApprove?: () => Promise<void>;
     onReject?: () => Promise<void>;
 }) {
-    const expiryMin = expiryMinutes(useAgentOptional()?.config);
+    const config = useAgentOptional()?.config;
+    const expiryMin = expiryMinutes(config);
     const [tab, setTab] = useState(0);
     const [open, setOpen] = useState(false);
     const [dialog, setDialog] = useState(false);
@@ -313,7 +314,7 @@ export default function SearchApproval({
                 <Box sx={{ mt: 1 }}>
                     <Line icon={<LockOutlinedIcon />}>{holdoutText(data.holdout)}</Line>
                     <Line icon={<AutorenewOutlinedIcon />}>{`The agent continues on its own after each run (at most ${data.autonomy?.max_auto_turns ?? 0} turns without you).`}</Line>
-                    <Line icon={<InfoOutlinedIcon />}>{endsByText(undefined)}</Line>
+                    <Line icon={<InfoOutlinedIcon />}>{endsByText(config?.search_max_hours)}</Line>
                 </Box>
                 {data.note && <AgentText label={AGENT_NOTE_LABEL} text={data.note} testId="agent-search-approval-note" />}
                 <Technical text={approval.summary ?? approval.name} testId="agent-approval-technical" />

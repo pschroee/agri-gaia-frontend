@@ -39,6 +39,7 @@ import type { ChipKind, Meter, TestView } from '../../searchView';
 import type { AssessCheck } from '../../types';
 import { agentColors, MONO } from '../tokens';
 import SearchControls from './SearchControls';
+import { AgentNote } from './SearchParts';
 import { pathWord } from '../../experimentsTab';
 
 const CHIP_COLOR: Record<ChipKind, 'primary' | 'success' | 'default' | 'error' | 'warning'> = {
@@ -258,6 +259,11 @@ export function FinalResult({ chatId, search, trials, check }: FinalProps) {
                     {endText(search, trials).replace(/^Ended: /, '')}
                 </Typography>
             </ResultRow>
+            {search.end_reason === 'ended_by_agent' && search.end_note && (
+                <Box sx={{ mt: 1 }}>
+                    <AgentNote text={search.end_note} collapsible={false} testId="search-end-note" />
+                </Box>
+            )}
             <Box sx={{ mt: 1.5 }}>
                 <ExportButton chatId={chatId} search={search} />
             </Box>

@@ -64,7 +64,7 @@ export const spaceColumns = (search: Pick<Search, 'space'> | undefined): string[
 
 /** The base configuration of a search (template way) as the gateway stored it: `base.config`. */
 function baseConfig(search: Search): Record<string, unknown> | undefined {
-    const cfg = (search.base as (Search['base'] & { config?: unknown }) | undefined)?.config;
+    const cfg = search.base?.config;
     return cfg && typeof cfg === 'object' && !Array.isArray(cfg) ? (cfg as Record<string, unknown>) : undefined;
 }
 

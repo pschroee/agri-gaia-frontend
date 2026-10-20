@@ -648,6 +648,8 @@ export type Config = {
     artifact_max_mb?: number;
     /** An approval expires after this many seconds. */
     approval_timeout_s?: number;
+    /** The longest a training search runs, in hours (the approval names it). */
+    search_max_hours?: number;
     /** An idle chat rests (releases its sandbox) after this many seconds. */
     idle_timeout_s?: number;
     /** Connection of every new chat, fixed by the gateway (AGW_TOOLSETS); missing from older gateways. */

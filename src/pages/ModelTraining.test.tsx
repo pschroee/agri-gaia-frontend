@@ -21,9 +21,8 @@ vi.mock('../api', () => ({
     httpPost: vi.fn(),
     httpPut: vi.fn(),
 }));
-vi.mock('../contexts/KeycloakContext', () => ({
-    default: () => ({ authenticated: true, loadUserProfile: () => Promise.resolve({ username: 'u' }) }),
-}));
+const kc = vi.hoisted(() => ({ authenticated: true, loadUserProfile: () => Promise.resolve({ username: 'u' }) }));
+vi.mock('../contexts/KeycloakContext', () => ({ default: () => kc }));
 vi.mock('../contexts/TasksContext', () => ({ default: () => ({ addTask: vi.fn(), tasks: [] }) }));
 vi.mock('@rjsf/mui', () => ({ default: () => null }));
 vi.mock('@rjsf/validator-ajv8', () => ({ default: {} }));

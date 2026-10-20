@@ -46,7 +46,8 @@ function Frame({ plans }: { plans: Plan[] }) {
 describe('one list feeds the button and the card', () => {
     it('shows the running step in both after one plan event', () => {
         const { rerender } = render(<Frame plans={[base]} />);
-        expect(screen.getByTestId('agent-plan-button').textContent).toContain('Waiting');
+        // jsdom has no width, so the button shows its compact label; the mark carries the state
+        expect(screen.getByTestId('agent-plan-button').getAttribute('data-plan-mark')).toBe('approval');
         const event: Plan = {
             ...base,
             state: 'approved',
@@ -54,7 +55,7 @@ describe('one list feeds the button and the card', () => {
             steps: [step({ state: 'running' })],
         };
         rerender(<Frame plans={upsertPlan([base], event)} />);
-        expect(screen.getByTestId('agent-plan-button').textContent).toContain('Running');
+        expect(screen.getByTestId('agent-plan-button').getAttribute('data-plan-mark')).toBe('running');
         expect(screen.getByTestId('agent-plan-step').getAttribute('data-status')).toBe('running');
         fireEvent.click(screen.getByTestId('agent-plan-button'));
         expect(screen.getAllByText(/Approved · valid until/).length).toBeGreaterThan(0);
