@@ -30,6 +30,7 @@ import type {
 } from './types';
 
 import type { Plan } from './plan';
+import type { Search, SearchBudget } from './experiments';
 import type { WatchJob } from './jobs';
 import type { UploadEntry } from './uploads';
 
@@ -319,6 +320,18 @@ export const agentApi = {
     jobs: (id: string) => request<WatchJob[]>(`chats/${enc(id)}/jobs`).then((l) => (Array.isArray(l) ? l : [])),
     /** Stops one observed job of a chat (gateway A-E2); 409 when it does not run or cannot be stopped. */
     stopJob: (id: string, job: string) => post<WatchJob>(`chats/${enc(id)}/jobs/${enc(job)}/stop`),
+    /**
+     * The user's own controls of a running training search (gateway issue #168). The agent has no tool for any of them.
+     * 404 for a search of another chat, 409 when it is not running, 400 for a refused input; each answers the search.
+     */
+    stopSearch: (id: string, search: string, scope: 'trial' | 'search') =>
+        post<Search>(`chats/${enc(id)}/searches/${enc(search)}/stop`, { scope }),
+    searchBudget: (id: string, search: string, budget: SearchBudget) =>
+        post<Search>(`chats/${enc(id)}/searches/${enc(search)}/budget`, budget),
+    searchHint: (id: string, search: string, text: string) =>
+        post<Search>(`chats/${enc(id)}/searches/${enc(search)}/hint`, { text }),
+    adoptTrial: (id: string, search: string, trial: number) =>
+        post<Search>(`chats/${enc(id)}/searches/${enc(search)}/adopt`, { trial }),
     pendingApprovals: () => request<Approval[]>('approvals?state=pending'),
     /** Platform calls of the user's chats across all chats (query from activityQuery); 404 on older gateways. */
     activity: (query: string) => request<ActivityPage>(`activity${query}`),
@@ -334,6 +347,10 @@ export const imageUrl = (chatId: string, path: string, msg: string) =>
     `${API}/chats/${enc(chatId)}/images?path=${enc(path)}&msg=${enc(msg)}`;
 
 export const eventsUrl = (chatId: string) => `${API}/chats/${enc(chatId)}/events`;
+
+/** Export of a training search (gateway issue #168): the search, its trials, epochs and record as JSON, or one CSV row per trial. */
+export const searchExportUrl = (chatId: string, search: string, format: 'json' | 'csv') =>
+    `${API}/chats/${enc(chatId)}/searches/${enc(search)}/export?format=${format}`;
 
 /** Stream of the approvals across all the user's chats (gateway issue #32; approvalFeed.ts). */
 export const approvalEventsUrl = `${API}/events`;
