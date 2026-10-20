@@ -23,7 +23,6 @@ import type { CommandNotice } from './commands';
 import { switchFailure } from './modelChoice';
 import { emptyLive, liveReducer, liveTextOf } from './live';
 import type { LiveMessage, ThinkingTime } from './live';
-import { reportPlatformCall } from './platformChanges';
 import {
     deliveredBubbles,
     emptyQueue,
@@ -499,9 +498,7 @@ export function useChatStream(chatId: string | undefined): ChatStream {
                     case 'socket_call': {
                         const c = ev.data as SocketCall;
                         setSocketCalls((l) => upsert(l, c, (x) => x.id));
-                        // a successful write of the agent: the open platform pages load their data again
-                        // (issue #139). Only here, not when the stored socket_calls are loaded: those are old.
-                        reportPlatformCall(c);
+                        // platform pages are told through GET /api/events (#167), not from here
                         break;
                     }
                     case 'queue': {

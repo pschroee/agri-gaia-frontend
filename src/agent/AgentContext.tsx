@@ -20,6 +20,7 @@ import { emptyPending, pendingList, pendingReducer, startApprovalFeed } from './
 import { AGENT_ROUTE } from './expand';
 import { browserNotify, effectiveOptIn, isOn, permissionOf, showNotification, shouldNotify } from './notify';
 import { onAgentPage } from './panelCarry';
+import { reportPlatformChanged } from './platformChanges';
 import {
     alertKey,
     alertSticky,
@@ -300,6 +301,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             dispatch: dispatchPending,
             version: () => pendingVersion.current,
             onLive: setApprovalsLive,
+            onPlatformChanged: reportPlatformChanged,
             onAlert: (a) => {
                 setPlanAlerts((q) => pushAlert(q, a));
                 // a system notification only with the user's permission for this plan and only while the tab

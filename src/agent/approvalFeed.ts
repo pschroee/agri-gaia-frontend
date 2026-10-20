@@ -7,6 +7,8 @@
 // then every new or decided "approval". A slow poll of GET /approvals?state=pending is the fallback; while the
 // stream is down it polls faster.
 
+import { platformChangedOf } from './platformChanges';
+import type { PlatformChangedEvent } from './platformChanges';
 import { planAlertAction } from './planAlerts';
 import type { PlanAlert } from './planAlerts';
 import type { Approval } from './types';
@@ -104,6 +106,8 @@ export type FeedOptions = {
     onUnauthorized?: () => void;
     /** The stream carried a `plan_alert` (A-E4, D4.3); the approvals are unaffected by it. */
     onAlert?: (alert: PlanAlert) => void;
+    /** The stream carried a `platform_changed` (#167): the platform pages load their data again. */
+    onPlatformChanged?: (ev: PlatformChangedEvent) => void;
     isUnauthorized?: (e: unknown) => boolean;
     /** Poll interval while the stream is open (fallback against a silently stalled stream). */
     slowPollMs?: number;
@@ -168,6 +172,11 @@ export function startApprovalFeed(o: FeedOptions): () => void {
         };
         src.onmessage = (msg) => {
             // one stream carries both: the approvals of the user and, since A-E4, the alerts of autonomous plans
+            const changed = platformChangedOf(msg.data);
+            if (changed) {
+                o.onPlatformChanged?.(changed);
+                return;
+            }
             const alert = planAlertAction(msg.data);
             if (alert) {
                 o.onAlert?.(alert);

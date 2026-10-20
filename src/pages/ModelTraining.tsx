@@ -226,9 +226,10 @@ export default function ModelTraining() {
             });
     };
 
-    // the agent started or removed a training container, or changed a dataset the dropdown shows: reload both
-    // lists without leaving the page (the 5 s interval stays)
-    useReloadOnPlatformChange(['training', 'datasets'], () => {
+    // the agent started or removed a training container, changed a dataset the dropdown shows, or a background
+    // task ended (a container appears when the build task ends): reload both lists without leaving the page
+    // (the 5 s interval stays)
+    useReloadOnPlatformChange(['training', 'datasets', 'tasks'], () => {
         fetchDatasets();
         fetchTrainContainers();
     });

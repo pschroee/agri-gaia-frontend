@@ -163,6 +163,7 @@ describe('startApprovalFeed', () => {
     let fetchPending: ReturnType<typeof vi.fn>;
     let live: boolean[];
     let stop: () => void;
+    let changed: unknown[];
 
     const start = () => {
         stop = startApprovalFeed({
@@ -177,6 +178,7 @@ describe('startApprovalFeed', () => {
             },
             version: () => state.version,
             onLive: (v) => live.push(v),
+            onPlatformChanged: (ev) => changed.push(ev),
             slowPollMs: 60000,
             fastPollMs: 15000,
         });
@@ -187,12 +189,28 @@ describe('startApprovalFeed', () => {
         sources = [];
         state = emptyPending;
         live = [];
+        changed = [];
         fetchPending = vi.fn(() => Promise.resolve([] as Approval[]));
     });
 
     afterEach(() => {
         stop?.();
         vi.useRealTimers();
+    });
+
+    it('hands platform_changed to onPlatformChanged and not to the approvals', async () => {
+        start();
+        await vi.advanceTimersByTimeAsync(0);
+        sources[0].open();
+        const before = state;
+        sources[0].send('platform_changed', {
+            chat_id: 'c1',
+            source: 'call',
+            path: '/datasets/5',
+            changes: [{ resource: 'dataset', action: 'update', id: '5' }],
+        });
+        expect(changed).toHaveLength(1);
+        expect(state).toBe(before);
     });
 
     it('counts live from the stream: snapshot, new approval in another chat, decision', async () => {

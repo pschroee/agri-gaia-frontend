@@ -4,47 +4,85 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { CHANGE_WINDOW_MS, changedArea, notifyPlatformChange, onPlatformChange, reportPlatformCall } from './platformChanges';
+import {
+    CHANGE_WINDOW_MS,
+    areasOf,
+    notifyPlatformChange,
+    onPlatformChange,
+    pathArea,
+    platformChangedOf,
+    reportPlatformChanged,
+} from './platformChanges';
 
 /** Pushes the pending change windows past their end. */
 const flushWindows = () => vi.advanceTimersByTime(CHANGE_WINDOW_MS);
 
-describe('changedArea', () => {
-    it('maps a writing call to the area the page shows', () => {
-        expect(changedArea('POST', '/datasets')).toBe('datasets');
-        expect(changedArea('PATCH', '/datasets/16')).toBe('datasets');
-        expect(changedArea('DELETE', '/datasets/16/toggle-public')).toBe('datasets');
-        expect(changedArea('POST', '/models')).toBe('models');
-        expect(changedArea('PUT', '/models/3')).toBe('models');
-        expect(changedArea('POST', '/train/containers')).toBe('training');
-        expect(changedArea('DELETE', '/train/containers/3')).toBe('training');
-        expect(changedArea('POST', '/container-images/build')).toBe('images');
-        expect(changedArea('POST', '/edge-devices')).toBe('edge-devices');
-        expect(changedArea('PATCH', '/edge-groups/2')).toBe('edge-groups');
+describe('pathArea', () => {
+    it('maps a path to the area the page shows', () => {
+        expect(pathArea('/datasets/16')).toBe('datasets');
+        expect(pathArea('/train/containers')).toBe('training');
+        expect(pathArea('/container-images/build')).toBe('images');
+        expect(pathArea('/inference-container-templates/create/git')).toBe('container-templates');
+        expect(pathArea('/integrated-services/3')).toBe('integrated-services');
+        expect(pathArea('/tasks/abc')).toBe('tasks');
     });
 
     it('ignores a query string and a trailing slash', () => {
-        expect(changedArea('DELETE', '/datasets?limit=2')).toBe('datasets');
-        expect(changedArea('POST', '/datasets/')).toBe('datasets');
-    });
-
-    it('accepts a lower case method', () => {
-        expect(changedArea('post', '/datasets')).toBe('datasets');
-    });
-
-    it('ignores reads', () => {
-        for (const method of ['GET', 'HEAD', '']) expect(changedArea(method, '/datasets')).toBeUndefined();
+        expect(pathArea('/datasets?limit=2')).toBe('datasets');
+        expect(pathArea('/datasets/')).toBe('datasets');
     });
 
     it('matches whole segments only', () => {
-        expect(changedArea('POST', '/datasetsX')).toBeUndefined();
-        expect(changedArea('POST', '/models-of-something')).toBeUndefined();
+        expect(pathArea('/datasetsX')).toBeUndefined();
+        expect(pathArea('/users')).toBeUndefined();
+        expect(pathArea('')).toBeUndefined();
+    });
+});
+
+describe('areasOf', () => {
+    it('maps each resource of the gateway to the areas of its pages', () => {
+        expect(areasOf({ resource: 'dataset', action: 'update', id: '5' })).toEqual(['datasets']);
+        expect(areasOf({ resource: 'model', action: 'create' })).toEqual(['models']);
+        expect(areasOf({ resource: 'training', action: 'run' })).toEqual(['training']);
+        expect(areasOf({ resource: 'task', action: 'update' })).toEqual(['training', 'tasks']);
+        expect(areasOf({ resource: 'container_image', action: 'create' })).toEqual(['images']);
+        expect(areasOf({ resource: 'container_template', action: 'create' })).toEqual(['container-templates']);
+        expect(areasOf({ resource: 'container_deployment', action: 'run' })).toEqual(['edge-devices']);
+        expect(areasOf({ resource: 'edge_device', action: 'delete' })).toEqual(['edge-devices']);
     });
 
-    it('ignores paths of other areas', () => {
-        expect(changedArea('POST', '/users')).toBeUndefined();
-        expect(changedArea('DELETE', '/activity')).toBeUndefined();
-        expect(changedArea('POST', '')).toBeUndefined();
+    it('has no page for notebook, assessment or annotation function', () => {
+        for (const resource of ['notebook', 'assessment', 'annotation_function', 'unknown']) {
+            expect(areasOf({ resource, action: 'create' })).toEqual([]);
+        }
+    });
+
+    it('resolves the api resource by the path', () => {
+        expect(areasOf({ resource: 'api', action: 'update', id: '/integrated-services/3' })).toEqual(['integrated-services']);
+        expect(areasOf({ resource: 'api', action: 'update' }, '/edge-groups/2')).toEqual(['edge-groups']);
+        expect(areasOf({ resource: 'api', action: 'update', id: '/users' })).toEqual([]);
+    });
+});
+
+describe('platformChangedOf', () => {
+    const msg = (data: unknown, kind = 'platform_changed') => JSON.stringify({ kind, data });
+    const good = { chat_id: 'c1', source: 'call', path: '/datasets/5', changes: [{ resource: 'dataset', action: 'update', id: '5' }] };
+
+    it('reads a well-formed event', () => {
+        expect(platformChangedOf(msg(good))).toEqual({ ...good, job_id: undefined });
+    });
+
+    it('gives undefined for another kind, broken JSON and missing fields', () => {
+        expect(platformChangedOf(msg(good, 'approval'))).toBeUndefined();
+        expect(platformChangedOf('{not json')).toBeUndefined();
+        expect(platformChangedOf(msg({ chat_id: 'c1', source: 'call' }))).toBeUndefined();
+        expect(platformChangedOf(msg({ ...good, changes: 'x' }))).toBeUndefined();
+        expect(platformChangedOf(msg(null))).toBeUndefined();
+    });
+
+    it('drops malformed changes', () => {
+        const ev = platformChangedOf(msg({ ...good, changes: [{ resource: 'dataset' }, ...good.changes] }));
+        expect(ev?.changes).toEqual(good.changes);
     });
 });
 
@@ -103,12 +141,16 @@ describe('onPlatformChange', () => {
     });
 });
 
-// The entry the chat stream uses: an event of the SSE "socket_call" kind reaches reportPlatformCall unchanged.
-describe('reportPlatformCall', () => {
+describe('reportPlatformChanged', () => {
     let calls: string[];
     let off: (() => void) | undefined;
 
-    const call = (op: string, detail: string, result: string) => reportPlatformCall({ op, detail, result });
+    const change = (resource: string, path = '') => ({
+        chat_id: 'c1',
+        source: 'call',
+        path,
+        changes: [{ resource, action: 'update' }],
+    });
 
     beforeEach(() => {
         vi.useFakeTimers();
@@ -122,51 +164,21 @@ describe('reportPlatformCall', () => {
         vi.useRealTimers();
     });
 
-    it('reports a successful platform write', () => {
-        expect(call('platform', 'PATCH /datasets/16', 'ok 200')).toBe('datasets');
+    it('reports every area of the event', () => {
+        expect(reportPlatformChanged(change('task')).sort()).toEqual(['tasks', 'training']);
+        flushWindows();
+        expect(calls.sort()).toEqual(['tasks', 'training']);
+    });
+
+    it('stays silent for a resource without a page', () => {
+        expect(reportPlatformChanged(change('notebook'))).toEqual([]);
+        flushWindows();
+        expect(calls).toEqual([]);
+    });
+
+    it('summarises ten events into one reload per area', () => {
+        for (let i = 0; i < 10; i++) reportPlatformChanged(change('dataset'));
         flushWindows();
         expect(calls).toEqual(['datasets']);
-    });
-
-    it('stays silent on an error', () => {
-        expect(call('platform', 'PATCH /datasets/16', 'error 500')).toBeUndefined();
-        flushWindows();
-        expect(calls).toEqual([]);
-    });
-
-    it('stays silent on a refused, blocked or rejected call', () => {
-        for (const result of ['rejected by you', 'refused: not allowed', 'violation blocked: delegation']) {
-            expect(call('platform', 'POST /datasets', result)).toBeUndefined();
-        }
-        flushWindows();
-        expect(calls).toEqual([]);
-    });
-
-    it('stays silent on a read, even a successful one', () => {
-        expect(call('platform', 'GET /datasets?limit=100', 'ok 200')).toBeUndefined();
-        expect(call('platform', 'GET /models/3', 'ok 200')).toBeUndefined();
-        flushWindows();
-        expect(calls).toEqual([]);
-    });
-
-    it('stays silent for another channel', () => {
-        expect(call('llm', 'PATCH /datasets/16', 'ok 200')).toBeUndefined();
-        expect(call('exec', 'POST /datasets', 'ok 200')).toBeUndefined();
-        flushWindows();
-        expect(calls).toEqual([]);
-    });
-
-    it('stays silent for a write outside the areas the pages show', () => {
-        expect(call('platform', 'POST /users', 'ok 200')).toBeUndefined();
-        flushWindows();
-        expect(calls).toEqual([]);
-    });
-
-    it('summarises a plan of several writes into one reload per area', () => {
-        call('platform', 'POST /train/config', 'ok 201');
-        call('platform', 'POST /train/containers/3/run', 'ok 200');
-        call('platform', 'PATCH /datasets/16', 'ok 200');
-        flushWindows();
-        expect(calls.sort()).toEqual(['datasets', 'training']);
     });
 });

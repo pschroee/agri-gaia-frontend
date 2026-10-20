@@ -2,20 +2,29 @@
 //
 // SPDX-License-Identifier: MIT
 
-// "Platform changed" (issue #139): the agent reports every successful writing platform call of the open chat, the
-// platform pages listen for the areas they show and load their data again. There is no polling and no query cache
-// in this frontend, so without this event an open page keeps the state it loaded when it was mounted.
+// "Platform changed" (issues #139, #167): the gateway reports every successful writing platform call of the agent
+// and every observed job that hands over or ends as the event `platform_changed` on the stream across all chats
+// (GET /api/events). The platform pages listen for the areas they show and load their data again. There is no
+// polling and no query cache in this frontend, so without this event an open page keeps the state it loaded when it
+// was mounted.
 //
-// Only the stream of the selected chat reaches this module: the shared stream provider keeps that one open across
-// page changes. An agent working in another chat (or a change by another user) reports nothing here.
+// The source is the stream across chats, kept open by the agent context whatever chat, page or tab is open: an
+// agent working in another chat or a closed panel reports as well. A change by the user or by another user does not.
 
 import { useEffect, useRef } from 'react';
 
-import { outcomeOf, splitCall } from './format';
-import type { SocketCall } from './types';
 
-/** Part of the platform a page shows; the value is the path prefix the platform call started with. */
-export type PlatformArea = 'datasets' | 'models' | 'training' | 'images' | 'edge-devices' | 'edge-groups';
+/** Part of the platform a page shows. */
+export type PlatformArea =
+    | 'datasets'
+    | 'models'
+    | 'training'
+    | 'images'
+    | 'edge-devices'
+    | 'edge-groups'
+    | 'container-templates'
+    | 'integrated-services'
+    | 'tasks';
 
 /** Path prefix → area, longest first is not needed: no prefix is a prefix of another. */
 const AREA_PREFIXES: ReadonlyArray<readonly [string, PlatformArea]> = [
@@ -25,19 +34,73 @@ const AREA_PREFIXES: ReadonlyArray<readonly [string, PlatformArea]> = [
     ['/container-images', 'images'],
     ['/edge-devices', 'edge-devices'],
     ['/edge-groups', 'edge-groups'],
+    ['/inference-container-templates', 'container-templates'],
+    ['/integrated-services', 'integrated-services'],
+    ['/tasks', 'tasks'],
 ];
 
-const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+/** One object the gateway reports as changed (names of the gateway's delegation). */
+export type PlatformChange = { resource: string; action: string; id?: string };
+
+/** Data of the stream event `platform_changed`. */
+export type PlatformChangedEvent = {
+    chat_id: string;
+    source: string;
+    path?: string;
+    job_id?: string;
+    changes: PlatformChange[];
+};
+
+/** Resource of a change → the areas whose pages show it. `api` is resolved by the path (see areasOf). */
+const RESOURCE_AREAS: Record<string, PlatformArea[]> = {
+    dataset: ['datasets'],
+    model: ['models'],
+    training: ['training'],
+    task: ['training', 'tasks'],
+    container_image: ['images'],
+    container_template: ['container-templates'],
+    container_deployment: ['edge-devices'],
+    edge_device: ['edge-devices'],
+    notebook: [],
+    assessment: [],
+    annotation_function: [],
+};
 
 /**
- * Area a platform call touched, or undefined. Only writing methods count: a read changes nothing. The match is on
- * whole path segments, so "/datasets/16" hits datasets and "/datasetsX" does not. A query string is ignored.
+ * Area a path belongs to, or undefined. The match is on whole path segments, so "/datasets/16" hits datasets and
+ * "/datasetsX" does not. A query string and a trailing slash are ignored.
  */
-export function changedArea(method: string, path: string): PlatformArea | undefined {
-    if (!WRITE_METHODS.has((method ?? '').toUpperCase())) return undefined;
-    const p = (path ?? '').split('?')[0];
+export function pathArea(path: string): PlatformArea | undefined {
+    const p = (path ?? '').split('?')[0].replace(/\/+$/, '');
     for (const [prefix, area] of AREA_PREFIXES) if (p === prefix || p.startsWith(`${prefix}/`)) return area;
     return undefined;
+}
+
+/** Areas one change touches. */
+export function areasOf(change: PlatformChange, path?: string): PlatformArea[] {
+    if (change.resource === 'api') {
+        const area = pathArea(change.id || path || '');
+        return area ? [area] : [];
+    }
+    return RESOURCE_AREAS[change.resource] ?? [];
+}
+
+/** Reads the data of a stream message; anything that is not a well-formed `platform_changed` gives undefined. */
+export function platformChangedOf(raw: string): PlatformChangedEvent | undefined {
+    let msg: unknown;
+    try {
+        msg = JSON.parse(raw);
+    } catch {
+        return undefined;
+    }
+    const m = msg as { kind?: unknown; data?: unknown } | null;
+    if (!m || m.kind !== 'platform_changed' || !m.data || typeof m.data !== 'object') return undefined;
+    const d = m.data as Partial<PlatformChangedEvent>;
+    if (typeof d.chat_id !== 'string' || typeof d.source !== 'string' || !Array.isArray(d.changes)) return undefined;
+    const changes = d.changes.filter(
+        (c): c is PlatformChange => !!c && typeof c.resource === 'string' && typeof c.action === 'string',
+    );
+    return { chat_id: d.chat_id, source: d.source, path: d.path, job_id: d.job_id, changes };
 }
 
 /** Window in which several changes of one area cause a single reload. */
@@ -72,18 +135,12 @@ export function onPlatformChange(cb: Listener): () => void {
     };
 }
 
-/**
- * Entry for the chat stream: reports a socket log entry of the open chat. Only a successful platform write of a
- * known area is a change; reads, failures and a channel other than the platform are not. Returns the area it
- * reported, for tests.
- */
-export function reportPlatformCall(c: Pick<SocketCall, 'op' | 'detail' | 'result'>): PlatformArea | undefined {
-    if (c?.op !== 'platform') return undefined;
-    if (outcomeOf(c.result ?? '') !== 'ok') return undefined;
-    const { method, path } = splitCall(c.detail ?? '');
-    const area = changedArea(method, path);
-    if (area) notifyPlatformChange(area);
-    return area;
+/** Entry for the feed: tells the open pages about every area the event touches. Returns the areas, for tests. */
+export function reportPlatformChanged(ev: PlatformChangedEvent): PlatformArea[] {
+    const areas = new Set<PlatformArea>();
+    for (const c of ev.changes) for (const a of areasOf(c, ev.path)) areas.add(a);
+    for (const a of areas) notifyPlatformChange(a);
+    return [...areas];
 }
 
 /**
