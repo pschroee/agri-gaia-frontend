@@ -105,8 +105,32 @@ export default function DataManagement() {
             });
     };
 
+    // The ids an active keyword search shows, or null without a search. A reload because of the agent keeps that
+    // filter and the page, and drops checked datasets that are gone (#167).
+    const searchIds = useRef<Set<number> | null>(null);
+    const handleSearchResult = (result: IDataset[]) => {
+        searchIds.current = new Set(result.map((d) => d.id));
+        setDatasets(result);
+    };
+    const resetSearch = () => {
+        searchIds.current = null;
+        fetchDatasets();
+    };
+    const reloadKeepingView = async () => {
+        try {
+            const all: IDataset[] = await httpGet(keycloak, DATASETS_PATH);
+            all.sort((a, b) => a.name.localeCompare(b.name));
+            const ids = searchIds.current;
+            setDatasets(ids ? all.filter((d) => ids.has(d.id)) : all);
+            const present = new Set(all.map((d) => d.id));
+            setSelected((sel) => (sel.every((id) => present.has(id)) ? sel : sel.filter((id) => present.has(id))));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     // the agent renamed, created or deleted a dataset: show the new list without leaving the page
-    useReloadOnPlatformChange('datasets', fetchDatasets);
+    useReloadOnPlatformChange('datasets', reloadKeepingView);
 
     /*
     const fetchClasses = async () => {
@@ -254,7 +278,7 @@ export default function DataManagement() {
                 </Grid>
             </Grid>
 
-            <AgrovocSearchbar searchRoute={DATASETS_PATH} handleResponse={setDatasets} resetResult={fetchDatasets} />
+            <AgrovocSearchbar searchRoute={DATASETS_PATH} handleResponse={handleSearchResult} resetResult={resetSearch} />
 
             <DatasetsList
                 datasets={datasets}
