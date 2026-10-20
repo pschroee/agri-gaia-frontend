@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -62,22 +63,33 @@ export const TasksProvider = function ({ children }: { children: ReactNode }) {
                 const taskIdString = uncompletedTasks.map((task) => 'id=' + task.id).join('&');
                 httpGet(keycloak, `${TASKS_PATH}?${taskIdString}`)
                     .then((updatedTasks: IBackgroundTask[]) => {
-                        const updatedTasksIds = updatedTasks.map((task) => task.id);
-                        const tasksList = tasks.tasksList.map((task) => {
-                            const updatedTaskIndex = updatedTasksIds.indexOf(task.id);
-                            if (updatedTaskIndex > -1) {
-                                return {
-                                    ...updatedTasks[updatedTaskIndex],
-                                    taskCompleteCallback: task.taskCompleteCallback,
-                                };
-                            }
-                            return task;
-                        });
-                        setTasks((tasks) => ({ ...tasks, tasksList: tasksList }));
-                        tasksList
+                        // Merge into the current state, not into the list read before the request: a task added in
+                        // the meantime stays, and the client-only fields of a task survive the answer (#173).
+                        const byId = new Map(updatedTasks.map((task) => [task.id, task]));
+                        const before = tasksRef.current.tasksList;
+                        setTasks((tasks) => ({
+                            ...tasks,
+                            tasksList: tasks.tasksList.map((task) => {
+                                const updated = byId.get(task.id);
+                                return updated
+                                    ? {
+                                          ...updated,
+                                          taskCompleteCallback: task.taskCompleteCallback,
+                                          startedByAgent: task.startedByAgent,
+                                      }
+                                    : task;
+                            }),
+                        }));
+                        updatedTasks
                             .filter((task) => task.status === TaskStatus.completed || task.status === TaskStatus.failed)
-                            .filter((task) => updatedTasksIds.includes(task.id))
-                            .forEach((task) => task.taskCompleteCallback?.(task));
+                            .forEach((task) => {
+                                const known = before.find((t) => t.id === task.id);
+                                known?.taskCompleteCallback?.({
+                                    ...task,
+                                    taskCompleteCallback: known.taskCompleteCallback,
+                                    startedByAgent: known.startedByAgent,
+                                });
+                            });
                     })
                     .catch(console.error);
             },
