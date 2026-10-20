@@ -17,6 +17,9 @@ import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
 import NotebookRunApproval from './NotebookRunApproval';
+import CodeChangeApproval from './search/CodeChangeApproval';
+import SearchApproval from './search/SearchApproval';
+import { isCodeChange, isProposal } from '../searchApproval';
 import type { Plan } from '../plan';
 import { summaryChanged, summaryParts } from '../plan';
 import { useShownPlanCards } from '../planRegistry';
@@ -342,12 +345,13 @@ export default function ApprovalCard({
     const shown = useShownPlanCards();
     if (approvals.length === 0) return null;
 
-    // a plan is approved with its own button only: approving all never takes it along (issue #70)
+    // a plan is approved with its own button only: approving all never takes it along (issue #70); the same goes for a
+    // training search (issue #168), which hands over a budget and hours of autonomy
     const approveAll = async () => {
         setBusy(true);
         try {
             for (const a of approvals) {
-                if (a.kind === 'plan') continue;
+                if (a.kind === 'plan' || a.kind === 'search') continue;
                 await onDecide(a, true);
             }
         } finally {
@@ -374,6 +378,24 @@ export default function ApprovalCard({
                     <InternetItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ) : a.kind === 'artifact_upload' ? (
                     <ArtifactItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                ) : a.search && isCodeChange(a.search) ? (
+                    // a trial of a notebook search runs other code than the approved one (issue #168, G15)
+                    <CodeChangeApproval
+                        key={a.id}
+                        approval={a}
+                        data={a.search}
+                        onApprove={() => onDecide(a, true)}
+                        onReject={() => onDecide(a, false)}
+                    />
+                ) : a.kind === 'search' && isProposal(a.search) ? (
+                    <SearchApproval
+                        key={a.id}
+                        approval={a}
+                        data={a.search}
+                        layout={layout}
+                        onApprove={() => onDecide(a, true)}
+                        onReject={() => onDecide(a, false)}
+                    />
                 ) : a.notebook ? (
                     // a run in the chat's notebook server (own code C-E4): the gateway's structured data replaces the
                     // text preview — the code of the run, file by file
@@ -389,7 +411,7 @@ export default function ApprovalCard({
                     <ApprovalItem key={a.id} approval={a} layout={layout} onDecide={(approve) => onDecide(a, approve)} />
                 ),
             )}
-            {approvals.filter((a) => a.kind !== 'plan').length > 1 && (
+            {approvals.filter((a) => a.kind !== 'plan' && a.kind !== 'search').length > 1 && (
                 <Box sx={{ px: 1.5, py: 1, borderTop: 1, borderColor: 'divider' }}>
                     <Button size="small" variant="contained" disabled={busy} onClick={() => void approveAll()}>
                         Approve all

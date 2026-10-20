@@ -4,6 +4,7 @@
 
 import type { PageContext } from './pageContext';
 import type { NotebookApprovalData } from './notebook';
+import type { SearchApproval } from './searchApproval';
 import type { UploadManifest } from './uploads';
 // Subset of the agent gateway API types (agri-gaia-agent-gateway, API.md and web/src/api/types.ts),
 // limited to what the platform UI shows.
@@ -255,6 +256,8 @@ export type MessageSource = {
     audience?: 'agent';
     /** Type "page_context": the page context as structured data (not shown in the transcript); queue_id: its user entry. */
     context?: PageContext;
+    /** The user's hint for a training search (gateway issue #168): the message is shown with a "Hint" label. */
+    search_hint?: { search_id: string };
 };
 
 export type Approval = {
@@ -262,7 +265,7 @@ export type Approval = {
     chat_id: string;
     /** platform_write: name is "METHOD path", preview carries the JSON body. plan: name is "Plan with N steps" (older
      * gateways: "Plan: <title>"), size the number of steps, preview the plan (issue #70). */
-    kind: 'artifact_upload' | 'internet_access' | 'platform_write' | 'plan';
+    kind: 'artifact_upload' | 'internet_access' | 'platform_write' | 'plan' | 'search';
     via: 'cli' | 'mcp';
     name: string;
     size: number;
@@ -294,6 +297,12 @@ export type Approval = {
      * the socket read), never from the agent's text; missing on older entries and on every other call.
      */
     notebook?: NotebookApprovalData;
+    /**
+     * A training search (gateway issue #168), written by the gateway: on an approval of kind `search` the proposal (space,
+     * budget, base or code, test set); on a `platform_write` approval of a notebook run of a search the code change (versions,
+     * changed files, diffs). Missing on every other approval.
+     */
+    search?: SearchApproval;
     /**
      * platform_write that uploads files (gateway issue #164): number, size, folders, file types, the annotation file
      * and the SHA-256 over the list of every file. The list itself is not part of the approval — the card fetches it

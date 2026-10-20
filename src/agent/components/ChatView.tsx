@@ -36,6 +36,7 @@ import { useChatDraft, useSharedChatStream } from '../sharedChatStream';
 import { todoTimeline } from '../tasks';
 import { PlanCardRegistryProvider } from '../planRegistry';
 import { usePlans } from '../usePlans';
+import { useExperiments } from '../experiments';
 import { useStickToBottom } from '../useStickToBottom';
 import ApprovalCard from './ApprovalCard';
 import ChatInput from './ChatInput';
@@ -71,6 +72,8 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
     const stream = useSharedChatStream(chatId, readOnly);
     const plans = usePlans(stream.plans);
     const draft = useChatDraft(chatId);
+    // the chat's training searches and trials (issue #168): the cards in the transcript and the chip in the header
+    const experiments = useExperiments(chatId, !readOnly);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, partials, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
     const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
@@ -104,6 +107,13 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
         setPlanList(chatId, plans);
         return () => setPlanList(chatId, undefined);
     }, [chatId, plans, setPlanList]);
+    const setSearchList = readOnly ? undefined : agent?.setSearchList;
+    const experimentsBook = experiments.state;
+    useEffect(() => {
+        if (!setSearchList) return;
+        setSearchList(chatId, { searches: experimentsBook.searches, trials: experimentsBook.trials });
+        return () => setSearchList(chatId, undefined);
+    }, [chatId, experimentsBook.searches, experimentsBook.trials, setSearchList]);
     const items = useMemo(
         () =>
             buildTranscript(messages, {
@@ -320,6 +330,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                                     dense={dense}
                                     subagents={subagentLinks}
                                     plans={plans}
+                                    experiments={experiments}
                                 />
                             )}
                             <ApprovalCard

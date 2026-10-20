@@ -69,7 +69,7 @@ import { agentColors, MONO } from './tokens';
 export type NotebookSize = 'panel' | 'page' | 'dialog';
 
 /** How long a name may be in each place of the card (design, gap L1). */
-const LEN: Record<NotebookSize, { title: number; tab: number; dataset: number; line: number }> = {
+export const LEN: Record<NotebookSize, { title: number; tab: number; dataset: number; line: number }> = {
     panel: { title: 28, tab: 22, dataset: 24, line: 18 },
     page: { title: 48, tab: 30, dataset: 40, line: 40 },
     dialog: { title: 60, tab: 40, dataset: 40, line: 40 },
@@ -194,7 +194,7 @@ function FileMeta({ file, entry }: { file: NotebookFile; entry: string }) {
 }
 
 /** The datasets and the limits of the run as a grid: two rows in the panel, wider values on the page. */
-function Facts({ data, size }: { data: NotebookApprovalData; size: NotebookSize }) {
+export function Facts({ data, size }: { data: NotebookApprovalData; size: NotebookSize }) {
     const datasetMax = LEN[size].dataset;
     return (
         <Box
@@ -226,7 +226,7 @@ function Facts({ data, size }: { data: NotebookApprovalData; size: NotebookSize 
 }
 
 /** The file view of one run: the tabs over its files, the meta line and the code of the chosen one. */
-function FileView({
+export function FileView({
     data,
     size,
     tab,
@@ -328,13 +328,13 @@ function Actions({
 }
 
 /** The symbol of a decided line; the state is never told by the colour alone (it stands next to the word). */
-function DecisionIcon({ tone }: { tone: 'ok' | 'error' | 'muted' }) {
+export function DecisionIcon({ tone }: { tone: 'ok' | 'error' | 'muted' }) {
     if (tone === 'ok') return <CheckIcon sx={{ fontSize: 16, color: agentColors.ok, flex: 'none' }} aria-hidden />;
     if (tone === 'error') return <BlockIcon sx={{ fontSize: 16, color: 'error.main', flex: 'none' }} aria-hidden />;
     return <TimerOffIcon sx={{ fontSize: 16, color: 'text.disabled', flex: 'none' }} aria-hidden />;
 }
 
-const TONE_COLOR = { ok: agentColors.ok, error: 'error.main', muted: 'text.disabled' } as const;
+export const TONE_COLOR = { ok: agentColors.ok, error: 'error.main', muted: 'text.disabled' } as const;
 
 /**
  * The approval of one run of the chat's notebook server. Pending it is the full card (title, chip, facts, the code
@@ -496,7 +496,7 @@ export default function NotebookRunApproval({
 }
 
 /** Reject and Approve in the dialog's footer; the same busy rule as the actions of the card. */
-function DialogDecision({ onApprove, onReject }: { onApprove?: () => Promise<void>; onReject?: () => Promise<void> }) {
+export function DialogDecision({ onApprove, onReject }: { onApprove?: () => Promise<void>; onReject?: () => Promise<void> }) {
     const [busy, setBusy] = useState(false);
     const decide = async (approve: boolean) => {
         setBusy(true);
