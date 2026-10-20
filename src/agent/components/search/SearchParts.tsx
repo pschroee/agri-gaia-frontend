@@ -209,13 +209,3 @@ export function LogBox({
         </Box>
     );
 }
-
-/** The sign "reconnecting" over the values that stay as they were. */
-export function ReconnectingLine({ time }: { time?: string }) {
-    return (
-        <Box role="status" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 12, color: 'text.secondary' }}>
-            <CircularProgress size={10} thickness={6} color="inherit" aria-hidden />
-            <span>{`Reconnecting…${time ? ` · showing the last values from ${time}` : ''}`}</span>
-        </Box>
-    );
-}

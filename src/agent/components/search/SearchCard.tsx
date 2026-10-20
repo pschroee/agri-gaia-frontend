@@ -37,7 +37,6 @@ import {
     epochPercent,
     epochText,
     etaText,
-    gpuMissing,
     metricWords,
     nextIdx,
     openTrialOf,
@@ -51,9 +50,10 @@ import {
 } from '../../searchView';
 import type { AssessCheck } from '../../types';
 import { useNow } from '../../useNow';
-import { AgentNote, LogBox, Meters, ReconnectingLine, SearchStateChip, Spinner, TrialStateMark, WayTag } from './SearchParts';
+import { AgentNote, LogBox, Meters, SearchStateChip, Spinner, TrialStateMark, WayTag } from './SearchParts';
 import { SearchControls } from './SearchControls';
 import { Sparkline } from './Sparkline';
+import { ReconnectingHint, emptyState } from './TrialChartEmpty';
 import { Technical } from '../PlanCard';
 import { MONO } from '../tokens';
 
@@ -123,7 +123,6 @@ function RunningTrial({ search, trial, list, env, now }: { search: Search; trial
     const pct = epochPercent(trial);
     const eta = etaText(trial.eta, now);
     const lastGpu = series.gpu[series.gpu.length - 1] ?? trial.gpu ?? undefined;
-    const gpuNote = lastGpu ? undefined : gpuMissing(trial, series.gpu);
     const last = series.epochs.filter((e) => typeof e[o.metric] === 'number').pop();
     const spec = Object.keys(search.space ?? {});
     return (
@@ -169,7 +168,7 @@ function RunningTrial({ search, trial, list, env, now }: { search: Search; trial
                         </Box>
                     ) : (
                         <Typography component="span" sx={{ fontSize: 13, color: 'text.secondary' }}>
-                            {trial.figures === 'none' ? 'This training writes no figures' : 'No figures yet'}
+                            {emptyState(trial, 'figures').title}
                         </Typography>
                     )}
                 </Fact>
@@ -177,7 +176,7 @@ function RunningTrial({ search, trial, list, env, now }: { search: Search; trial
                     {lastGpu ? (
                         <>{`${Math.round(lastGpu.util)} % · ${(lastGpu.mem_used_mb / 1024).toFixed(1)} of ${Math.round(lastGpu.mem_total_mb / 1024)} GB`}</>
                     ) : (
-                        <Typography component="span" sx={{ fontSize: 13, color: 'text.secondary' }}>{gpuNote?.title ?? 'GPU data not available'}</Typography>
+                        <Typography component="span" sx={{ fontSize: 13, color: 'text.secondary' }}>{emptyState(trial, 'gpu').title}</Typography>
                     )}
                 </Fact>
                 <Fact label="Best so far">
@@ -381,7 +380,7 @@ export default function SearchCard({ search, env }: { search: Search; env: Searc
                 boxSizing: 'border-box',
             }}
         >
-            {env.experiments.reconnecting && <ReconnectingLine time={lastAt} />}
+            {env.experiments.reconnecting && <ReconnectingHint since={lastAt} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: compact ? 'nowrap' : 'wrap', minHeight: 30 }}>
                 <Typography noWrap title={search.title} sx={{ fontSize: 14, fontWeight: 500, minWidth: 0, flex: '0 1 auto' }}>
                     {`Training search · ${search.title}`}
