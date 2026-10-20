@@ -141,6 +141,10 @@ describe('the end and the final test', () => {
         expect(testView({ ...s, holdout: { available: false, final_state: 'none' } }, done)?.kind).toBe('none');
         expect(testView({ ...s, holdout: { available: true, final_state: 'pending' } }, [])).toEqual({ kind: 'none', text: 'No finished trial – no final test.' });
         expect(testView(mockSearch(), done)).toBeUndefined();
+        // the result the gateway copied into the search is used while the check is not loaded
+        const started = { ...s, holdout: { available: true, final_state: 'started' as const, check_id: 'k1', result: { state: 'finished' as const, accuracy: 0.87, images: 92 } } };
+        expect(testView(started, done)).toMatchObject({ kind: 'measured', accuracy: 0.87, images: 92 });
+        expect(testView({ ...started, holdout: { ...started.holdout, result: undefined } }, done)?.kind).toBe('running');
     });
 });
 describe('missing data (G1)', () => {

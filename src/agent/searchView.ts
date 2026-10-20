@@ -13,6 +13,7 @@ import type {
     ParamSpec,
     Search,
     SearchBudget,
+    SearchHoldout,
     SearchObjective,
     Trial,
     TrialState,
@@ -91,6 +92,15 @@ export function minutesText(min: number): string {
     return m === 0 ? `${h} h` : `${h} h ${m} min`;
 }
 
+/** A bound of a range: on a log scale up to 0.01 in exponential form ("1e-2"), as the design writes it. */
+function boundText(n: number, log: boolean): string {
+    if (log && n > 0 && n <= 0.01) {
+        const [m, e] = n.toExponential(2).split('e');
+        return `${m.replace(/\.?0+$/, '')}e${Number(e)}`;
+    }
+    return compactNumber(n);
+}
+
 /** The kind and the bounds of a searched parameter for the table of the approval. */
 export function specText(spec: ParamSpec): { kind: string; vals: string } {
     switch (spec.type) {
@@ -98,7 +108,7 @@ export function specText(spec: ParamSpec): { kind: string; vals: string } {
         case 'int':
             return {
                 kind: `range · ${spec.scale === 'log' ? 'log' : 'linear'}`,
-                vals: `${compactNumber(spec.min ?? 0)} … ${compactNumber(spec.max ?? 0)}`,
+                vals: `${boundText(spec.min ?? 0, spec.scale === 'log')} … ${boundText(spec.max ?? 0, spec.scale === 'log')}`,
             };
         case 'choice':
             return { kind: 'values', vals: (spec.values ?? []).map(paramValue).join(' · ') };
@@ -511,6 +521,12 @@ export function testResultOf(check: AssessCheck | undefined): { accuracy?: numbe
     return { accuracy: typeof accuracy === 'number' ? accuracy : undefined, images: r.measured_images, verdict: r.verdict || undefined };
 }
 
+/** The result the gateway copied into `holdout.result`; used while the check is not loaded in the view. */
+function resultOfHoldout(r: SearchHoldout['result']): { accuracy?: number; images?: number; verdict?: string } | undefined {
+    if (!r || r.state === 'failed') return undefined;
+    return { accuracy: r.accuracy, images: r.images, verdict: r.verdict };
+}
+
 export function testView(search: Search, trials: Trial[], check?: AssessCheck): TestView | undefined {
     if (search.state !== 'ended') return undefined;
     const ho = search.holdout;
@@ -518,7 +534,7 @@ export function testView(search: Search, trials: Trial[], check?: AssessCheck): 
     if (!winner) return { kind: 'none', text: 'No finished trial – no final test.' };
     if (!ho?.available || ho.final_state === 'none') return { kind: 'none', text: 'No test set — the final test is skipped.' };
     if (ho.final_state === 'started') {
-        const res = testResultOf(check);
+        const res = testResultOf(check) ?? resultOfHoldout(ho.result);
         return res ? { kind: 'measured', ...res } : { kind: 'running', text: 'Final test running' };
     }
     const n = ho.images ?? ho.eval_dataset?.images;

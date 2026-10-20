@@ -49,7 +49,7 @@ describe('a running search', () => {
         render1(mockSearch(), mockTrials());
         expect(screen.getByRole('region', { name: 'Training search tf-flowers' })).toBeTruthy();
         expect(screen.getByText('Training search · tf-flowers')).toBeTruthy();
-        expect(screen.getByText('Running')).toBeTruthy();
+        expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
         expect(screen.getByText('Validation accuracy · higher is better · platform template')).toBeTruthy();
         expect(screen.getByText('3 of 6 · trial 4 running')).toBeTruthy();
         expect(screen.getByText('1 h 12 min of 3 h')).toBeTruthy();
@@ -142,6 +142,13 @@ describe('the ends', () => {
         render1(ended('adopted'), done);
         expect(screen.getByText('Trial adopted')).toBeTruthy();
         expect(screen.getByText('Winner · Trial 2 (adopted by you)')).toBeTruthy();
+    });
+
+    it('ended by the agent: its note is shown as not verified (A4)', () => {
+        render1(ended('ended_by_agent', { end_note: 'good enough for now' }), done);
+        expect(screen.getByText('Ended by the agent')).toBeTruthy();
+        expect(screen.getByTestId('agent-search-end-note').textContent).toContain('good enough for now');
+        expect(screen.getByTestId('agent-search-end-note').textContent).toContain('not verified');
     });
 
     it('failed: the alert, the best finished trial and the test still pending (G13)', () => {

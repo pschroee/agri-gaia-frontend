@@ -294,6 +294,7 @@ function Result({ search, list, checks }: { search: Search; list: Trial[]; check
                 </Typography>
             )}
             {!failed && reason && <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{reason}</Typography>}
+            {search.end_reason === 'ended_by_agent' && <AgentNote text={search.end_note} collapsible={false} testId="agent-search-end-note" />}
             {failed && (
                 <Technical
                     text={[`end_reason: ${search.end_reason}`, bad ? `trial ${bad.idx} (${bad.state}): ${bad.error ?? 'no error text'}` : ''].filter(Boolean).join('\n')}
