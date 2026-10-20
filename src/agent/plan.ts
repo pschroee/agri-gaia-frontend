@@ -9,6 +9,7 @@
 import { AGENT_BASE } from './login';
 import type { AgentPart, Step, TranscriptItem } from './transcript';
 import type { Approval } from './types';
+import type { UploadManifest } from './uploads';
 import { answerSteps } from './answer';
 
 export type PlanState =
@@ -87,6 +88,11 @@ export type PlanStep = {
     form?: Record<string, unknown>;
     form_sha256?: string;
     files?: { field: string; path: string; sha256: string }[];
+    /**
+     * The summary of the step's uploads (gateway issue #172), instead of `files`: number, size, folders, file types
+     * and the SHA-256 over the list of every file. The list itself is fetched when the user opens it.
+     */
+    uploads?: UploadManifest;
     /** Effect class; irreversible steps are never covered by the plan. */
     effect: 'write' | 'compute' | 'irreversible';
     /** Covered by the approval of the plan (false: the step asks for its own approval). */
@@ -218,7 +224,9 @@ export function stepTechnical(step: PlanStep): string {
     }
     if (step.body !== undefined && step.body !== null) parts.push(`body ${JSON.stringify(step.body, null, 2)}`);
     if (step.form && Object.keys(step.form).length > 0) parts.push(`form: ${JSON.stringify(step.form, null, 2)}`);
-    if (step.files && step.files.length > 0)
+    if (step.uploads)
+        parts.push(`files: ${step.uploads.files} (manifest sha256 ${step.uploads.manifest_sha256}); the full list is shown above`);
+    else if (step.files && step.files.length > 0)
         parts.push(step.files.map((f) => `file ${f.field}: ${f.path}  sha256 ${f.sha256}`).join('\n'));
     return parts.join('\n');
 }
