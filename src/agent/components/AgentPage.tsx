@@ -40,6 +40,7 @@ import { TrashBanner, TrashDialogs, TrashEntryButton, TrashSnackbar, TrashView }
 import { ChatTokens, ContextMeter } from './ContextMeter';
 import PlanButton from './PlanButton';
 import PlanIndicator from './PlanIndicator';
+import SearchIndicator from './search/SearchIndicator';
 import TaskButton from './TaskButton';
 import InternetToggle from './InternetToggle';
 import AgentDropZone from './AgentDropZone';
@@ -353,7 +354,7 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
 
 /** Head of the open chat: title, run state while something happens, internet switch, context ring and tokens. */
 function ChatHeader() {
-    const { chats, selectedChatId, compacting, taskLists, planLists, pendingApprovals } = useAgent();
+    const { chats, selectedChatId, compacting, taskLists, planLists, searchLists, pendingApprovals } = useAgent();
     const sub = useSubagentNav();
     const chat = chats.find((c) => c.id === selectedChatId);
     if (!chat) return null;
@@ -421,6 +422,7 @@ function ChatHeader() {
                     pending={pendingIdsOf(pendingApprovals)}
                     onShow={() => shownPlan && scrollToPlanCard(shownPlan.id)}
                 />
+                <SearchIndicator book={searchLists[chat.id]} variant="page" chatId={chat.id} />
                 <TaskButton tasks={taskLists[chat.id]} />
                 <PlanButton plans={planLists[chat.id]} />
                 <ContextMeter chat={chat} compacting={compacting[chat.id]} label />

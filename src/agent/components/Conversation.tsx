@@ -5,12 +5,14 @@
 import { Fragment, useCallback, useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CompressIcon from '@mui/icons-material/Compress';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
@@ -26,6 +28,7 @@ import { outputsByStepPart, placeOutputs } from '../files';
 import { placePlans, plansByPart, pendingIdsOf } from '../plan';
 import type { PlacedPlan, Plan } from '../plan';
 import { useJobs } from '../jobs';
+import type { ExperimentsHandle } from '../experiments';
 import type { WatchJob } from '../jobs';
 import { decidedWithoutJob, notebookApprovalOf, notebookJobsOf } from '../notebook';
 import { useAgentOptional } from '../AgentContext';
@@ -50,6 +53,10 @@ import type { StepControls } from './StepList';
 import SubagentCard from './SubagentCard';
 import NotebookRunApproval from './NotebookRunApproval';
 import NotebookRunCard from './NotebookRunCard';
+import CodeChangeApproval from './search/CodeChangeApproval';
+import SearchBlocks from './search/SearchBlocks';
+import type { SearchEnv } from './search/SearchCard';
+import { isCodeChange } from '../searchApproval';
 import PlanCard from './PlanCard';
 import ThinkingBlock from './ThinkingBlock';
 import WorkingIndicator, { WorkingBar } from './WorkingIndicator';
@@ -74,6 +81,7 @@ export function UserBubble({
     quiet,
     attachments,
     files,
+    hint,
 }: {
     text: string;
     dense: boolean;
@@ -83,6 +91,8 @@ export function UserBubble({
     /** Names of the attachments that went with the message. */
     attachments?: string[];
     files: Files;
+    /** The message is the user's hint for a training search (gateway issue #168): a "Hint" label above it. */
+    hint?: boolean;
 }) {
     const withFiles = !!attachments?.length;
     return (
@@ -98,6 +108,9 @@ export function UserBubble({
                 opacity: pending || quiet ? 0.6 : 1,
             }}
         >
+            {hint && (
+                <Chip size="small" variant="outlined" icon={<LightbulbOutlinedIcon />} label="Hint" data-testid="agent-hint-chip" />
+            )}
             {withFiles && <MessageAttachments chatId={files.chatId} files={attachments ?? []} known={files.known} />}
             {text && (
                 <Box
@@ -138,6 +151,8 @@ export type PlanEnv = {
     checks?: CheckItem[];
     /** The CVAT base of the chat (`cvat_url` of the annotation route); without it a card offers no link. */
     cvatBase?: string;
+    /** The training searches of the chat (issue #168): the cards stand at the tool call that proposed them. */
+    search?: SearchEnv;
 };
 
 /**
@@ -235,16 +250,23 @@ export function AgentBlock({
                     const approval = notebookApprovalOf(approvals, job);
                     return (
                         <Box key={job.id} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
-                            {approval?.notebook && approval.state !== 'pending' && (
-                                <NotebookRunApproval approval={approval} data={approval.notebook} layout={layout} />
-                            )}
+                            {approval?.notebook && approval.state !== 'pending' &&
+                                (approval.search && isCodeChange(approval.search) ? (
+                                    <CodeChangeApproval approval={approval} data={approval.search} />
+                                ) : (
+                                    <NotebookRunApproval approval={approval} data={approval.notebook} layout={layout} />
+                                ))}
                             <NotebookRunCard job={job} layout={layout} data={approval?.notebook} />
                         </Box>
                     );
                 })}
-                {decided.map((d) => (
-                    <NotebookRunApproval key={d.approval.id} approval={d.approval} data={d.data} layout={layout} />
-                ))}
+                {decided.map((d) =>
+                    d.approval.search && isCodeChange(d.approval.search) ? (
+                        <CodeChangeApproval key={d.approval.id} approval={d.approval} data={d.approval.search} />
+                    ) : (
+                        <NotebookRunApproval key={d.approval.id} approval={d.approval} data={d.data} layout={layout} />
+                    ),
+                )}
             </>
         );
     };
@@ -306,6 +328,7 @@ export function AgentBlock({
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
                         {notebookRuns(p.steps)}
+                        {planEnv?.search && <SearchBlocks steps={p.steps} approvals={approvals} env={planEnv.search} />}
                         {deployments.map((d) => (
                             <DeploymentCard key={d.key} data={d.data} job={d.job} layout={dense ? 'panel' : 'page'} />
                         ))}
@@ -474,6 +497,7 @@ export default function Conversation({
     dense = false,
     subagents,
     plans,
+    experiments,
 }: {
     stream: ChatStream;
     /** The transcript, built by the caller (it also counts the entries for scrolling). */
@@ -486,6 +510,8 @@ export default function Conversation({
      * plans without a call stay before the running answer, as before.
      */
     plans?: Plan[];
+    /** The chat's training searches and trials with the user's controls (gateway issue #168). */
+    experiments?: ExperimentsHandle;
 }) {
     const { chat, live, resumes, pending } = stream;
     // the observed platform jobs of this chat (A-E2) and what the plan cards of this view need (A-E4)
@@ -512,6 +538,15 @@ export default function Conversation({
                     annotation: annotationItems,
                     checks: checkItems,
                     cvatBase: annotation.cvat_url,
+                    search: experiments
+                        ? {
+                              chatId: stream.chat?.id,
+                              experiments: experiments.state,
+                              actions: experiments.actions,
+                              checks,
+                              layout: dense ? 'panel' : 'page',
+                          }
+                        : undefined,
                 },
                 setPlanNotify,
                 planNotifyOptIn,
@@ -524,6 +559,9 @@ export default function Conversation({
             annotationItems,
             checkItems,
             annotation.cvat_url,
+            experiments,
+            checks,
+            stream.chat?.id,
             setPlanNotify,
             planNotifyOptIn,
         ],
@@ -698,7 +736,7 @@ export default function Conversation({
                         <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
                     ))}
                     {it.kind === 'user' ? (
-                        <UserBubble text={it.text} dense={dense} attachments={it.files} files={files} />
+                        <UserBubble text={it.text} dense={dense} attachments={it.files} files={files} hint={!!it.searchHint} />
                     ) : it.kind === 'notice' ? (
                         it.note ? (
                             <BackgroundNoteLine note={it.note} text={it.text} />

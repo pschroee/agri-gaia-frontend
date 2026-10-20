@@ -170,6 +170,7 @@ export const APPROVAL_KIND_LABEL: Record<Approval['kind'], string> = {
     artifact_upload: 'File handover',
     internet_access: 'Internet access',
     plan: 'Plan',
+    search: 'Training search',
 };
 
 /**

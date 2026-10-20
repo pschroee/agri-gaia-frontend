@@ -34,6 +34,7 @@ import { browserLanguage } from './language';
 import { FreshChat, canStartNewChat, newChatErrorText, newChatRequest } from './newChat';
 import { PanelState, panelReducer, panelShown } from './panelCarry';
 import type { Plan } from './plan';
+import type { SearchBook } from './searchChip';
 import type { SubagentRun } from './subagents';
 import type { Task } from './tasks';
 import type { Approval, Chat, Config, Me, Model, TrashList } from './types';
@@ -104,6 +105,9 @@ type AgentState = {
     /** The plans of the chats the open views see, by chat id (for the plan button in the header; issue #138). */
     planLists: Record<string, Plan[]>;
     setPlanList: (chatId: string, plans: Plan[] | undefined) => void;
+    /** The training searches and trials of the chats the open views see, by chat id (for the search chip; issue #168). */
+    searchLists: Record<string, SearchBook>;
+    setSearchList: (chatId: string, book: SearchBook | undefined) => void;
     /** The context panel is open on platform pages (the user's choice, or a chat carried from /ai-agent). */
     panelOpen: boolean;
     setPanelOpen: (open: boolean) => void;
@@ -219,6 +223,7 @@ export function AgentProvider({ children }: { children: ReactNode }) {
     const [compacting, setCompactingState] = useState<Record<string, Compacting>>({});
     const [taskLists, setTaskListsState] = useState<Record<string, Task[]>>({});
     const [planLists, setPlanListsState] = useState<Record<string, Plan[]>>({});
+    const [searchLists, setSearchListsState] = useState<Record<string, SearchBook>>({});
     const [creatingChat, setCreatingChat] = useState(false);
     const [newChatError, setNewChatError] = useState<string>();
     const [freshChat, setFreshChat] = useState<FreshChat>();
@@ -478,6 +483,19 @@ export function AgentProvider({ children }: { children: ReactNode }) {
         });
     }, []);
 
+    const setSearchList = useCallback((chatId: string, book: SearchBook | undefined) => {
+        setSearchListsState((m) => {
+            if (!book) {
+                if (!(chatId in m)) return m;
+                const next = { ...m };
+                delete next[chatId];
+                return next;
+            }
+            if (m[chatId] && JSON.stringify(m[chatId]) === JSON.stringify(book)) return m;
+            return { ...m, [chatId]: book };
+        });
+    }, []);
+
     const setPlanList = useCallback((chatId: string, plans: Plan[] | undefined) => {
         setPlanListsState((m) => {
             if (!plans) {
@@ -570,6 +588,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setTaskList,
             planLists,
             setPlanList,
+            searchLists,
+            setSearchList,
             panelOpen,
             setPanelOpen,
             noteRoute,
@@ -617,6 +637,8 @@ export function AgentProvider({ children }: { children: ReactNode }) {
             setTaskList,
             planLists,
             setPlanList,
+            searchLists,
+            setSearchList,
             panelOpen,
             setPanelOpen,
             noteRoute,

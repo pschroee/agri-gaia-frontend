@@ -153,7 +153,8 @@ export type TranscriptItem =
     /** files: names of the attachments (inputs) that went with the message. */
     /** context: page context the message was sent with (structured, from the gateway's source); not shown since issue #46. */
     /** at: when the message was stored (to place files that name no message, issue #54). */
-    | { kind: 'user'; key: string; seq?: number; at?: string; text: string; files?: string[]; context?: PageContext }
+    /** searchHint: the message is the user's hint for the training search of that id (gateway issue #168). */
+    | { kind: 'user'; key: string; seq?: number; at?: string; text: string; files?: string[]; context?: PageContext; searchHint?: string }
     /** note: a background task's end, parsed for the compact line (gateway type "background"). */
     | { kind: 'notice'; key: string; seq?: number; text: string; label?: string; note?: BackgroundNote }
     /** stopped: the answer was aborted (shown muted, not as an error); abortReason: why (issue #120). */
@@ -256,6 +257,11 @@ export function textOf(content: PiMessage['content']): string {
         .filter((b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text')
         .map((b) => b.text)
         .join('\n\n');
+}
+
+/** The training search a user message is a hint for: the gateway marks it in the sources of the turn (issue #168). */
+export function searchHintOf(sources: MessageSource[] | undefined): string | undefined {
+    return sources?.find((s) => s.kind === 'user' && s.search_hint?.search_id)?.search_hint?.search_id;
 }
 
 /** Tool names as the agent sees them, shortened for display (mcp_platform_list_datasets → platform.list_datasets). */
@@ -392,8 +398,9 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                 items.push({ kind: 'notice', key: `n${m.seq}`, seq: m.seq, text });
                 continue;
             }
+            const hint = searchHintOf(m.sources);
             if (m.origin !== 'system' && m.origin !== 'mixed') {
-                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, at: m.created_at, text, files });
+                items.push({ kind: 'user', key: `u${m.seq}`, seq: m.seq, at: m.created_at, text, files, searchHint: hint });
                 continue;
             }
             // notes the gateway marks as context for the model only (audience "agent", e.g. the preferred
@@ -437,6 +444,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
                         text: p.text,
                         files: i === lastUser ? files : undefined,
                         context: contexts.get(i),
+                        searchHint: hint,
                     });
             });
             continue;

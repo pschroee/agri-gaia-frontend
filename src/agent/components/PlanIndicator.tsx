@@ -9,11 +9,13 @@
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
+import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 
 import { awaitingPlatform, doneSteps, needsInput, Plan } from '../plan';
 import { indicatorLabel, indicatorTooltip } from '../planText';
@@ -46,12 +48,15 @@ export default function PlanIndicator({
     variant,
     onShow,
     pending,
+    iconOnly,
 }: {
     plan: Plan | undefined;
     variant: IndicatorVariant;
     onShow: () => void;
     /** Approvals still pending, by id: a step with such a parked approval makes the chip amber (D2.8). */
     pending?: ReadonlySet<string>;
+    /** The chat has a training search (issue #168): in the 400 px panel the plan shrinks to an icon button so both fit. */
+    iconOnly?: boolean;
 }) {
     // on a phone the panel fills the screen and the header has no room for the words (design)
     const narrow = useMediaQuery('(max-width: 599.95px)');
@@ -62,6 +67,14 @@ export default function PlanIndicator({
     const tone = toneOf(plan, pendingIds);
     const total = plan.steps.length;
     const done = doneSteps(plan);
+    if (iconOnly && size === 'panel')
+        return (
+            <Tooltip title={tooltip}>
+                <IconButton size="small" data-testid="agent-plan-indicator" data-plan-id={plan.id} data-plan-state={plan.state} aria-label={tooltip} aria-controls="agent-plan-card" onClick={onShow} sx={{ flex: 'none', color: tone.color }}>
+                    <FactCheckOutlinedIcon fontSize="small" />
+                </IconButton>
+            </Tooltip>
+        );
     const moving = plan.state === 'approved';
     const mark =
         plan.state === 'completed' ? (

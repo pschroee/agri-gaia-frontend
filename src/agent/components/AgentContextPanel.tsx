@@ -19,6 +19,7 @@ import { expandToAgentPage } from '../expand';
 import { sectionOf } from '../format';
 import { activePlan, pendingIdsOf } from '../plan';
 import { scrollToPlanCard } from '../planRegistry';
+import { chipOf } from '../searchChip';
 import { isRunning, runSince, runStateOf, runStateText } from '../runState';
 import ChatSelector from './ChatSelector';
 import ChatView from './ChatView';
@@ -26,6 +27,7 @@ import { ContextMeter } from './ContextMeter';
 import PlanButton from './PlanButton';
 import TaskButton from './TaskButton';
 import PlanIndicator from './PlanIndicator';
+import SearchIndicator from './search/SearchIndicator';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
 import SignInNotice from './SignInNotice';
@@ -54,6 +56,7 @@ export default function AgentContextPanel() {
         compacting,
         taskLists,
         planLists,
+        searchLists,
         pendingApprovals,
     } = useAgent();
     const navigate = useNavigate();
@@ -126,8 +129,10 @@ export default function AgentContextPanel() {
                                 plan={shownPlan}
                                 variant="panel"
                                 pending={pendingIds}
+                                iconOnly={!!chipOf(searchLists[selected.id])}
                                 onShow={() => shownPlan && scrollToPlanCard(shownPlan.id)}
                             />
+                            <SearchIndicator book={searchLists[selected.id]} variant="panel" chatId={selected.id} />
                             <TaskButton tasks={taskLists[selected.id]} />
                             <PlanButton plans={planLists[selected.id]} />
                             <Box sx={{ px: '6px', display: 'inline-flex' }}>
