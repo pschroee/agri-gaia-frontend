@@ -16,6 +16,7 @@ import useKeycloak from './KeycloakContext';
 import { TASKS_PATH } from '../endpoints';
 import { IBackgroundTask } from '../types/IBackgroundTask';
 import { TaskStatus } from '../types/TaskStatus';
+import { onPlatformChangedEvent, startedTaskIds } from '../agent/platformChanges';
 
 export interface ApplicationTasks {
     tasksList: IBackgroundTask[];
@@ -36,6 +37,29 @@ export interface ApplicationTasks {
 }
 
 const taskPollingInterval = 3000;
+
+// Ids of the tasks the agent started, kept in this browser so the mark survives a reload (#173). Display only.
+const AGENT_TASK_IDS_KEY = 'agentTaskIds';
+const AGENT_TASK_IDS_MAX = 200;
+
+export function readAgentTaskIds(): number[] {
+    try {
+        const parsed = JSON.parse(localStorage.getItem(AGENT_TASK_IDS_KEY) ?? '[]');
+        return Array.isArray(parsed) ? parsed.filter((n): n is number => Number.isSafeInteger(n) && n > 0) : [];
+    } catch {
+        return [];
+    }
+}
+
+export function rememberAgentTaskId(id: number): void {
+    try {
+        const ids = readAgentTaskIds().filter((n) => n !== id);
+        ids.push(id);
+        localStorage.setItem(AGENT_TASK_IDS_KEY, JSON.stringify(ids.slice(-AGENT_TASK_IDS_MAX)));
+    } catch {
+        // storage unavailable: the mark is lost on reload, nothing else
+    }
+}
 
 const TasksContext = createContext<ApplicationTasks | undefined>(undefined);
 
@@ -136,6 +160,31 @@ export const TasksProvider = function ({ children }: { children: ReactNode }) {
             .catch(console.error);
     };
 
+    // The agent started a task (platform_changed, #173): take it into the list and let the existing poll follow it.
+    const addAgentTask = (id: number) => {
+        rememberAgentTaskId(id);
+        if (tasksRef.current.tasksList.some((t) => t.id === id)) {
+            setTasks((tasks) => ({
+                ...tasks,
+                tasksList: tasks.tasksList.map((t) => (t.id === id ? { ...t, startedByAgent: true } : t)),
+            }));
+            return;
+        }
+        httpGet(keycloak, `${TASKS_PATH}/${id}`)
+            .then((task: IBackgroundTask) => {
+                setTasks((tasks) => ({
+                    ...tasks,
+                    tasksList: tasks.tasksList.some((t) => t.id === id)
+                        ? tasks.tasksList.map((t) => (t.id === id ? { ...t, startedByAgent: true } : t))
+                        : [...tasks.tasksList, { ...task, startedByAgent: true }],
+                }));
+                if (task.status === TaskStatus.created || task.status === TaskStatus.inprogress) {
+                    tasksRef.current.startTaskPolling(keycloak, tasksRef.current);
+                }
+            })
+            .catch(console.error);
+    };
+
     const [tasks, setTasks] = useState<ApplicationTasks>({
         tasksList: [],
         addServerBackgroundTask: addServerBackgroundTask,
@@ -156,7 +205,16 @@ export const TasksProvider = function ({ children }: { children: ReactNode }) {
             if (userProfile?.username !== undefined) {
                 const serverTasks = await await httpGet(keycloak, `${TASKS_PATH}?initiator=${userProfile.username}`);
 
-                setTasks((tasks) => ({ ...tasks, tasksList: serverTasks }));
+                // the newest tasks come first from the server (limit 100): show them oldest first
+                const marked = new Set(readAgentTaskIds());
+                const initial: IBackgroundTask[] = [...(serverTasks as IBackgroundTask[])]
+                    .sort((a, b) => a.id - b.id)
+                    .map((t) => (marked.has(t.id) ? { ...t, startedByAgent: true } : t));
+                // keep a task taken in while the list was loading
+                setTasks((tasks) => ({
+                    ...tasks,
+                    tasksList: [...initial, ...tasks.tasksList.filter((t) => !initial.some((i) => i.id === t.id))],
+                }));
                 tasks.startTaskPolling(keycloak, tasks);
             } else {
                 console.error('Could not fetch tasks because username is undefined');
@@ -166,6 +224,14 @@ export const TasksProvider = function ({ children }: { children: ReactNode }) {
             initialize().catch(console.error);
         }
     }, [keycloak]);
+
+    // A ref holds the newest handler, so the subscription is set up once per login.
+    const addAgentTaskRef = useRef(addAgentTask);
+    addAgentTaskRef.current = addAgentTask;
+    useEffect(
+        () => onPlatformChangedEvent((ev) => startedTaskIds(ev).forEach((id) => addAgentTaskRef.current(id))),
+        [keycloak],
+    );
 
     return <TasksContext.Provider value={tasks}>{children}</TasksContext.Provider>;
 };

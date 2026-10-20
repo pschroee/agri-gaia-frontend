@@ -6,11 +6,13 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
 import { Grid, IconButton, Button, Tooltip, Typography, Box, Divider } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { TaskStatus } from '../../types/TaskStatus';
 import { IBackgroundTask } from '../../types/IBackgroundTask';
 import { getTaskStatusColor } from './utils';
@@ -36,6 +38,16 @@ export default function (props: {
                             <Box height={rowHeight} justifyContent="center" alignItems="center" display="flex">
                                 <Grid container justifyContent="space-between" alignItems="center">
                                     <Grid item xs={8}>
+                                        {task.startedByAgent && (
+                                            <Tooltip title="Started by the agent">
+                                                <AutoAwesomeIcon
+                                                    fontSize="small"
+                                                    color="primary"
+                                                    aria-label="Started by the agent"
+                                                    sx={{ verticalAlign: 'middle', mr: 1 }}
+                                                />
+                                            </Tooltip>
+                                        )}
                                         {task.title || `Task: ${task.id}`}
                                     </Grid>
                                     <Grid item xs={2}>
