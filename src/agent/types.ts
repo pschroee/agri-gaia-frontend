@@ -4,6 +4,7 @@
 
 import type { PageContext } from './pageContext';
 import type { NotebookApprovalData } from './notebook';
+import type { UploadManifest } from './uploads';
 // Subset of the agent gateway API types (agri-gaia-agent-gateway, API.md and web/src/api/types.ts),
 // limited to what the platform UI shows.
 
@@ -293,6 +294,12 @@ export type Approval = {
      * the socket read), never from the agent's text; missing on older entries and on every other call.
      */
     notebook?: NotebookApprovalData;
+    /**
+     * platform_write that uploads files (gateway issue #164): number, size, folders, file types, the annotation file
+     * and the SHA-256 over the list of every file. The list itself is not part of the approval — the card fetches it
+     * (agentApi.approvalUploads) when the user opens it; missing on older entries and on every other call.
+     */
+    uploads?: UploadManifest;
 };
 
 /**
