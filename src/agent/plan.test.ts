@@ -273,6 +273,26 @@ describe('gateway summaries (gateway issue #72)', () => {
         );
     });
 
+    it('names the upload manifest instead of a line per file (gateway issue #172)', () => {
+        const t = stepTechnical(
+            step({
+                method: 'POST',
+                path: '/datasets',
+                uploads: {
+                    files: 500,
+                    bytes: 50000,
+                    root: '/workspace/pu',
+                    folders: [],
+                    extensions: [],
+                    manifest_sha256: 'e'.repeat(64),
+                },
+            }),
+        );
+        expect(t).toContain(`files: 500 (manifest sha256 ${'e'.repeat(64)}); the full list is shown above`);
+        expect(t).not.toContain('sha256 aa');
+        expect(t.split('\n').filter((l) => l.startsWith('file '))).toHaveLength(0);
+    });
+
     it('splits summaries and counts steps', () => {
         expect(summaryParts(undefined)).toBeUndefined();
         expect(summaryParts('A\n\nB')).toEqual({ head: 'A', details: ['B'] });

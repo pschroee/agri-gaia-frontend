@@ -132,6 +132,9 @@ export const agentApi = {
     /** The list of every file of an upload approval (gateway issue #164); not part of the approval itself. */
     approvalUploads: (chatId: string, approvalId: string) =>
         request<{ entries: UploadEntry[] }>(`chats/${enc(chatId)}/approvals/${enc(approvalId)}/uploads`),
+    /** The list of every file of an upload step of a plan (gateway issue #172); not part of the plan itself. */
+    planStepUploads: (chatId: string, planId: string, step: number) =>
+        request<{ entries: UploadEntry[] }>(`chats/${enc(chatId)}/plans/${enc(planId)}/steps/${step}/uploads`),
     createChat: (req: CreateChatRequest) => post<Chat>('chats', req),
     /**
      * Sends a message; attachments: names of inputs uploaded before (400 for unknown names); context: the page the

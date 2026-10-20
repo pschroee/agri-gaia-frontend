@@ -14,7 +14,7 @@
 // platform job of a step. The words are in planText.ts, the rules about states and progress in plan.ts, so both
 // can be tested without rendering this file.
 
-import { ReactElement, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { ReactElement, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
@@ -66,6 +66,8 @@ import ViewInArOutlinedIcon from '@mui/icons-material/ViewInArOutlined';
 
 import { agentApi } from '../api';
 import { jobOfStep } from '../jobs';
+import { LISTED_FILES } from '../uploads';
+import UploadFiles from './UploadFiles';
 import type { WatchJob } from '../jobs';
 import { defaultOptIn, notifyCheckbox, permissionOf, browserNotify, requestPermission } from '../notify';
 import type { NotifyPermission } from '../notify';
@@ -761,6 +763,7 @@ function StepProgress({ plan, step, now }: { plan: Plan; step: PlanStep; now: nu
 function StepItem({
     plan,
     step,
+    layout,
     now,
     jobs,
     onControl,
@@ -769,6 +772,7 @@ function StepItem({
 }: {
     plan: Plan;
     step: PlanStep;
+    layout: 'panel' | 'page';
     now: number;
     jobs: WatchJob[];
     onControl: (action: 'stop', step: number) => Promise<void>;
@@ -787,6 +791,10 @@ function StepItem({
     const parkedApproval = step.parked_approval ? approvals.find((a) => a.id === step.parked_approval) : undefined;
     const embedded = phase === 'approval' && parkedApproval?.state === 'pending' && decide ? parkedApproval : undefined;
     const extra = computeStepLine(plan, step);
+    const loadStepFiles = useCallback(
+        (chatId: string) => agentApi.planStepUploads(chatId, plan.id, step.idx).then((r) => r.entries),
+        [plan.id, step.idx],
+    );
     return (
         <Box component="li" data-testid="agent-plan-step" data-status={phase} sx={{ minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minWidth: 0 }}>
@@ -828,6 +836,17 @@ function StepItem({
                         {main.head}
                     </Typography>
                     <SummaryDetails details={main.details} />
+                    {/* Up to LISTED_FILES the summary lists the files itself; above it the step shows the folders and
+                        the collapsed list of every file (gateway issue #172). */}
+                    {step.uploads && step.uploads.files > LISTED_FILES && (
+                        <UploadFiles
+                            data={step.uploads}
+                            chatId={plan.chat_id}
+                            approvalId={`${plan.id}:${step.idx}`}
+                            layout={layout}
+                            load={loadStepFiles}
+                        />
+                    )}
                     {phase === 'open' && (extra || !step.covered) && (
                         <Box component="ul" sx={{ listStyle: 'none', m: 0, mt: 0.25, p: 0 }}>
                             {extra && (
@@ -1269,6 +1288,7 @@ export default function PlanCard({
                             key={step.idx}
                             plan={plan}
                             step={step}
+                            layout={frame}
                             now={now}
                             jobs={jobs}
                             approvals={allApprovals}

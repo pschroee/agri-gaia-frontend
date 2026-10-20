@@ -393,3 +393,31 @@ describe('approving a plan (issue #166)', () => {
         expect(await screen.findByText('Approve plan')).toBeTruthy();
     });
 });
+
+describe('an upload step of many files (gateway issue #172)', () => {
+    const uploads = (files: number) => ({
+        files,
+        bytes: files * 100,
+        root: '/workspace/pu',
+        folders: [{ path: 'a', files, bytes: files * 100 }],
+        extensions: [{ ext: '.png', files }],
+        manifest_sha256: 'f'.repeat(64),
+    });
+
+    it('shows the folders and the closed list for 500 files, without a row', () => {
+        const up = plan({ mode: 'interactive', steps: [step({ idx: 1, uploads: uploads(500) })] } as Partial<Plan>);
+        render(<PlanCard plan={up} layout="panel" onControl={vi.fn()} />);
+        expect(screen.getByTestId('agent-upload-files')).toBeTruthy();
+        expect(screen.getByText('Show all 500 files')).toBeTruthy();
+        expect(screen.queryAllByTestId('agent-upload-row')).toHaveLength(0);
+    });
+
+    it('draws no list component up to ten files and for a step without uploads', () => {
+        const up = plan({
+            mode: 'interactive',
+            steps: [step({ idx: 1, uploads: uploads(10) }), step({ idx: 2, path: '/datasets/1', method: 'PATCH' })],
+        } as Partial<Plan>);
+        render(<PlanCard plan={up} layout="panel" onControl={vi.fn()} />);
+        expect(screen.queryByTestId('agent-upload-files')).toBeNull();
+    });
+});
