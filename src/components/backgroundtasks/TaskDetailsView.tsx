@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -53,6 +54,7 @@ export default function ({ task, onClose }: { task: IBackgroundTask; onClose: ()
                 <Divider />
                 <Grid container alignItems="center" sx={{ pt: 3 }} spacing={1}>
                     <GridRow label="Initiator" value={task.initiator || '-'} />
+                    {task.startedByAgent && <GridRow label="Started by" value="Agent" />}
                     <GridRow label="Creation date" value={getLocalDateTime(task.creation_date)} />
                     <GridRow label="Status" value={<TaskStatusTypography status={task.status} />} />
                     <GridRow label="Completion Percentage" value={task.completion_percentage * 100 + ' %'} />

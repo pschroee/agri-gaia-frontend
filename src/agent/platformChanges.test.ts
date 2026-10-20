@@ -9,9 +9,11 @@ import {
     areasOf,
     notifyPlatformChange,
     onPlatformChange,
+    onPlatformChangedEvent,
     pathArea,
     platformChangedOf,
     reportPlatformChanged,
+    startedTaskIds,
 } from './platformChanges';
 
 /** Pushes the pending change windows past their end. */
@@ -180,5 +182,65 @@ describe('reportPlatformChanged', () => {
         for (let i = 0; i < 10; i++) reportPlatformChanged(change('dataset'));
         flushWindows();
         expect(calls).toEqual(['datasets']);
+    });
+});
+
+describe('startedTaskIds and the raw listener (#173)', () => {
+    const ev = (changes: { resource: string; action: string; id?: string }[]) => ({
+        chat_id: 'c',
+        source: 'call',
+        changes,
+    });
+
+    it('takes created tasks with a positive whole id', () => {
+        expect(startedTaskIds(ev([{ resource: 'task', action: 'create', id: '42' }]))).toEqual([42]);
+        expect(
+            startedTaskIds(
+                ev([
+                    { resource: 'task', action: 'create', id: '7' },
+                    { resource: 'task', action: 'create', id: '7' },
+                ]),
+            ),
+        ).toEqual([7]);
+    });
+
+    it('skips a missing id, a non-number, zero, another action and another resource', () => {
+        expect(
+            startedTaskIds(
+                ev([
+                    { resource: 'task', action: 'create' },
+                    { resource: 'task', action: 'create', id: 'abc' },
+                    { resource: 'task', action: 'create', id: '0' },
+                    { resource: 'task', action: 'update', id: '5' },
+                    { resource: 'training', action: 'create', id: '5' },
+                ]),
+            ),
+        ).toEqual([]);
+    });
+
+    it('calls the raw listener at once, before the change window ends', () => {
+        vi.useFakeTimers();
+        const seen: string[] = [];
+        const off = onPlatformChangedEvent((e) => seen.push(e.chat_id));
+        reportPlatformChanged(ev([{ resource: 'task', action: 'create', id: '1' }]));
+        expect(seen).toEqual(['c']);
+        off();
+        reportPlatformChanged(ev([{ resource: 'task', action: 'create', id: '2' }]));
+        expect(seen).toEqual(['c']);
+        vi.clearAllTimers();
+        vi.useRealTimers();
+    });
+
+    it('survives a listener that throws', () => {
+        vi.useFakeTimers();
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const off = onPlatformChangedEvent(() => {
+            throw new Error('boom');
+        });
+        expect(() => reportPlatformChanged(ev([]))).not.toThrow();
+        off();
+        spy.mockRestore();
+        vi.clearAllTimers();
+        vi.useRealTimers();
     });
 });

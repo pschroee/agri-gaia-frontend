@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -20,4 +21,5 @@ export interface IBackgroundTask {
     completion_percentage: number;
     message?: string;
     taskCompleteCallback?: (task: IBackgroundTask) => void;
+    startedByAgent?: boolean; // client only: the agent started it (#173)
 }
