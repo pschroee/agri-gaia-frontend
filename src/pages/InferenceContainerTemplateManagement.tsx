@@ -6,11 +6,13 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useState, useRef } from 'react';
 import { httpGet } from '../api';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import useKeycloak from '../contexts/KeycloakContext';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -48,9 +50,9 @@ export default function InferenceContainerTemplateManagement() {
         };
     }, []);
 
-    const fetchInferenceContainerTemplates = async () => {
+    const fetchInferenceContainerTemplates = async (silent = false) => {
         if (mounted.current) {
-            setIsLoading(true);
+            if (!silent) setIsLoading(true);
             httpGet(keycloak, INFERENCE_CONTAINER_TEMPLATES_PATH)
                 .then((data) => {
                     setContainerTemplates(data);
@@ -67,6 +69,9 @@ export default function InferenceContainerTemplateManagement() {
     useEffect(() => {
         fetchInferenceContainerTemplates();
     }, [keycloak]);
+
+    // the agent created a template (#167): load again without the loading state, the list stays in place
+    useReloadOnPlatformChange('container-templates', () => fetchInferenceContainerTemplates(true));
 
     const handleCreateDialogOpen = () => {
         setCreateDialogOpen(true);
@@ -101,7 +106,7 @@ export default function InferenceContainerTemplateManagement() {
                 <InferenceContainerImageBuildDialog
                     containerTemplate={selectedTemplate}
                     onClose={onBuildDialogClose}
-                    onBuildCompleted={fetchInferenceContainerTemplates}
+                    onBuildCompleted={() => fetchInferenceContainerTemplates()}
                 />
             ) : null}
             {updateDialogOpen && selectedTemplate ? (
@@ -130,7 +135,7 @@ export default function InferenceContainerTemplateManagement() {
             </Grid>
             <InferenceContainerTemplateList
                 containerTemplates={containerTemplates}
-                onDelete={fetchInferenceContainerTemplates}
+                onDelete={() => fetchInferenceContainerTemplates()}
                 onBuildContainer={onBuildContainer}
                 onUpdateTemplate={onUpdateTemplate}
             />

@@ -6,11 +6,13 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
 import { useEffect, useState, useRef } from 'react';
 import { httpGet, httpPatch } from '../api';
+import { useReloadOnPlatformChange } from '../agent/platformChanges';
 import useKeycloak from '../contexts/KeycloakContext';
 
 import AddIcon from '@mui/icons-material/Add';
@@ -47,8 +49,8 @@ export default function IntegratedServices() {
     const [explorerFiles, setExplorerFiles] = useState();
     const didMount = useRef(false);
 
-    const fetchIntegratedServices = async () => {
-        setIntegratedServicesAreLoading(true);
+    const fetchIntegratedServices = async (silent = false) => {
+        if (!silent) setIntegratedServicesAreLoading(true);
         httpGet(keycloak, INTEGRATED_SERVICES_PATH)
             .then((data) => {
                 console.log(data);
@@ -63,6 +65,9 @@ export default function IntegratedServices() {
     useEffect(() => {
         fetchIntegratedServices();
     }, [keycloak]);
+
+    // an agent call on /integrated-services changed the list (#167): load again without the loading state
+    useReloadOnPlatformChange('integrated-services', () => fetchIntegratedServices(true));
 
     const handleIntegratedServiceDialogOpen = () => {
         setIntegratedServiceDialogOpen(true);
@@ -185,7 +190,7 @@ export default function IntegratedServices() {
                         onTogglePublic={handleTogglePublic}
                         createServiceInput={getServiceInfo}
                         getServiceSpec={getServiceSpec}
-                        onDelete={fetchIntegratedServices}
+                        onDelete={() => fetchIntegratedServices()}
                         setExportDialogOpen={handleExportDialogOpen}
                     />
                     <NoDataYet data={integratedServices} name="Integrated Services" />

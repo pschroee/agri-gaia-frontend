@@ -10,7 +10,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { httpGet, httpPatch } from '../api';
 import useKeycloak from '../contexts/KeycloakContext';
 
@@ -59,8 +59,32 @@ export default function ModelManagement() {
             });
     };
 
+    // The ids an active keyword search shows, or null without a search. A reload because of the agent keeps that
+    // filter and the page, and drops checked models that are gone (#167).
+    const searchIds = useRef<Set<number> | null>(null);
+    const handleSearchResult = (result: IModel[]) => {
+        searchIds.current = new Set(result.map((m) => m.id));
+        setModels(result);
+    };
+    const resetSearch = () => {
+        searchIds.current = null;
+        fetchModels();
+    };
+    const reloadKeepingView = async () => {
+        try {
+            const all: IModel[] = await httpGet(keycloak, MODELS_PATH);
+            all.sort((a, b) => a.name.localeCompare(b.name));
+            const ids = searchIds.current;
+            setModels(ids ? all.filter((m) => ids.has(m.id)) : all);
+            const present = new Set(all.map((m) => m.id));
+            setSelected((sel) => (sel.every((id) => present.has(id)) ? sel : sel.filter((id) => present.has(id))));
+        } catch (error) {
+            console.error(error);
+        }
+    };
+
     // the agent changed a model: show the new list without leaving the page
-    useReloadOnPlatformChange('models', fetchModels);
+    useReloadOnPlatformChange('models', reloadKeepingView);
 
     const fetchConnectorInformation = () => {
         httpGet(keycloak, NETWORK_PATH + '/info')
@@ -185,7 +209,7 @@ export default function ModelManagement() {
                     </Grid>
                 </Grid>
             </Grid>
-            <AgrovocSearchbar searchRoute={MODELS_PATH} handleResponse={setModels} resetResult={fetchModels} />
+            <AgrovocSearchbar searchRoute={MODELS_PATH} handleResponse={handleSearchResult} resetResult={resetSearch} />
             <ModelsList
                 models={models}
                 connectorAvailable={connectorAvailable}
