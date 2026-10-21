@@ -76,7 +76,7 @@ export default function AgentContextPanel() {
             open={panelOpen}
             sx={{
                 '& .MuiDrawer-paper': {
-                    width: AGENT_PANEL_WIDTH,
+                    width: `min(${AGENT_PANEL_WIDTH}px, 100vw)`,
                     boxSizing: 'border-box',
                     pb: `${FOOTER_HEIGHT}px`,
                     // white as in the design: the selector's floating label sits on it
@@ -84,6 +84,7 @@ export default function AgentContextPanel() {
                 },
             }}
         >
+            {/* spacer: same height as the platform AppBar, which never wraps (issue #187) */}
             <Toolbar />
             {/* files dropped anywhere on the panel go to the open chat (AgentDropZone) */}
             <AgentDropZone sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
