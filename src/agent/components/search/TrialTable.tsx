@@ -36,6 +36,7 @@ import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import type { Search, Trial } from '../../experiments';
 import { fixedSettings, pathWord, rowMenu, scoreTitle, spaceColumns, trialLink } from '../../experimentsTab';
 import type { RowGroup, TrialRow } from '../../experimentsTab';
+import { LAUNCH_HINT } from '../../notebook';
 import { durationText, epochCell, metricWords, paramValue, scoreText, trialStateView } from '../../searchView';
 import type { StateView } from '../../searchView';
 import { agentColors, MONO } from '../tokens';
@@ -226,6 +227,7 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                     <MenuItem
                         component="a"
                         href={trialLink(menu.row.trial)}
+                        title={LAUNCH_HINT}
                         target="_blank"
                         rel="noopener noreferrer"
                         onClick={() => setMenu(undefined)}

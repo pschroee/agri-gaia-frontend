@@ -7,10 +7,11 @@
 // state, the facts, the log, the result files, the link to JupyterHub and the stop button. The rules behind it are
 // checked in notebook.test.ts; here the card only has to put them together.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { WatchJob } from '../jobs';
+import { LAUNCH_HINT } from '../notebook';
 import type { NotebookApprovalData } from '../notebook';
 import NotebookRunCard from './NotebookRunCard';
 
@@ -235,6 +236,18 @@ describe('the link and the stop button', () => {
         // without a link from the gateway the card offers none (gap L16)
         render(<NotebookRunCard job={job()} layout="panel" data={data()} />);
         expect(screen.queryByRole('link')).toBeNull();
+    });
+
+    it('says at the link of an ended run that JupyterHub restarts a stopped server, and not while it runs', async () => {
+        const link = 'https://jupyter.example.org/user/agent-test/lab/tree/runs/r1';
+        const { unmount } = render(<NotebookRunCard job={finished({ link })} layout="panel" data={data()} />);
+        fireEvent.mouseOver(screen.getByRole('link', { name: 'Open in JupyterHub (opens in a new tab)' }));
+        expect(await screen.findByText(LAUNCH_HINT)).toBeTruthy();
+        unmount();
+
+        render(<NotebookRunCard job={job({ link })} layout="panel" data={data()} />);
+        fireEvent.mouseOver(screen.getByRole('link', { name: 'Open in JupyterHub (opens in a new tab)' }));
+        await waitFor(() => expect(screen.queryByText(LAUNCH_HINT)).toBeNull());
     });
 
     it('offers Stop run while the run goes and calls the gateway route', async () => {

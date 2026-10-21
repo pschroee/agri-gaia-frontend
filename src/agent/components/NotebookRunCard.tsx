@@ -41,6 +41,7 @@ import {
     fullLog,
     isLive,
     isResultFile,
+    LAUNCH_HINT,
     midTrunc,
     outputName,
     outputSize,
@@ -374,31 +375,33 @@ export default function NotebookRunCard({
                     </Button>
                 )}
                 {job.link && (
-                    <Box
-                        component="a"
-                        href={job.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label="Open in JupyterHub (opens in a new tab)"
-                        sx={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 0.75,
-                            px: 0.75,
-                            py: 0.5,
-                            borderRadius: 1,
-                            fontSize: 13,
-                            fontWeight: 500,
-                            letterSpacing: '0.02857em',
-                            textTransform: 'uppercase',
-                            textDecoration: 'none',
-                            color: 'primary.main',
-                            '&:hover': { bgcolor: 'rgba(15,84,50,0.04)' },
-                        }}
-                    >
-                        Open in JupyterHub
-                        <OpenInNewIcon sx={{ fontSize: 16 }} aria-hidden />
-                    </Box>
+                    <Tooltip title={live ? '' : LAUNCH_HINT}>
+                        <Box
+                            component="a"
+                            href={job.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Open in JupyterHub (opens in a new tab)"
+                            sx={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.75,
+                                px: 0.75,
+                                py: 0.5,
+                                borderRadius: 1,
+                                fontSize: 13,
+                                fontWeight: 500,
+                                letterSpacing: '0.02857em',
+                                textTransform: 'uppercase',
+                                textDecoration: 'none',
+                                color: 'primary.main',
+                                '&:hover': { bgcolor: 'rgba(15,84,50,0.04)' },
+                            }}
+                        >
+                            Open in JupyterHub
+                            <OpenInNewIcon sx={{ fontSize: 16 }} aria-hidden />
+                        </Box>
+                    </Tooltip>
                 )}
                 {live && (
                     <Tooltip title="Stop run">
