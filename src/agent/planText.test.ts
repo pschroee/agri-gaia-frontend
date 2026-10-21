@@ -330,4 +330,10 @@ describe('stepRefText (#177)', () => {
         expect(stepRefText({ step: 2, resource: 'model', id: '9' })).toBe('Step 2 created model 9');
         expect(stepRefText({ step: 2, resource: '', id: '9' })).toBe('Step 2 created resource 9');
     });
+
+    it('drops a label that only repeats the kind and the id (#182)', () => {
+        expect(stepRefText({ step: 1, resource: 'dataset', id: '66', label: 'dataset 66' })).toBe('Step 1 created dataset 66');
+        expect(stepRefText({ step: 3, resource: 'training', id: '4', label: 'Training container 4' })).toBe('Step 3 created training container 4');
+        expect(stepRefText({ step: 1, resource: 'dataset', id: '66', label: 'dataset 66 copy' })).toBe('Step 1 created dataset 66 "dataset 66 copy"');
+    });
 });

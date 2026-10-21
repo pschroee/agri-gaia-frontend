@@ -75,4 +75,10 @@ describe('the code change', () => {
         expect(codeChangeSummary(c)).toBe('Version 1 → 2 · train.py changed · applies to trial 6 and later');
         expect(codeChangeFoot(c)).toBe('Approving makes version 2 the code of the following trials. Trials 1–5 keep version 1.');
     });
+
+    it('says "keeps" for the one earlier trial (#182)', () => {
+        expect(codeChangeFoot({ ...mockCodeChange(), trial: 2 })).toBe(
+            'Approving makes version 2 the code of the following trials. Trial 1 keeps version 1.',
+        );
+    });
 });

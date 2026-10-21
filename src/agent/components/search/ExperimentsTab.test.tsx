@@ -60,7 +60,8 @@ describe('ExperimentsTab', () => {
         cleanup();
         load({});
         mount();
-        expect(screen.getByText('No training runs in this chat yet')).toBeTruthy();
+        expect(screen.getByText('Training runs and training searches the agent starts in this chat appear here.')).toBeTruthy();
+        expect(screen.getByText('No training runs')).toBeTruthy();
         expect(screen.getByRole('button', { name: 'Open chat' })).toBeTruthy();
     });
 

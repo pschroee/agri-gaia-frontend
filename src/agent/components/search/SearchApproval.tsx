@@ -107,9 +107,9 @@ function Terms({ d }: { d: SearchApprovalData }) {
                     <Table size="small" aria-label="Search space">
                         <TableHead>
                             <TableRow>
-                                <TableCell>Parameter</TableCell>
-                                <TableCell>Kind</TableCell>
-                                <TableCell>Bounds or values</TableCell>
+                                <TableCell sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 400 }}>Parameter</TableCell>
+                                <TableCell sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 400 }}>Kind</TableCell>
+                                <TableCell sx={{ fontSize: 12, color: 'text.secondary', fontWeight: 400 }}>Bounds or values</TableCell>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -319,11 +319,11 @@ export default function SearchApproval({
                 {data.note && <AgentText label={AGENT_NOTE_LABEL} text={data.note} testId="agent-search-approval-note" />}
                 <Technical text={approval.summary ?? approval.name} testId="agent-approval-technical" />
                 <Box sx={{ display: 'flex', gap: 1, mt: 1.25 }}>
-                    <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>
-                        Reject
-                    </Button>
                     <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
                         Approve
+                    </Button>
+                    <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>
+                        Reject
                     </Button>
                 </Box>
             </Box>

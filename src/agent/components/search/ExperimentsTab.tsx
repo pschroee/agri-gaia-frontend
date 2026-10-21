@@ -55,7 +55,7 @@ function Empty({ onOpenChat, chatId }: { onOpenChat?: (id: string) => void; chat
             <ScienceOutlinedIcon sx={{ fontSize: 36, color: 'text.disabled' }} />
             <Typography sx={{ fontWeight: 500, mt: 1 }}>No training runs in this chat yet</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, mb: 2 }}>
-                Ask the agent to train a model or to search for good settings. Its runs and trials appear here with their curves.
+                Training runs and training searches the agent starts in this chat appear here.
             </Typography>
             {chatId && onOpenChat && (
                 <Button variant="outlined" size="small" onClick={() => onOpenChat(chatId)}>
@@ -111,7 +111,7 @@ export default function ExperimentsTab({ onOpenChat }: { onOpenChat?: (chatId: s
         </TextField>
     );
     const showSelect = (
-        <TextField select size="small" label="Show" value={options.some((o) => o.value === show) ? show : ''} onChange={(e) => { setWant(e.target.value); setSelectedId(undefined); }} sx={{ minWidth: 300 }} disabled={options.length === 0}>
+        <TextField select size="small" label="Show" value={options.some((o) => o.value === show) ? show : ''} onChange={(e) => { setWant(e.target.value); setSelectedId(undefined); }} sx={{ minWidth: 300 }} disabled={options.length === 0} SelectProps={options.length === 0 ? { displayEmpty: true, renderValue: () => 'No training runs' } : undefined} InputLabelProps={options.length === 0 ? { shrink: true } : undefined}>
             {options.map((o) => (
                 <MenuItem key={o.value} value={o.value}>
                     {o.label}

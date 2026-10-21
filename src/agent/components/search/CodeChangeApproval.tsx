@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 
+import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
@@ -17,8 +18,8 @@ import Typography from '@mui/material/Typography';
 
 import { useAgentOptional } from '../../AgentContext';
 import { formatClock } from '../../format';
-import { approvalDecision, expiryMinutes } from '../../notebook';
-import { codeChangeFoot, codeChangeSummary, diffCounts, diffRows } from '../../searchApproval';
+import { approvalDeadline, approvalDecision, expiryMinutes } from '../../notebook';
+import { codeChangeFoot, codeChangeSummary, diffCounts, diffRows, waitingText } from '../../searchApproval';
 import type { SearchCodeChange, SearchFileChange } from '../../searchApproval';
 import { shortSha } from '../../notebook';
 import type { Approval } from '../../types';
@@ -26,6 +27,7 @@ import EffectChip from '../EffectChip';
 import { DecisionIcon, TONE_COLOR } from '../NotebookRunApproval';
 import { Technical } from '../PlanCard';
 import { MONO } from '../tokens';
+import { useNow } from '../../useNow';
 
 /** The diff of one file: a column for the line number, one for the sign (never the colour alone), the text. */
 function FileDiff({ file }: { file: SearchFileChange }) {
@@ -87,6 +89,7 @@ export default function CodeChangeApproval({
 }) {
     const expiryMin = expiryMinutes(useAgentOptional()?.config);
     const [busy, setBusy] = useState(false);
+    const now = useNow(approval.state === 'pending', 30000);
     const title = `Code changed in training search '${data.title}'`;
     const decide = async (approve: boolean) => {
         setBusy(true);
@@ -113,6 +116,10 @@ export default function CodeChangeApproval({
             <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}>
                 <Typography variant="subtitle2" component="h3" sx={{ fontSize: 14, overflowWrap: 'anywhere' }}>{title}</Typography>
                 <EffectChip effect="compute" />
+                <Typography sx={{ ml: 'auto', fontSize: 12, color: 'text.secondary', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                    <HourglassEmptyOutlinedIcon sx={{ fontSize: 16 }} aria-hidden />
+                    {waitingText(approvalDeadline(approval.created_at, expiryMin), now)}
+                </Typography>
             </Box>
             <Typography data-testid="agent-approval-summary" sx={{ fontSize: 13, fontWeight: 500, mt: 0.5 }}>{codeChangeSummary(data)}</Typography>
             <Box component="ul" sx={{ listStyle: 'none', m: 0, mt: 1, p: 0 }}>
@@ -139,8 +146,8 @@ export default function CodeChangeApproval({
             <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 1 }}>{codeChangeFoot(data)}</Typography>
             <Technical text={approval.summary ?? approval.name} testId="agent-approval-technical" />
             <Box sx={{ display: 'flex', gap: 1, mt: 1.25 }}>
-                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>Reject</Button>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>Approve</Button>
+                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>Reject</Button>
             </Box>
         </Box>
     );

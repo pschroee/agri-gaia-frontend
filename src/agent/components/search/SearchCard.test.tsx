@@ -7,7 +7,7 @@
 // trial, the ends (target, budget, patience, stopped, adopted, failed) and the lost connection. The rules behind the
 // words are checked in searchView.test.ts; here the card only has to put them together. Written in phase A, run in B.
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExperimentsActions, ExperimentsState, Search, Trial } from '../../experiments';
@@ -90,6 +90,29 @@ describe('a running search', () => {
     it('is smaller in the panel but says the same', () => {
         render1(mockSearch(), mockTrials(), {}, 'panel');
         expect(screen.getByText('3 of 6 · trial 4 running')).toBeTruthy();
+    });
+});
+
+describe('where the controls sit (#182)', () => {
+    it('puts Stop trial and Stop search in the head and the adjusting buttons in the footer', () => {
+        const { container } = render1(mockSearch(), mockTrials());
+        const controls = container.querySelectorAll('[data-variant="card"]');
+        expect(controls.length).toBe(2);
+        const [head, foot] = Array.from(controls) as HTMLElement[];
+        expect(within(head).getByRole('button', { name: /Stop trial 4/ })).toBeTruthy();
+        expect(within(head).getByRole('button', { name: 'Stop search' })).toBeTruthy();
+        expect(within(head).queryByRole('button', { name: 'Change budget' })).toBeNull();
+        expect(within(foot).getByRole('button', { name: 'Change budget' })).toBeTruthy();
+        expect(within(foot).getByRole('button', { name: 'Give a hint' })).toBeTruthy();
+        expect(within(foot).queryByRole('button', { name: 'Stop search' })).toBeNull();
+    });
+
+    it('uses icon buttons with labels for stopping in the panel, text buttons for the rest', () => {
+        const { container } = render1(mockSearch(), mockTrials(), {}, 'panel');
+        const [head, foot] = Array.from(container.querySelectorAll('[data-variant="card"]')) as HTMLElement[];
+        expect(within(head).getByLabelText('Stop search')).toBeTruthy();
+        expect(within(head).queryByText('Stop search')).toBeNull();
+        expect(within(foot).getByText('Change budget')).toBeTruthy();
     });
 });
 

@@ -43,9 +43,13 @@ import { agentColors } from '../tokens';
 import {
     ADOPT_TEXT,
     BUDGET_DIALOG_TEXT,
+    HINT_INTRO,
     HINT_MAX,
+    HINT_SENT_AS,
+    HINT_SENT_AS_INLINE,
     STOP_SEARCH_TEXT,
     canAdopt,
+    budgetUsedText,
     canStopTrial,
     hintCounter,
     hintError,
@@ -53,6 +57,7 @@ import {
     isStopping,
     pruneStopping,
     searchIsOpen,
+    stopSearchDetail,
 } from './controlRules';
 
 type Props = {
@@ -62,6 +67,8 @@ type Props = {
     variant: 'card' | 'panel' | 'page';
     actions: ExperimentsActions;
     compact?: boolean;
+    /** Which buttons: all (default), the stopping ones (card header) or the adjusting ones (card footer). */
+    part?: 'all' | 'stop' | 'adjust';
 };
 
 type Dlg = 'stop' | 'budget' | 'hint' | 'adopt' | undefined;
@@ -74,6 +81,7 @@ function Confirm(props: {
     open: boolean;
     title: string;
     body: string;
+    detail?: string;
     action: string;
     danger?: boolean;
     busy: boolean;
@@ -93,6 +101,11 @@ function Confirm(props: {
             <DialogTitle sx={{ fontSize: 17 }}>{props.title}</DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{ fontSize: 14 }}>{props.body}</DialogContentText>
+                {props.detail && (
+                    <DialogContentText sx={{ fontSize: 13, color: 'text.secondary', mt: 1 }}>
+                        {props.detail}
+                    </DialogContentText>
+                )}
                 {props.error && (
                     <Alert severity="error" sx={{ mt: 1.5, fontSize: 13 }}>
                         {props.error}
@@ -185,9 +198,17 @@ function BudgetDialog(props: { search: Search; actions: ExperimentsActions; onCl
         }
     };
     return (
-        <Dialog open onClose={busy ? undefined : props.onClose} maxWidth="sm" fullWidth fullScreen={full}>
-            <DialogTitle sx={{ fontSize: 17 }}>Change budget</DialogTitle>
+        <Dialog
+            open
+            onClose={busy ? undefined : props.onClose}
+            maxWidth="sm"
+            fullWidth
+            fullScreen={full}
+            sx={{ '& .MuiDialog-paper': { maxWidth: 600 } }}
+        >
+            <DialogTitle sx={{ fontSize: 17, pb: 0.5 }}>Change budget</DialogTitle>
             <DialogContent>
+                <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 1.5 }}>{budgetUsedText(search)}</Typography>
                 <DialogContentText sx={{ fontSize: 13, mb: 2 }}>{BUDGET_DIALOG_TEXT}</DialogContentText>
                 <BudgetRow
                     label="Number of runs"
@@ -311,7 +332,7 @@ function HintForm(props: { search: Search; actions: ExperimentsActions; inline: 
                 error={text.length > HINT_MAX}
                 helperText={
                     <Box component="span" sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                        <span>The agent reads it before it chooses the next trial.</span>
+                        <span>{props.inline ? HINT_SENT_AS_INLINE : HINT_SENT_AS}</span>
                         <span>{hintCounter(text)}</span>
                     </Box>
                 }
@@ -340,7 +361,10 @@ function HintForm(props: { search: Search; actions: ExperimentsActions; inline: 
     return (
         <Dialog open onClose={busy ? undefined : props.onClose} maxWidth="sm" fullWidth fullScreen={full}>
             <DialogTitle sx={{ fontSize: 17 }}>Give a hint</DialogTitle>
-            <DialogContent sx={{ pt: 1 }}>{field}</DialogContent>
+            <DialogContent sx={{ pt: 1 }}>
+                <DialogContentText sx={{ fontSize: 14, mb: 1.5 }}>{HINT_INTRO}</DialogContentText>
+                {field}
+            </DialogContent>
             <DialogActions>
                 <Button onClick={props.onClose} disabled={busy}>
                     Cancel
@@ -353,8 +377,8 @@ function HintForm(props: { search: Search; actions: ExperimentsActions; inline: 
     );
 }
 
-export function SearchControls({ search, trial, variant, actions, compact }: Props) {
-    const icons = compact ?? variant === 'panel';
+export function SearchControls({ search, trial, variant, actions, compact, part = 'all' }: Props) {
+    const icons = part === 'adjust' ? false : (compact ?? variant === 'panel');
     const [dlg, setDlg] = useState<Dlg>();
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState<string>();
@@ -403,7 +427,7 @@ export function SearchControls({ search, trial, variant, actions, compact }: Pro
     const button = (
         key: string,
         label: string,
-        icon: ReactNode,
+        icon: ReactNode | undefined,
         onClick: () => void,
         opts: { disabled?: boolean; color?: 'error' } = {},
     ): ReactNode =>
@@ -438,21 +462,26 @@ export function SearchControls({ search, trial, variant, actions, compact }: Pro
     const adoptIdx = trial?.idx ?? 0;
     const adopt = ADOPT_TEXT(adoptIdx);
     const items: ReactNode[] = [];
-    if (canStopTrial(search, trial))
+    const showStop = part !== 'adjust';
+    const showAdjust = part !== 'stop';
+    if (showStop && canStopTrial(search, trial))
         items.push(
             button('trial', stopping ? 'Stopping…' : stopLabel, <StopOutlinedIcon fontSize="small" />, stopTrial, {
                 disabled: stopping,
             }),
         );
-    if (canAdopt(search, trial))
+    if (showAdjust && canAdopt(search, trial))
         items.push(button('adopt', adopt.action, <CheckCircleOutlineIcon fontSize="small" />, () => setDlg('adopt')));
-    items.push(button('budget', 'Change budget', <TuneIcon fontSize="small" />, () => setDlg('budget')));
-    items.push(button('hint', 'Give a hint', <LightbulbOutlinedIcon fontSize="small" />, () => setDlg('hint')));
-    items.push(
-        button('stop', 'Stop search', <StopCircleOutlinedIcon fontSize="small" />, () => setDlg('stop'), {
-            color: 'error',
-        }),
-    );
+    if (showAdjust) {
+        items.push(button('budget', 'Change budget', <TuneIcon fontSize="small" />, () => setDlg('budget')));
+        items.push(button('hint', 'Give a hint', <LightbulbOutlinedIcon fontSize="small" />, () => setDlg('hint')));
+    }
+    if (showStop)
+        items.push(
+            button('stop', 'Stop search', part === 'stop' && !icons ? undefined : <StopCircleOutlinedIcon fontSize="small" />, () => setDlg('stop'), {
+                color: 'error',
+            }),
+        );
 
     return (
         <Box data-variant={variant}>
@@ -469,6 +498,7 @@ export function SearchControls({ search, trial, variant, actions, compact }: Pro
             <Confirm
                 open={dlg === 'stop'}
                 {...STOP_SEARCH_TEXT}
+                detail={stopSearchDetail(trial)}
                 action="Stop search"
                 danger
                 busy={busy}

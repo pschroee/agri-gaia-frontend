@@ -197,5 +197,6 @@ export function codeChangeSummary(c: SearchCodeChange): string {
 /** "Approving makes version 2 the code of the following trials. Trials 1–5 keep version 1." */
 export function codeChangeFoot(c: SearchCodeChange): string {
     const keep = c.trial > 2 ? `Trials 1–${c.trial - 1}` : c.trial === 2 ? 'Trial 1' : 'Earlier trials';
-    return `Approving makes version ${c.code_version_to} the code of the following trials. ${keep} keep version ${c.code_version_from}.`;
+    const verb = c.trial === 2 ? 'keeps' : 'keep';
+    return `Approving makes version ${c.code_version_to} the code of the following trials. ${keep} ${verb} version ${c.code_version_from}.`;
 }
