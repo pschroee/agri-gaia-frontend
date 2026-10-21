@@ -295,7 +295,12 @@ export function cardTexts(kind: InternetKind, ecosystems: ('pip' | 'npm')[] = []
                 hints: ["The agent's web tools read any public page; the page address leaves the platform."],
             };
         case 'domains':
-            return { hints: ['Data can be sent to these sites too.', 'The web tools can use these sites too.'] };
+            return { hints: [
+                    'Data can be sent to these sites too.',
+                    'The web tools can use these sites too.',
+                    'Files from these sites can include programs that the agent runs in its sandbox.',
+                ],
+            };
         case 'packages': {
             const npm = ecosystems.includes('npm');
             return {

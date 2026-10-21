@@ -204,6 +204,8 @@ describe('approval card', () => {
     it('carries the hints of the decisions G5 and G6 and the warning for full', () => {
         expect(cardTexts('search').hints).toContain("The agent's web tools read any public page; the page address leaves the platform.");
         expect(cardTexts('domains').hints).toContain('The web tools can use these sites too.');
+        expect(cardTexts('domains').hints).toHaveLength(3);
+        expect(cardTexts('domains').hints[2]).toBe('Files from these sites can include programs that the agent runs in its sandbox.');
         expect(cardTexts('packages', ['pip']).hints.join(' ')).toContain('build tools (pip, setuptools, wheel) and install scripts run too.');
         expect(cardTexts('packages', ['npm']).hints.join(' ')).toContain('any version of them');
         expect(cardTexts('full').warning).toBe(FULL_WARNING);
