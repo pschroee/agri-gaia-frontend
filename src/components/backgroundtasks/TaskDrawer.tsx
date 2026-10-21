@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -19,6 +20,7 @@ import { TaskStatus } from '../../types/TaskStatus';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TasksTabs from './TasksTabs';
 import TaskDetailsView from './TaskDetailsView';
+import { footerLabel } from './utils';
 
 const taskHeight = 60;
 const minDrawerHeight = 500;
@@ -77,7 +79,9 @@ export default function () {
     const [open, setOpen] = useState(false);
     const [openedTask, setOpenedTask] = useState<IBackgroundTask | undefined>(undefined);
     const [lastOpenedTask, setLastOpenedTask] = useState<IBackgroundTask | undefined>(undefined);
-    const hasActiveTasks = tasksList.filter((task) => task.status === TaskStatus.inprogress).length > 0;
+    const numRunningTasks = tasksList.filter((task) => task.status === TaskStatus.inprogress).length;
+    const numQueuedTasks = tasksList.filter((task) => task.status === TaskStatus.created).length;
+    const hasActiveTasks = numRunningTasks > 0;
     const failedTasks = tasksList.filter((task) => task.status === TaskStatus.failed);
     const finishedTasks = tasksList.filter(
         (task) => task.status === TaskStatus.completed || task.status === TaskStatus.failed,
@@ -91,10 +95,7 @@ export default function () {
         setOpenedTask(undefined);
     };
 
-    const getFooterButtonLabel = () => {
-        const numRunningTasks = tasksList.filter((task) => task.status === TaskStatus.inprogress).length;
-        return `${numRunningTasks} ${numRunningTasks == 1 ? 'Task' : 'Tasks'} running`;
-    };
+    const getFooterButtonLabel = () => footerLabel(numRunningTasks, numQueuedTasks);
 
     return (
         <ThemeProvider theme={createDrawerTheme(Math.max(unfinishedTasks.length, finishedTasks.length))}>
