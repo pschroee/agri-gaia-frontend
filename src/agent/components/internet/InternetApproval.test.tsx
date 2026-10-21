@@ -55,7 +55,7 @@ describe('the pending card', () => {
         expect(screen.getByText("Agent's note – not verified")).toBeTruthy();
         fireEvent.click(screen.getByRole('button', { name: 'Allow 1 site: download.tensorflow.org' }));
         await waitFor(() => expect(onDecide).toHaveBeenCalledWith(true));
-        fireEvent.click(screen.getByRole('button', { name: 'REJECT' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
         await waitFor(() => expect(onDecide).toHaveBeenCalledWith(false));
     });
 
@@ -146,7 +146,7 @@ describe('the decided line', () => {
         expect(screen.queryByText('download.tensorflow.org', { selector: 'li' })).toBeNull();
         fireEvent.click(screen.getByRole('button', { expanded: false }));
         expect(screen.getByText('download.tensorflow.org', { selector: 'li' })).toBeTruthy();
-        expect(screen.queryByRole('button', { name: 'REJECT' })).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
     });
 
     it('says rejected, no decision and ended', () => {
