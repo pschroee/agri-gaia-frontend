@@ -40,11 +40,35 @@ export function defaultTrial(search: Search, list: Trial[]): Trial | undefined {
 }
 
 function Loading() {
+    const bar = (w: number | string, sx = {}) => (
+        <Skeleton variant="rounded" width={w} height={12} sx={{ borderRadius: 0.5, flexShrink: 1, minWidth: 0, maxWidth: '100%', ...sx }} />
+    );
     return (
-        <Box sx={{ display: 'grid', gap: 2 }} data-testid="experiments-loading" aria-busy="true">
-            <Skeleton variant="rounded" height={110} />
-            <Skeleton variant="rounded" height={230} />
-            <Skeleton variant="rounded" height={200} />
+        <Box sx={{ display: 'grid', gap: 2 }} data-testid="experiments-loading" aria-busy="true" aria-label="Loading training runs">
+            <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', mb: 2 }}>
+                    <Skeleton variant="rounded" width={260} height={20} sx={{ maxWidth: '60%' }} />
+                    <Skeleton variant="rounded" width={90} height={20} sx={{ borderRadius: 12 }} />
+                </Box>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2 }}>
+                    {[0, 1, 2, 3].map((i) => (
+                        <Skeleton key={i} variant="rounded" height={36} />
+                    ))}
+                </Box>
+            </Paper>
+            <Skeleton variant="rounded" height={190} />
+            <Box data-testid="experiments-loading-table">
+                {[0, 1, 2, 3, 4].map((i) => (
+                    <Box key={i} data-testid="experiments-loading-row" sx={{ height: 48, borderBottom: 1, borderColor: 'divider', px: 2, display: 'flex', alignItems: 'center', gap: 3 }}>
+                        {bar(24)}
+                        {bar(80)}
+                        {bar(140)}
+                        {bar(320)}
+                        {bar(90)}
+                        {bar('auto', { flex: 1 })}
+                    </Box>
+                ))}
+            </Box>
         </Box>
     );
 }
@@ -111,7 +135,7 @@ export default function ExperimentsTab({ onOpenChat }: { onOpenChat?: (chatId: s
         </TextField>
     );
     const showSelect = (
-        <TextField select size="small" label="Show" value={options.some((o) => o.value === show) ? show : ''} onChange={(e) => { setWant(e.target.value); setSelectedId(undefined); }} sx={{ minWidth: 300 }} disabled={options.length === 0} SelectProps={options.length === 0 ? { displayEmpty: true, renderValue: () => 'No training runs' } : undefined} InputLabelProps={options.length === 0 ? { shrink: true } : undefined}>
+        <TextField select size="small" label="Show" value={options.some((o) => o.value === show) ? show : ''} onChange={(e) => { setWant(e.target.value); setSelectedId(undefined); }} sx={{ minWidth: 300 }} disabled={options.length === 0} SelectProps={options.length === 0 ? { displayEmpty: true, renderValue: () => (state.loaded ? 'No training runs' : 'Loading…') } : undefined} InputLabelProps={options.length === 0 ? { shrink: true } : undefined}>
             {options.map((o) => (
                 <MenuItem key={o.value} value={o.value}>
                     {o.label}
