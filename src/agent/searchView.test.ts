@@ -158,6 +158,12 @@ describe('missing data (G1)', () => {
         expect(gpuMissing({ gpu_available: false, state: 'running' }, [])?.title).toBe('No GPU in this run');
         expect(gpuMissing({ gpu_available: undefined, state: 'done' }, [])?.title).toBe('GPU data not available');
     });
+
+    it('words the GPU captions by path (#188)', () => {
+        expect(gpuMissing({ gpu_available: false, state: 'running', path: 'notebook' }, [])?.caption).toBe('It runs on the CPU of your notebook server.');
+        expect(gpuMissing({ gpu_available: false, state: 'running', path: 'template' }, [])?.caption).toBe('It runs on the CPU of the platform.');
+        expect(gpuMissing({ gpu_available: undefined, state: 'done', path: 'template' }, [])?.caption).toBe('The platform sent no GPU figures for this run.');
+    });
 });
 
 describe('the log and the refusal text', () => {

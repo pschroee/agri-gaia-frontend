@@ -57,6 +57,10 @@ describe('ExperimentsTab', () => {
         load({ loaded: false });
         mount();
         expect(screen.getByTestId('experiments-loading')).toBeTruthy();
+        expect(screen.getByLabelText('Loading training runs')).toBeTruthy();
+        expect(screen.getAllByTestId('experiments-loading-row')).toHaveLength(5);
+        expect(screen.getByText('Loading…')).toBeTruthy();
+        expect(screen.queryByText('No training runs')).toBeNull();
         cleanup();
         load({});
         mount();
