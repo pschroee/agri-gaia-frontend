@@ -1,13 +1,16 @@
+// @vitest-environment jsdom
 // SPDX-FileCopyrightText: 2026 Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
-import { fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { InternetGrant } from '../../internet';
 import InternetPopover, { type InternetPopoverProps } from './InternetPopover';
+
+afterEach(cleanup);
 
 const MB = 1 << 20;
 const now = Date.parse('2026-10-21T12:10:00Z');
