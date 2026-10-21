@@ -322,14 +322,21 @@ export function failedCellOf(message: string | undefined): { cell: number; what?
  * line ("… after 12 min 8 s") says. Undefined when nothing of that is known.
  */
 export function runSeconds(
-    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at'>,
+    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at' | 'run_started_at' | 'run_ended_at'>,
     now = Date.now(),
 ): number | undefined {
-    const start = job.started_at ? Date.parse(job.started_at) : NaN;
+    // The run's own clock first (issue #203): the same two instants as the gateway's job line. Without it the
+    // job's times, which are the gateway's clock.
+    const ownStart = job.run_started_at ? Date.parse(job.run_started_at) : NaN;
+    const ownEnd = job.run_ended_at ? Date.parse(job.run_ended_at) : NaN;
+    const start = Number.isFinite(ownStart) ? ownStart : job.started_at ? Date.parse(job.started_at) : NaN;
     if (job.state === 'running' || job.state === 'starting')
         return Number.isFinite(start) ? Math.max(0, Math.floor((now - start) / 1000)) : undefined;
-    const end = job.ended_at ? Date.parse(job.ended_at) : NaN;
-    if (Number.isFinite(start) && Number.isFinite(end)) return Math.max(0, Math.round((end - start) / 1000));
+    // Both ends from one clock: a run time without its end falls back to the job's pair.
+    const own = Number.isFinite(ownStart) && Number.isFinite(ownEnd);
+    const from = own ? ownStart : job.started_at ? Date.parse(job.started_at) : NaN;
+    const end = own ? ownEnd : job.ended_at ? Date.parse(job.ended_at) : NaN;
+    if (Number.isFinite(from) && Number.isFinite(end)) return Math.max(0, Math.round((end - from) / 1000));
     const m = /after\s+(?:(\d+)\s*h\s*)?(?:(\d+)\s*min\s*)?(?:(\d+)\s*s)?/.exec(job.message ?? '');
     if (!m || (!m[1] && !m[2] && !m[3])) return undefined;
     return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
@@ -360,12 +367,16 @@ export type RunFact = { label: string; value: string; tone?: 'error' | 'warning'
  * and the time limit come from the run's approval (the job itself carries neither).
  */
 export function runFacts(
-    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at' | 'log_tail' | 'stopped_by'>,
+    job: Pick<
+        WatchJob,
+        'state' | 'message' | 'started_at' | 'ended_at' | 'run_started_at' | 'run_ended_at' | 'log_tail' | 'stopped_by'
+    >,
     data: NotebookApprovalData | undefined,
     now = Date.now(),
 ): RunFact[] {
     const view = runViewOf(job);
-    const started = job.started_at ? formatTime(job.started_at) : undefined;
+    const startIso = job.run_started_at ?? job.started_at;
+    const started = startIso ? formatTime(startIso) : undefined;
     const secs = runSeconds(job, now);
     const duration = secs === undefined ? undefined : formatDuration(secs);
     const out: RunFact[] = [];
@@ -406,7 +417,7 @@ export function factText(f: RunFact): string {
 
 /** The head of a live run shows the time that passed, an ended one its duration, a timed out one its limit. */
 export function runHeadTime(
-    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at'>,
+    job: Pick<WatchJob, 'state' | 'message' | 'started_at' | 'ended_at' | 'run_started_at' | 'run_ended_at'>,
     data: NotebookApprovalData | undefined,
     now = Date.now(),
 ): string | undefined {
