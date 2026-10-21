@@ -22,6 +22,7 @@ import type { AnnotationItem } from '../annotation';
 import { checkCardsIn, mergeChecks, useChecks } from '../assess';
 import type { CheckItem } from '../assess';
 import { backgroundByCall } from '../background';
+import { callAnchors, splitAfter } from '../callCards';
 import { noticeAnchor } from '../commands';
 import { deploymentCardsIn } from '../deploymentCard';
 import { outputsByStepPart, placeOutputs } from '../files';
@@ -54,6 +55,7 @@ import SubagentCard from './SubagentCard';
 import NotebookRunApproval from './NotebookRunApproval';
 import { BlockedRowsProvider } from './internet/BlockedRows';
 import { InternetDecidedRows } from './internet/InternetApproval';
+import { PlatformDecidedRows } from './PlatformDecidedRow';
 import NotebookRunCard from './NotebookRunCard';
 import CodeChangeApproval from './search/CodeChangeApproval';
 import SearchBlocks from './search/SearchBlocks';
@@ -241,11 +243,12 @@ export function AgentBlock({
     // stand where the call stands in the answer. A rejected or expired approval never starts a job, so it has no run
     // card; its one line stands at the call all the same (design, gap L8).
     const notebookRuns = (steps: Step[]) => {
-        const runs = notebookJobsOf(planEnv?.jobs ?? [], steps.map((s) => s.id));
+        const ids = steps.flatMap((s) => (s.callId ? [s.id, s.callId] : [s.id]));
+        const runs = notebookJobsOf(planEnv?.jobs ?? [], ids);
         const decided = decidedWithoutJob(
             approvals,
             runs.map((j) => j.tool_call_id),
-            steps.map((s) => s.id),
+            ids,
         );
         if (runs.length === 0 && decided.length === 0) return null;
         const layout = planEnv?.layout ?? (dense ? 'panel' : 'page');
@@ -324,28 +327,54 @@ export function AgentBlock({
                         </Fragment>
                     );
                 const files = placed.byPart.get(i);
-                // the state of an edge deployment starts behind the group of calls that reported it (edge D-E4)
-                const deployments = deploymentCardsIn(p.steps, planEnv?.jobs ?? []);
-                // the cards of pre-annotation and of the result checks stand at the call that started them (V4)
-                const annotations = annotationCardsIn(p.steps, planEnv?.annotation ?? []);
-                const checkCards = checkCardsIn(p.steps, planEnv?.checks ?? []);
+                // the group is cut after every call a card hangs on (issue #192): the card stands right below its call
+                const segs = splitAfter(
+                    p.steps,
+                    callAnchors(p.steps, {
+                        jobs: planEnv?.jobs ?? [],
+                        approvals,
+                        searches: planEnv?.search?.experiments.searches,
+                        searchOn: !!planEnv?.search,
+                        annotation: planEnv?.annotation ?? [],
+                        checks: planEnv?.checks ?? [],
+                        plans: placedPlans.byPart.get(i),
+                    }),
+                );
+                // a plan stands after the piece with its `propose_plan` call, the rest after the last piece
+                const planSeg = (pl: PlacedPlan) => {
+                    const at = segs.findIndex((g) => g.some((s) => pl.afterCallId === s.id || pl.afterCallId === s.callId));
+                    return at < 0 ? segs.length - 1 : at;
+                };
                 return (
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
-                        <StepList steps={p.steps} controls={controls} expand={thinking} />
-                        {notebookRuns(p.steps)}
-                        <InternetDecidedRows steps={p.steps} approvals={approvals} layout={dense ? 'panel' : 'page'} />
-                        {planEnv?.search && <SearchBlocks steps={p.steps} approvals={approvals} env={planEnv.search} />}
-                        {deployments.map((d) => (
-                            <DeploymentCard key={d.key} data={d.data} job={d.job} layout={dense ? 'panel' : 'page'} />
-                        ))}
-                        <AnnotationCards
-                            items={annotations.map((a) => a.item)}
-                            checks={checkCards.map((c) => c.item)}
-                            base={planEnv?.cvatBase}
-                            layout={dense ? 'panel' : 'page'}
-                        />
-                        {files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
-                        {cards}
+                        {segs.map((seg, k) => {
+                            // the state of an edge deployment starts behind the call that reported it (edge D-E4)
+                            const deployments = deploymentCardsIn(seg, planEnv?.jobs ?? []);
+                            // the cards of pre-annotation and of the result checks stand at the call that started them (V4)
+                            const annotations = annotationCardsIn(seg, planEnv?.annotation ?? []);
+                            const checkCards = checkCardsIn(seg, planEnv?.checks ?? []);
+                            const last = k === segs.length - 1;
+                            return (
+                                <Fragment key={`seg-${seg[0]?.id ?? k}`}>
+                                    <StepList steps={seg} controls={controls} expand={thinking} />
+                                    {notebookRuns(seg)}
+                                    <InternetDecidedRows steps={seg} approvals={approvals} layout={dense ? 'panel' : 'page'} />
+                                    <PlatformDecidedRows steps={seg} approvals={approvals} />
+                                    {planEnv?.search && <SearchBlocks steps={seg} approvals={approvals} env={planEnv.search} />}
+                                    {deployments.map((d) => (
+                                        <DeploymentCard key={d.key} data={d.data} job={d.job} layout={dense ? 'panel' : 'page'} />
+                                    ))}
+                                    <AnnotationCards
+                                        items={annotations.map((a) => a.item)}
+                                        checks={checkCards.map((c) => c.item)}
+                                        base={planEnv?.cvatBase}
+                                        layout={dense ? 'panel' : 'page'}
+                                    />
+                                    {last && files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
+                                    {placedPlans.byPart.get(i)?.filter((pl) => planSeg(pl) === k).map(planCard)}
+                                </Fragment>
+                            );
+                        })}
                     </Fragment>
                 );
             })}
