@@ -134,19 +134,36 @@ describe('queueRows', () => {
 
     it('lists gateway entries in order, then the unconfirmed ones', () => {
         const rows = queueRows(state, running);
-        expect(rows.map((r) => r.key)).toEqual(['q1', 'q2', 'q3', 'k1']);
-        expect(rows.map((r) => r.state)).toEqual(['waiting', 'removing', 'waiting', 'sending']);
-        expect(rows[3].id).toBeUndefined();
+        // the note about the background task is not shown while the queue runs (#197)
+        expect(rows.map((r) => r.key)).toEqual(['q1', 'q2', 'k1']);
+        expect(rows.map((r) => r.state)).toEqual(['waiting', 'removing', 'sending']);
+        expect(rows[2].id).toBeUndefined();
         expect(rows[1].attachments).toEqual(['plot.png']);
     });
 
     it('marks entries as held after an abort when the agent is idle', () => {
         const rows = queueRows(state, idleHeld);
+        expect(rows.map((r) => r.key)).toEqual(['q1', 'q2', 'q3', 'k1']);
         expect(rows.map((r) => r.state)).toEqual(['held', 'removing', 'held', 'sending']);
     });
 
+    it('shows a background note only while the queue is held (#197)', () => {
+        expect(queueRows(state, running).some((r) => r.key === 'q3')).toBe(false);
+        const held = queueRows(state, idleHeld).find((r) => r.key === 'q3');
+        expect(held?.state).toBe('held');
+        expect(held?.system).toBe(true);
+    });
+
+    it('keeps a note to a subagent while the queue runs (#197)', () => {
+        const sub = queueRows(
+            { ...emptyQueue, entries: [entry('q5', 'x', { kind: 'system', note: 'subagent_user' })] },
+            running,
+        );
+        expect(sub.map((r) => r.key)).toEqual(['q5']);
+    });
+
     it('labels gateway notes by their kind, never by their text', () => {
-        const rows = queueRows(state, running);
+        const rows = queueRows(state, idleHeld);
         expect(rows[2].system).toBe(true);
         expect(rows[2].label).toBe('background task bg-2 ended');
         expect(rows[0].label).toBeUndefined();

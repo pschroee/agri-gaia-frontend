@@ -137,3 +137,55 @@ describe('AgentBlock cuts the group at the call of a card', () => {
         expect(order(container)).toEqual(['agent-step-list']);
     });
 });
+
+// Issue #197: the subagent card stands below its call, not under the whole answer; the one-line note has no indent.
+describe('AgentBlock places the subagent card at its call (#197)', () => {
+    const run = (runId: string) => ({ runId, title: `run ${runId}`, status: 'done' as const });
+    function showWithRuns(steps: Step[], byCall: Map<string, ReturnType<typeof run>[]>) {
+        const item = { kind: 'agent', parts: [{ type: 'steps', steps }] } as never;
+        const controls = {
+            running: new Set<string>(),
+            onStop: async () => undefined,
+            onBackground: async () => {
+                throw new Error('unused');
+            },
+            background: new Map(),
+            subagents: { byCall, onOpen: () => undefined },
+        };
+        const env = planEnvOf({ approvals: [], jobs: [], pending: new Set<string>(), layout: 'panel' });
+        return render(
+            <MemoryRouter>
+                <AgentBlock
+                    item={item}
+                    dense
+                    thinking={{ open: {}, onOpenChange: () => undefined }}
+                    approvals={[]}
+                    planEnv={env}
+                    controls={controls as never}
+                />
+            </MemoryRouter>,
+        );
+    }
+    const blocks = (root: HTMLElement) =>
+        [...root.querySelectorAll('[data-testid]')]
+            .map((e) => e.getAttribute('data-testid'))
+            .filter((t) => t === 'agent-step-list' || t === 'agent-subagent-card');
+
+    it('stands between the group before the call and the group after it', () => {
+        const steps = ['s1', 's2', 's3', 's4', 's5'].map((id) => step(id));
+        const { container } = showWithRuns(steps, new Map([['s3', [run('r1')]]]));
+        expect(blocks(container)).toEqual(['agent-step-list', 'agent-subagent-card', 'agent-step-list']);
+    });
+
+    it('shows each run once, even when two calls name it', () => {
+        const steps = ['s1', 's2'].map((id) => step(id));
+        const { container } = showWithRuns(
+            steps,
+            new Map([
+                ['s1', [run('r1')]],
+                ['s2', [run('r1'), run('r2')]],
+            ]),
+        );
+        expect(container.querySelectorAll('[data-testid="agent-step-subagent"]')).toHaveLength(2);
+    });
+});

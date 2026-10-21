@@ -9,6 +9,8 @@ import {
     backgroundByCall,
     backgroundStatus,
     backgroundStopErrorText,
+    backgroundById,
+    backgroundStripSummary,
     backgroundSummary,
     commandPreview,
     compactNoteSummary,
@@ -78,6 +80,22 @@ describe('background tasks', () => {
         expect(sortBackground([...l, task(4)]).map((t) => t.id)).toEqual(['bg-1', 'bg-4', 'bg-3', 'bg-2']);
         expect(backgroundSummary(l)).toBe('1 running · 2 ended');
         expect(backgroundByCall(l).get('call-2')?.id).toBe('bg-2');
+    });
+
+    it('summarises the Background strip (#197)', () => {
+        const l = [task(1), task(2, { state: 'exited' }), task(3, { state: 'stopped' })];
+        expect(backgroundStripSummary(l, [])).toBe('1 command running · 2 ended');
+        expect(backgroundStripSummary([task(1, { state: 'exited' })], [])).toBe('1 command ended');
+        expect(backgroundStripSummary([task(1), task(2)], [])).toBe('2 commands running');
+        expect(backgroundStripSummary([], ['done'])).toBe('1 subagent done');
+        expect(backgroundStripSummary([], ['running', 'done', 'done'])).toBe('1 subagent running · 2 done');
+        expect(backgroundStripSummary(l, ['done'])).toBe('1 command running · 2 ended · 1 subagent done');
+    });
+
+    it('finds a task by its ID (#197)', () => {
+        const l = [task(1), task(2, { state: 'exited' })];
+        expect(backgroundById(l).get('bg-2')?.state).toBe('exited');
+        expect(backgroundById(l).get('bg-9')).toBeUndefined();
     });
 
     it('labels states and runtimes', () => {
@@ -189,7 +207,7 @@ describe('background notes', () => {
     });
 
     it('labels a queued note by its header line', () => {
-        const chat = { running: true, queue_held: false } as Chat;
+        const chat = { running: false, queue_held: true } as Chat;
         const rows = queueRows(
             {
                 ...emptyQueue,
