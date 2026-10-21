@@ -21,6 +21,7 @@ import {
     planHeadline,
     Plan,
     PlanStep,
+    StepRef,
 } from './plan';
 
 /** Why the gateway paused a plan: the user's own pause, an abort, a lost login, a budget or a restart. */
@@ -442,4 +443,19 @@ export function cancelConfirmText(plan: Plan): string {
         parts.push(`${subject} from earlier steps ${createdSingular(plan) ? 'stays' : 'stay'} on the platform.`);
     }
     return parts.length > 0 ? parts.join(' ') : 'This plan will not run any further step.';
+}
+
+/** "Step 1 created dataset 66 "mnist-train"": what a placeholder of a later step resolved to. */
+export function stepRefText(r: StepRef): string {
+    const res = r.resource.toLowerCase();
+    const noun = res.startsWith('dataset')
+        ? 'dataset'
+        : res.startsWith('model')
+          ? 'model'
+          : res.startsWith('training')
+            ? 'training container'
+            : res.startsWith('image') || res.startsWith('container')
+              ? 'image'
+              : 'resource';
+    return `Step ${r.step} created ${noun} ${r.id}${r.label ? ` "${r.label}"` : ''}`;
 }
