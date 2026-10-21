@@ -87,6 +87,22 @@ describe('the pending approval', () => {
         ]);
     });
 
+    it('says that a notebook entry runs as a notebook and keeps its outputs (gateway issue #193)', () => {
+        const nb = data({
+            entry: 'train.ipynb',
+            files: [{ name: 'train.ipynb', size: 1200, sha256: 'c'.repeat(64), text: '{"cells":[]}' }],
+        });
+        render(<NotebookRunApproval approval={approval()} data={nb} layout="panel" />);
+        expect(screen.getByTestId('agent-notebook-approval').textContent).toContain(
+            'Entry file · runs as a notebook; outputs are saved · ',
+        );
+    });
+
+    it('does not say that for a script entry', () => {
+        render(<NotebookRunApproval approval={approval()} data={data()} layout="panel" />);
+        expect(screen.getByTestId('agent-notebook-approval').textContent).not.toContain('runs as a notebook');
+    });
+
     it('shows the code of the chosen file with line numbers and the meta line of the file', () => {
         render(<NotebookRunApproval approval={approval()} data={data()} layout="panel" />);
         expect(screen.getByText('1')).toBeTruthy();
