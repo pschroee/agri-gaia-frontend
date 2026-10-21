@@ -26,6 +26,7 @@ import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StarIcon from '@mui/icons-material/Star';
@@ -33,7 +34,7 @@ import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 
 import type { Search, Trial } from '../../experiments';
-import { fixedSettings, pathWord, rowMenu, scoreTitle, spaceColumns } from '../../experimentsTab';
+import { fixedSettings, pathWord, rowMenu, scoreTitle, spaceColumns, trialLink } from '../../experimentsTab';
 import type { RowGroup, TrialRow } from '../../experimentsTab';
 import { durationText, epochCell, metricWords, paramValue, scoreText, trialStateView } from '../../searchView';
 import type { StateView } from '../../searchView';
@@ -104,6 +105,7 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                         <TableCell sx={stickyStar} aria-label="Best" />
                         <TableCell sx={stickyIdx}>#</TableCell>
                         {showWay && <TableCell>Way</TableCell>}
+                        {!search && <TableCell>Run</TableCell>}
                         {cols.map((c) => (
                             <TableCell key={c} sx={{ fontFamily: MONO, fontSize: 12 }}>
                                 {c}
@@ -149,6 +151,13 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                                     {r.label}
                                 </TableCell>
                                 {showWay && <TableCell>{pathWord(t.path)}</TableCell>}
+                                {!search && (
+                                    <TableCell sx={{ maxWidth: 200 }}>
+                                        <Typography noWrap sx={{ fontFamily: MONO, fontSize: 12 }} title={t.name}>
+                                            {t.name || '–'}
+                                        </Typography>
+                                    </TableCell>
+                                )}
                                 {cols.map((c) => (
                                     <TableCell key={c} sx={{ fontFamily: MONO, fontSize: 12, whiteSpace: 'nowrap' }}>
                                         {c in (t.params ?? {}) ? paramValue(t.params[c]) : '–'}
@@ -211,6 +220,20 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                             <ManageSearchIcon fontSize="small" />
                         </ListItemIcon>
                         Show details
+                    </MenuItem>
+                )}
+                {m?.open && menu && (
+                    <MenuItem
+                        component="a"
+                        href={trialLink(menu.row.trial)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setMenu(undefined)}
+                    >
+                        <ListItemIcon>
+                            <OpenInNewIcon fontSize="small" />
+                        </ListItemIcon>
+                        Open in JupyterHub
                     </MenuItem>
                 )}
                 {m?.stop && menu && search && (

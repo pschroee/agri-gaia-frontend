@@ -22,6 +22,7 @@ import {
     showOptions,
     sourceText,
     spaceColumns,
+    trialLink,
     trialTitle,
 } from './experimentsTab';
 import { epochRows, lossSearch, lossTrials, makeSearch, makeTrial, trials } from './experimentsFixtures';
@@ -173,5 +174,22 @@ describe('curves', () => {
         expect(sourceText(makeTrial(1), makeSearch())).toBe('Figures written by the platform template');
         const nb = makeSearch({ path: 'notebook', code: { version: 1, entry: 'train.py', files: [{ name: 'train.py', sha256: '3f9a' + '0'.repeat(56) + 'c21e', size: 10 }] } });
         expect(sourceText(makeTrial(1, { path: 'notebook', code_version: 1 }), nb)).toBe("Figures written by the run's code (code version 1, 3f9a…c21e)");
+    });
+});
+
+describe('trial link and name (issue #194)', () => {
+    it('accepts https addresses only', () => {
+        expect(trialLink({ link: 'https://hub.example/lab' })).toBe('https://hub.example/lab');
+        expect(trialLink({ link: 'javascript:alert(1)' })).toBeUndefined();
+        expect(trialLink({ link: 'http://hub.example/lab' })).toBeUndefined();
+        expect(trialLink({ link: '' })).toBeUndefined();
+        expect(trialLink({})).toBeUndefined();
+    });
+
+    it('offers Open only with a link and names a single run', () => {
+        const t = makeTrial(0, { idx: 0, seq: 2, search_id: undefined, name: 'train.ipynb', link: 'https://hub.example/x' });
+        expect(rowMenu({ trial: t, label: 'S2', best: false, winner: false } as never, undefined).open).toBe(true);
+        expect(rowMenu({ trial: { ...t, link: undefined }, label: 'S2', best: false, winner: false } as never, undefined).open).toBe(false);
+        expect(trialTitle(t)).toBe('Single run 2 · train.ipynb');
     });
 });
