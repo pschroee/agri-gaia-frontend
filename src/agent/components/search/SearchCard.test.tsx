@@ -94,12 +94,18 @@ describe('a running search', () => {
 });
 
 describe('where the controls sit (#182)', () => {
+    it('keeps a disabled Stop trial between two trials, as in the design', () => {
+        const { container } = render1(mockSearch({ running_trial: null }), mockTrials().slice(0, 3));
+        const [head] = Array.from(container.querySelectorAll('[data-variant="card"]')) as HTMLElement[];
+        expect((within(head).getByRole('button', { name: 'Stop trial' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
     it('puts Stop trial and Stop search in the head and the adjusting buttons in the footer', () => {
         const { container } = render1(mockSearch(), mockTrials());
         const controls = container.querySelectorAll('[data-variant="card"]');
         expect(controls.length).toBe(2);
         const [head, foot] = Array.from(controls) as HTMLElement[];
-        expect(within(head).getByRole('button', { name: /Stop trial 4/ })).toBeTruthy();
+        expect(within(head).getByRole('button', { name: /Stop trial/ })).toBeTruthy();
         expect(within(head).getByRole('button', { name: 'Stop search' })).toBeTruthy();
         expect(within(head).queryByRole('button', { name: 'Change budget' })).toBeNull();
         expect(within(foot).getByRole('button', { name: 'Change budget' })).toBeTruthy();

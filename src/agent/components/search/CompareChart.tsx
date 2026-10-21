@@ -42,7 +42,7 @@ export default function CompareChart({ search, trials, height = 220 }: { search:
                             <YAxis domain={domain} tick={{ fontSize: 11 }} width={40} />
                             <Tooltip formatter={(v: unknown) => (typeof v === 'number' ? scoreText(v, o) : String(v))} />
                             <Legend wrapperStyle={{ fontSize: 11 }} />
-                            <Bar dataKey="score" name="Trial" isAnimationActive={false} maxBarSize={72}>
+                            <Bar dataKey="score" name="Trial" fill={BAR} isAnimationActive={false} maxBarSize={72}>
                                 {data.map((p) => (
                                     <Cell
                                         key={p.idx}

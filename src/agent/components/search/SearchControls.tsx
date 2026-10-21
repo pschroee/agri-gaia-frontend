@@ -9,7 +9,8 @@
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
-import StopOutlinedIcon from '@mui/icons-material/StopOutlined';
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -458,16 +459,17 @@ export function SearchControls({ search, trial, variant, actions, compact, part 
             </Button>
         );
 
-    const stopLabel = trial ? `Stop trial ${trial.idx}` : 'Stop trial';
     const adoptIdx = trial?.idx ?? 0;
     const adopt = ADOPT_TEXT(adoptIdx);
     const items: ReactNode[] = [];
     const showStop = part !== 'adjust';
     const showAdjust = part !== 'stop';
-    if (showStop && canStopTrial(search, trial))
+    // The button keeps its words while a stop is requested (the trial row says "Stopping…"); between two trials it
+    // stays, disabled, as in the design.
+    if (showStop && (canStopTrial(search, trial) || (part === 'stop' && !trial && search.state === 'running')))
         items.push(
-            button('trial', stopping ? 'Stopping…' : stopLabel, <StopOutlinedIcon fontSize="small" />, stopTrial, {
-                disabled: stopping,
+            button('trial', 'Stop trial', icons ? <StopCircleOutlinedIcon fontSize="small" /> : <StopIcon fontSize="small" />, stopTrial, {
+                disabled: stopping || !trial,
             }),
         );
     if (showAdjust && canAdopt(search, trial))
@@ -478,8 +480,8 @@ export function SearchControls({ search, trial, variant, actions, compact, part 
     }
     if (showStop)
         items.push(
-            button('stop', 'Stop search', part === 'stop' && !icons ? undefined : <StopCircleOutlinedIcon fontSize="small" />, () => setDlg('stop'), {
-                color: 'error',
+            button('stop', 'Stop search', icons ? <HighlightOffIcon fontSize="small" /> : undefined, () => setDlg('stop'), {
+                color: icons ? undefined : 'error',
             }),
         );
 

@@ -14,6 +14,7 @@ import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
+import ListItemIcon from '@mui/material/ListItemIcon';
 import MenuItem from '@mui/material/MenuItem';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -24,13 +25,15 @@ import TableRow from '@mui/material/TableRow';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
+import ManageSearchIcon from '@mui/icons-material/ManageSearch';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import StarIcon from '@mui/icons-material/Star';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 
 import type { Search, Trial } from '../../experiments';
-import { pathWord, rowMenu, scoreTitle, spaceColumns } from '../../experimentsTab';
+import { fixedSettings, pathWord, rowMenu, scoreTitle, spaceColumns } from '../../experimentsTab';
 import type { RowGroup, TrialRow } from '../../experimentsTab';
 import { durationText, epochCell, metricWords, paramValue, scoreText, trialStateView } from '../../searchView';
 import type { StateView } from '../../searchView';
@@ -76,6 +79,7 @@ type Props = {
 /** The table of one group of rows. */
 export default function TrialTable({ search, group, selectedId, stopping, showWay, onSelect, onStop }: Props) {
     const cols = spaceColumns(search);
+    const fixed = search ? fixedSettings(search) : '';
     const ended = search?.state === 'ended';
     const words = metricWords(search?.objective);
     const [menu, setMenu] = useState<{ el: HTMLElement; row: TrialRow }>();
@@ -89,6 +93,11 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
     const m = menu ? rowMenu(menu.row, search) : undefined;
     return (
         <TableContainer sx={{ overflowX: 'auto' }} data-testid="trial-table">
+            {fixed && (
+                <Typography variant="caption" color="text.secondary" component="div" data-testid="trial-fixed" sx={{ pb: 0.75, overflowWrap: 'anywhere' }}>
+                    Fixed in this search: {fixed}
+                </Typography>
+            )}
             <Table size="small" stickyHeader aria-label={group.title}>
                 <TableHead>
                     <TableRow>
@@ -185,6 +194,9 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                             setMenu(undefined);
                         }}
                     >
+                        <ListItemIcon>
+                            <EmojiEventsOutlinedIcon fontSize="small" />
+                        </ListItemIcon>
                         Adopt as result…
                     </MenuItem>
                 )}
@@ -195,6 +207,9 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                             setMenu(undefined);
                         }}
                     >
+                        <ListItemIcon>
+                            <ManageSearchIcon fontSize="small" />
+                        </ListItemIcon>
                         Show details
                     </MenuItem>
                 )}
@@ -205,6 +220,9 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                             setMenu(undefined);
                         }}
                     >
+                        <ListItemIcon>
+                            <StopCircleOutlinedIcon fontSize="small" />
+                        </ListItemIcon>
                         Stop trial
                     </MenuItem>
                 )}

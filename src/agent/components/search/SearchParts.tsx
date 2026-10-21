@@ -195,12 +195,12 @@ export function LogBox({
                 lines.map((l, i) => (
                     <Box
                         key={i}
-                        sx={{
+                        sx={(theme) => ({
                             px: 1.25,
                             whiteSpace: wrap ? 'pre-wrap' : 'pre',
                             overflowWrap: wrap ? 'anywhere' : undefined,
-                            ...(err >= 0 && i >= err ? (theme) => ({ bgcolor: alpha(theme.palette.error.main, 0.08), color: theme.palette.error.dark }) : {}),
-                        }}
+                            ...(err >= 0 && i >= err ? { bgcolor: alpha(theme.palette.error.main, 0.08), color: theme.palette.error.dark } : {}),
+                        })}
                     >
                         {l === '' ? ' ' : l}
                     </Box>
