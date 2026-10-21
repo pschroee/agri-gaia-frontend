@@ -2,6 +2,20 @@
 //
 // SPDX-License-Identifier: MIT
 
+import type { ActivityGrant, ConnectionFilter, InternetKind } from './internet';
+import {
+    accessList,
+    accessSummaryText,
+    endInfo,
+    formatData,
+    KIND_NAME,
+    limitText,
+    parsePackage,
+    viaText,
+    versionText,
+    cardTexts,
+    limitsLine,
+} from './internetView';
 import type {
     ActivityCall,
     ActivityChat,
@@ -39,14 +53,21 @@ export const OUTCOME_FILTERS: { value: ActivityOutcome | ''; label: string }[] =
     { value: 'refused', label: 'refused' },
 ];
 
-/** What the table lists: everything, only platform calls or only internet switches (gateway issue #37). */
-export type KindFilter = 'all' | ActivityKind;
+/**
+ * What the view lists: everything, only platform calls, the internet access entries (requests, ends, switches; gateway
+ * issues #37 and #175) or the connections through the web proxy (own route, own table).
+ */
+export type KindFilter = 'all' | ActivityKind | 'connections';
 
 export const KIND_FILTERS: { value: KindFilter; label: string }[] = [
     { value: 'all', label: 'Everything' },
     { value: 'platform', label: 'Platform calls' },
-    { value: 'internet', label: 'Internet switches' },
+    { value: 'internet', label: 'Internet access' },
+    { value: 'connections', label: 'Internet connections' },
 ];
+
+/** The two internet views show a summary line instead of the figure tiles and the effect legend. */
+export const isInternetKind = (k: KindFilter): boolean => k === 'internet' || k === 'connections';
 
 /** Calls per page; the gateway allows up to 500. */
 export const PAGE_SIZE = 100;
@@ -58,6 +79,12 @@ export function periodSince(period: Period, now = new Date()): Date | undefined 
     const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     d.setDate(d.getDate() - days);
     return d;
+}
+
+/** The start of a period as RFC 3339 in UTC without milliseconds; undefined for all. */
+export function sinceOf(period: Period, now = new Date()): string | undefined {
+    const since = periodSince(period, now);
+    return since ? since.toISOString().replace(/\.\d{3}Z$/, 'Z') : undefined;
 }
 
 /** Query string of GET /activity ("?since=…&limit=100"); the time goes as RFC 3339 in UTC without milliseconds. */
@@ -77,10 +104,11 @@ export function activityQuery(
 ): string {
     const q = new URLSearchParams();
     // kind=platform is the gateway's default; an outcome is about platform calls only, so it asks for those.
-    const kind = opts.outcome ? 'platform' : opts.kind ?? 'platform';
+    // The connections have their own route (`connectionsQuery`); asked here they mean the platform default.
+    const kind = opts.outcome || opts.kind === 'connections' ? 'platform' : opts.kind ?? 'platform';
     if (kind !== 'platform') q.set('kind', kind);
-    const since = periodSince(opts.period, now);
-    if (since) q.set('since', since.toISOString().replace(/\.\d{3}Z$/, 'Z'));
+    const since = sinceOf(opts.period, now);
+    if (since) q.set('since', since);
     if (opts.outcome) q.set('outcome', opts.outcome);
     if (opts.chat) q.set('chat', opts.chat);
     if (opts.call) q.set('call', opts.call);
@@ -119,6 +147,51 @@ export function activityParams(search: string): { chat?: string; call?: string }
     const chat = (q.get('chat') ?? '').trim();
     const call = (q.get('call') ?? '').trim();
     return { chat: chat || undefined, call: usableCallId(call) ? call : undefined };
+}
+
+/** The way into the internet views of the Activity (issue #175): `kind` and, for the connections, their result. */
+export type InternetActivityParams = { kind?: 'internet' | 'connections'; result?: 'allowed' | 'blocked' };
+
+/**
+ * Reads `?kind=internet|connections&result=allowed|blocked` of a link into the Activity; anything else is dropped.
+ * The chat of the link comes from `activityParams` (`chat`).
+ */
+export function internetActivityParams(search: string): InternetActivityParams {
+    const q = new URLSearchParams(search);
+    const kind = q.get('kind');
+    const result = q.get('result');
+    return {
+        kind: kind === 'internet' || kind === 'connections' ? kind : undefined,
+        result: result === 'allowed' || result === 'blocked' ? result : undefined,
+    };
+}
+
+/**
+ * Link to the connections of a chat in the Activity, by default the blocked ones ("Show in Activity" of the popover):
+ * `/ai-agent?tab=activity&kind=connections&result=blocked&chat=<id>`.
+ */
+export function internetActivityLink(chatId: string, result: 'allowed' | 'blocked' | '' = 'blocked'): string {
+    const q = new URLSearchParams({ tab: 'activity', kind: 'connections' });
+    if (result) q.set('result', result);
+    if (chatId) q.set('chat', chatId);
+    return `/ai-agent?${q.toString()}`;
+}
+
+/** The filter of the connection table: the period, the chat of a link, the result and the origin ("From"). */
+export function connectionFilterOf(opts: {
+    period: Period;
+    chat?: string;
+    result?: 'allowed' | 'blocked' | '';
+    origin?: 'pi' | 'exec' | 'pkg' | '';
+    limit?: number;
+}): ConnectionFilter {
+    return {
+        since: sinceOf(opts.period),
+        chat: opts.chat || undefined,
+        result: opts.result || undefined,
+        origin: opts.origin || undefined,
+        limit: opts.limit,
+    };
 }
 
 /** Appends the next page: calls without duplicates, chats merged, summary and cursor of the newer page. */
@@ -236,6 +309,16 @@ export function internetOf(c: ActivityCall): ActivityInternet {
             result: r === 'off' ? 'off' : r === 'already off' ? 'already_off' : 'error',
         };
     }
+    if (c.op === 'internet_end') {
+        const result = (['time', 'bytes', 'installed', 'user', 'agent'].includes(r) ? r : 'error') as
+            | 'time'
+            | 'bytes'
+            | 'installed'
+            | 'user'
+            | 'agent'
+            | 'error';
+        return { action: 'end', origin: r === 'user' ? 'user' : r === 'agent' ? 'agent' : 'system', result };
+    }
     const result = r.startsWith('approved')
         ? 'approved'
         : r.startsWith('already on')
@@ -244,72 +327,185 @@ export function internetOf(c: ActivityCall): ActivityInternet {
         ? 'expired'
         : r.startsWith('rejected')
         ? 'rejected'
+        : r.startsWith('refused')
+        ? 'refused'
         : 'error';
     return { action: 'request', origin: 'agent', result };
 }
 
 export type InternetTone = 'ok' | 'bad' | 'warn' | 'muted';
 
-/** What a row of the table says about an internet entry. */
+/** MUI icons of the Result column (A3, A10, A20); `none` for a result without a symbol. */
+export type ResultIcon =
+    | 'Check'
+    | 'Close'
+    | 'HourglassEmpty'
+    | 'TaskAlt'
+    | 'TimerOff'
+    | 'DataUsage'
+    | 'PublicOff'
+    | 'ErrorOutline'
+    | 'none';
+
+/** What a row of the Internet access view says about an entry. */
 export type InternetEvent = {
-    /** "Internet requested", "Internet switched off by the agent", "Internet switched on by you". */
+    /** "Sites approved for the agent", "Packages installed, access ended", "Full access switched on by you". */
     title: string;
     /** The agent's reason of a request. */
     reason?: string;
-    /** Result column: "approved", "rejected by you", "no decision in time", "switched off", … */
+    /** Result column: "approved", "rejected by you", "no decision in time", "ended: time", "refused", … */
     result: string;
+    resultIcon: ResultIcon;
     tone: InternetTone;
-    /** Who acted: "Agent", "Subagent" or "You". */
+    /** Who acted: "Agent", "Helper", "You" or "System". */
     by: string;
+    /** Icon in front of the title: `Public` where access starts, `PublicOff` where it ends. */
+    icon: 'Public' | 'PublicOff';
+    /** Kind of the access when the gateway sent the grant. */
+    kind?: InternetKind;
+    /** Second line: the hosts, the packages, "web tools" or "any address". */
+    list?: string;
+    /** Via column (A14): CLI, MCP, API; UI only for the user's own switch; "–" otherwise. */
+    via: string;
+    /** Data column: what the grant moved, for an end and a switch-off; "–" otherwise. */
+    data: string;
 };
 
-/** Texts of an internet entry for the activity table. */
+/** Texts of an internet entry for the Internet access view. */
 export function internetEvent(c: ActivityCall): InternetEvent {
     const i = internetOf(c);
-    const sub = i.origin === 'agent' && !!c.session && c.session !== 'main';
-    const by = i.origin === 'user' ? 'You' : sub ? 'Subagent' : 'Agent';
-    const actor = sub ? 'a subagent' : 'the agent';
+    const g = c.grant;
+    const helper = i.origin === 'agent' && !!c.session && c.session !== 'main';
+    const by = i.origin === 'user' ? 'You' : i.origin === 'system' ? 'System' : helper ? 'Helper' : 'Agent';
+    const actor = helper ? 'a helper of the agent' : 'the agent';
+    const name = g ? KIND_NAME[g.kind] : 'Internet access';
+    const via = i.origin === 'user' ? 'UI' : i.origin === 'system' ? '–' : viaText(c.via);
+    const base = {
+        by,
+        via,
+        kind: g?.kind,
+        list: g ? accessList(g) : undefined,
+        data: '–',
+    };
+    const moved = g ? formatData(g.bytes) : '–';
+    const reason = c.detail.trim();
+    const hasReason = !!reason && reason !== '(no reason given)';
+    const ev = (
+        title: string,
+        result: string,
+        resultIcon: ResultIcon,
+        tone: InternetTone,
+        icon: 'Public' | 'PublicOff' = 'Public',
+        extra: Partial<InternetEvent> = {},
+    ): InternetEvent => ({ ...base, title, result, resultIcon, tone, icon, ...extra });
+
     if (i.action === 'request') {
-        const reason = c.detail.trim();
-        const results: Record<string, [string, InternetTone]> = {
-            approved: ['approved', 'ok'],
-            already_on: ['already on, not asked', 'muted'],
-            rejected: ['rejected by you', 'bad'],
-            expired: ['no decision in time', 'warn'],
-        };
-        const [result, tone] = results[i.result] ?? ['failed', 'bad'];
-        return {
-            title: `Internet requested by ${actor}`,
-            reason: reason && reason !== '(no reason given)' ? reason : undefined,
-            result,
-            tone,
-            by,
-        };
+        const withReason = hasReason ? { reason } : {};
+        switch (i.result) {
+            case 'approved':
+                return ev(`${name} approved for ${actor}`, 'approved', 'Check', 'ok', 'Public', withReason);
+            case 'rejected':
+                return ev(`${name} rejected by you`, 'rejected', 'Close', 'bad', 'Public', withReason);
+            case 'expired':
+                return ev(
+                    `${name} requested by ${actor}`,
+                    'no decision in time',
+                    'HourglassEmpty',
+                    'warn',
+                    'Public',
+                    withReason,
+                );
+            case 'already_on':
+                return ev(
+                    `${name} requested by ${actor}`,
+                    'already on, not asked',
+                    'none',
+                    'muted',
+                    'Public',
+                    withReason,
+                );
+            case 'refused':
+                return ev('Internet access request refused', 'refused', 'ErrorOutline', 'bad', 'Public', withReason);
+            default:
+                return ev('Internet access request failed', 'failed', 'ErrorOutline', 'bad', 'Public', withReason);
+        }
     }
     if (i.action === 'off') {
-        const [result, tone]: [string, InternetTone] =
-            i.result === 'off'
-                ? ['switched off', 'muted']
-                : i.result === 'already_off'
-                ? ['was already off', 'muted']
-                : ['failed', 'bad'];
-        return { title: `Internet switched off by ${actor}`, result, tone, by };
+        const title = `${name} switched off by ${actor}`;
+        if (i.result === 'off') return ev(title, 'switched off', 'PublicOff', 'muted', 'PublicOff', { data: moved });
+        if (i.result === 'already_off') return ev(title, 'was already off', 'none', 'muted', 'PublicOff');
+        return ev(title, 'failed', 'ErrorOutline', 'bad', 'PublicOff');
+    }
+    if (i.action === 'end') {
+        const e = endInfo(i.result);
+        const data = { data: moved };
+        if (i.result === 'user') return ev(`${name} switched off by you`, e.short, e.icon, 'muted', 'PublicOff', data);
+        if (i.result === 'agent')
+            return ev(`${name} switched off by the agent`, e.short, e.icon, 'muted', 'PublicOff', data);
+        const title = i.result === 'installed' ? 'Packages installed, access ended' : `${name} ended: ${e.long}`;
+        return ev(title, e.short, e.icon, i.result === 'error' ? 'bad' : 'muted', 'PublicOff', data);
     }
     const on = i.result === 'on' || i.result === 'already_on';
-    const [result, tone]: [string, InternetTone] =
-        i.result === 'on'
-            ? ['on', 'ok']
-            : i.result === 'off'
-            ? ['off', 'muted']
-            : i.result === 'error'
-            ? ['failed', 'bad']
-            : [on ? 'was already on' : 'was already off', 'muted'];
-    return {
-        title: i.result === 'error' ? 'Internet switched by you' : `Internet switched ${on ? 'on' : 'off'} by you`,
-        result,
-        tone,
-        by,
-    };
+    if (i.result === 'on') return ev(`${name} switched on by you`, 'switched on', 'Check', 'ok');
+    if (i.result === 'off')
+        return ev(`${name} switched off by you`, 'switched off', 'PublicOff', 'muted', 'PublicOff', { data: moved });
+    if (i.result === 'error') return ev('Internet switched by you', 'failed', 'ErrorOutline', 'bad');
+    return ev(
+        `${name} switched ${on ? 'on' : 'off'} by you`,
+        on ? 'was already on' : 'was already off',
+        'none',
+        'muted',
+        on ? 'Public' : 'PublicOff',
+    );
+}
+
+/** Approvals and data over the entries of the Internet access view (A16): approved requests and switch-ons, once per grant. */
+export function accessTotals(calls: ActivityCall[]): { approvals: number; bytes: number } {
+    const internet = calls.filter((c) => kindOf(c) === 'internet');
+    const approvals = internet.filter((c) => {
+        const i = internetOf(c);
+        return (i.action === 'request' && i.result === 'approved') || (i.action === 'switch' && i.result === 'on');
+    }).length;
+    const grants = new Map<number, number>();
+    for (const c of internet) if (c.grant) grants.set(c.grant.id, c.grant.bytes);
+    return { approvals, bytes: [...grants.values()].reduce((a, b) => a + b, 0) };
+}
+
+/** The summary line of the Internet access view: "{n} approvals · {x} GB · {n} blocked"; `blocked` from the connections. */
+export function accessSummaryOf(calls: ActivityCall[], blocked: number): string {
+    const t = accessTotals(calls);
+    return accessSummaryText(t.approvals, t.bytes, blocked);
+}
+
+/** "pip torch any version · pip torchvision any version · and the packages these need" (the Allowed row, A19). */
+export function allowedLine(g: Pick<ActivityGrant, 'kind' | 'domains' | 'packages'>): string {
+    switch (g.kind) {
+        case 'search':
+            return cardTexts('search').allowText ?? '';
+        case 'domains':
+            return (g.domains ?? []).join(' · ');
+        case 'packages':
+            return [
+                ...(g.packages ?? []).map((s) => {
+                    const p = parsePackage(s);
+                    return p ? `${p.ecosystem} ${p.name} ${versionText(p.version)}` : s;
+                }),
+                'and the packages these need',
+            ].join(' · ');
+        default:
+            return cardTexts('full').allowText ?? '';
+    }
+}
+
+/** The Limits row of a grant, from what the gateway clamped: minutes between start and expiry, the data limit. */
+export function grantLimitsText(g: Pick<ActivityGrant, 'kind' | 'max_bytes' | 'started_at' | 'expires_at'>): string {
+    const start = g.started_at ? Date.parse(g.started_at) : NaN;
+    const end = g.expires_at ? Date.parse(g.expires_at) : NaN;
+    const megabytes = Math.round(g.max_bytes / (1 << 20));
+    if (Number.isNaN(start) || Number.isNaN(end) || g.max_bytes <= 0) {
+        return g.max_bytes > 0 ? `Data limit ${limitText(g.max_bytes)}.` : '';
+    }
+    return limitsLine({ kind: g.kind, minutes: Math.max(1, Math.round((end - start) / 60000)), megabytes });
 }
 
 /** Footer of the table: how many platform calls of the period and how many internet switches are shown. */
@@ -319,7 +515,7 @@ export function shownText(rows: ActivityRow[], total: number | undefined, kind: 
     const system = rows.filter((r) => isSystemRead(r.call)).length;
     const platform = rows.filter((r) => kindOf(r.call) === 'platform' && !isSystemRead(r.call)).length;
     const internet = rows.length - platform - system;
-    const switches = `${internet} internet ${internet === 1 ? 'switch' : 'switches'}`;
+    const switches = `${internet} internet ${internet === 1 ? 'entry' : 'entries'}`;
     const reads = `${system} read${system === 1 ? '' : 's'} by the system`;
     if (kind === 'internet') return `Shows ${switches}.`;
     if (outcome) return `Shows ${platform} ${platform === 1 ? 'call' : 'calls'} with this result.`;

@@ -351,9 +351,26 @@ export type ActivityKind = 'platform' | 'internet';
  * user's switch.
  */
 export type ActivityInternet = {
-    action: 'request' | 'off' | 'switch';
-    origin: 'agent' | 'user';
-    result: 'approved' | 'already_on' | 'rejected' | 'expired' | 'on' | 'off' | 'already_off' | 'error';
+    /** `end`: a grant ended (issue #175); `request` also covers requests the gateway refused. */
+    action: 'request' | 'off' | 'switch' | 'end';
+    /** `system`: a grant ended by itself (time, data limit, packages installed). */
+    origin: 'agent' | 'user' | 'system';
+    /** An end reason (`time`, `bytes`, `installed`, `user`, `agent`, `error`) for action `end`. */
+    result:
+        | 'approved'
+        | 'already_on'
+        | 'rejected'
+        | 'expired'
+        | 'refused'
+        | 'on'
+        | 'off'
+        | 'already_off'
+        | 'error'
+        | 'time'
+        | 'bytes'
+        | 'installed'
+        | 'user'
+        | 'agent';
 };
 
 /**

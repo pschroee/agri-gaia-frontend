@@ -11,7 +11,17 @@ import {
     activityParams,
     activityQuery,
     activityRows,
+    accessSummaryOf,
+    accessTotals,
+    allowedLine,
+    connectionFilterOf,
     formatDuration,
+    grantLimitsText,
+    internetActivityLink,
+    internetActivityParams,
+    isInternetKind,
+    KIND_FILTERS,
+    sinceOf,
     internetEvent,
     internetOf,
     isSystemRead,
@@ -215,40 +225,102 @@ describe('internet rows', () => {
         expect(activityRows(old, 'internet')).toEqual([]);
     });
     it('says what happened, who acted and how it ended', () => {
-        expect(internetEvent(inet(1, 'internet', 'approved', { detail: 'read the docs' }))).toEqual({
-            title: 'Internet requested by the agent',
+        expect(internetEvent(inet(1, 'internet', 'approved', { detail: 'read the docs' }))).toMatchObject({
+            title: 'Internet access approved for the agent',
             reason: 'read the docs',
             result: 'approved',
+            resultIcon: 'Check',
             tone: 'ok',
             by: 'Agent',
+            via: 'CLI',
+            data: '–',
         });
         const cases: [ActivityCall, string, string, string][] = [
-            [inet(1, 'internet', 'rejected'), 'Internet requested by the agent', 'rejected by you', 'bad'],
-            [inet(1, 'internet', 'expired'), 'Internet requested by the agent', 'no decision in time', 'warn'],
-            [inet(1, 'internet', 'already on'), 'Internet requested by the agent', 'already on, not asked', 'muted'],
-            [inet(1, 'internet', 'error: boom'), 'Internet requested by the agent', 'failed', 'bad'],
-            [inet(1, 'internet_off', 'off'), 'Internet switched off by the agent', 'switched off', 'muted'],
-            [inet(1, 'internet_off', 'already off'), 'Internet switched off by the agent', 'was already off', 'muted'],
-            [inet(1, 'internet_set', 'on', { via: 'user' }), 'Internet switched on by you', 'on', 'ok'],
-            [inet(1, 'internet_set', 'off', { via: 'user' }), 'Internet switched off by you', 'off', 'muted'],
+            [inet(1, 'internet', 'rejected'), 'Internet access rejected by you', 'rejected', 'bad'],
+            [inet(1, 'internet', 'expired'), 'Internet access requested by the agent', 'no decision in time', 'warn'],
+            [
+                inet(1, 'internet', 'already on'),
+                'Internet access requested by the agent',
+                'already on, not asked',
+                'muted',
+            ],
+            [inet(1, 'internet', 'refused: too many'), 'Internet access request refused', 'refused', 'bad'],
+            [inet(1, 'internet', 'error: boom'), 'Internet access request failed', 'failed', 'bad'],
+            [inet(1, 'internet_off', 'off'), 'Internet access switched off by the agent', 'switched off', 'muted'],
+            [
+                inet(1, 'internet_off', 'already off'),
+                'Internet access switched off by the agent',
+                'was already off',
+                'muted',
+            ],
+            [inet(1, 'internet_set', 'on', { via: 'user' }), 'Internet access switched on by you', 'switched on', 'ok'],
+            [
+                inet(1, 'internet_set', 'off', { via: 'user' }),
+                'Internet access switched off by you',
+                'switched off',
+                'muted',
+            ],
             [
                 inet(1, 'internet_set', 'already on', { via: 'user' }),
-                'Internet switched on by you',
+                'Internet access switched on by you',
                 'was already on',
                 'muted',
             ],
             [
                 inet(1, 'internet_off', 'off', { session: 'abc12345-run#1' }),
-                'Internet switched off by a subagent',
+                'Internet access switched off by a helper of the agent',
                 'switched off',
                 'muted',
             ],
+            [inet(1, 'internet_end', 'time'), 'Internet access ended: time is up', 'ended: time', 'muted'],
+            [
+                inet(1, 'internet_end', 'bytes'),
+                'Internet access ended: data limit reached',
+                'ended: data limit',
+                'muted',
+            ],
+            [inet(1, 'internet_end', 'installed'), 'Packages installed, access ended', 'ended: installed', 'muted'],
+            [inet(1, 'internet_end', 'user'), 'Internet access switched off by you', 'switched off', 'muted'],
+            [inet(1, 'internet_end', 'error'), 'Internet access ended: error', 'ended: error', 'bad'],
         ];
         for (const [c, title, result, tone] of cases) {
             expect(internetEvent(c)).toMatchObject({ title, result, tone });
         }
         expect(internetEvent(inet(1, 'internet_set', 'on', { via: 'user' })).by).toBe('You');
+        expect(internetEvent(inet(1, 'internet_set', 'on', { via: 'user' })).via).toBe('UI');
+        expect(internetEvent(inet(1, 'internet_end', 'time', { via: 'orchestrator' }))).toMatchObject({
+            by: 'System',
+            via: '–',
+        });
         expect(internetEvent(inet(1, 'internet', 'approved', { detail: '(no reason given)' })).reason).toBeUndefined();
+    });
+    it('names the kind, the list, the symbols and the data of an entry with its grant (A3, A5, A10)', () => {
+        const grant = {
+            id: 7,
+            kind: 'packages' as const,
+            domains: [],
+            packages: ['pip:torch', 'pip:torchvision==0.20.1'],
+            bytes: 2.6 * 1024 ** 3,
+            max_bytes: 4 * 1024 ** 3,
+            state: 'ended' as const,
+            origin: 'agent' as const,
+        };
+        const approved = internetEvent(inet(1, 'internet', 'approved', { grant, via: 'mcp' }));
+        expect(approved).toMatchObject({
+            title: 'Packages approved for the agent',
+            kind: 'packages',
+            list: 'torch, torchvision',
+            via: 'MCP',
+            data: '–',
+            icon: 'Public',
+        });
+        const ended = internetEvent(inet(2, 'internet_end', 'installed', { grant }));
+        expect(ended).toMatchObject({ resultIcon: 'TaskAlt', icon: 'PublicOff', data: '2.6 GB' });
+        expect(internetEvent(inet(3, 'internet_end', 'time', { grant })).resultIcon).toBe('TimerOff');
+        expect(internetEvent(inet(4, 'internet_end', 'bytes', { grant })).resultIcon).toBe('DataUsage');
+        expect(internetEvent(inet(5, 'internet_end', 'user', { grant })).resultIcon).toBe('PublicOff');
+        expect(internetEvent(inet(6, 'internet', 'refused')).resultIcon).toBe('ErrorOutline');
+        expect(internetEvent(inet(7, 'internet', 'expired', { grant })).resultIcon).toBe('HourglassEmpty');
     });
     it("prefers the gateway's classification over the result text", () => {
         const c = inet(1, 'internet', 'rejected', {
@@ -272,13 +344,94 @@ describe('internet rows', () => {
     });
     it('counts platform calls and switches apart below the table', () => {
         const rows = activityRows(p);
-        expect(shownText(rows, 10, 'all', '')).toBe('Shows 2 of 10 platform calls and 3 internet switches.');
+        expect(shownText(rows, 10, 'all', '')).toBe('Shows 2 of 10 platform calls and 3 internet entries.');
         expect(shownText(activityRows(p, 'platform'), 2, 'platform', '')).toBe('Shows 2 of 2 platform calls.');
-        expect(shownText(activityRows(p, 'internet'), 2, 'internet', '')).toBe('Shows 3 internet switches.');
+        expect(shownText(activityRows(p, 'internet'), 2, 'internet', '')).toBe('Shows 3 internet entries.');
         expect(shownText(activityRows(p, 'platform'), 2, 'all', 'ok')).toBe('Shows 2 calls with this result.');
         expect(shownText(activityRows(page([inet(9, 'internet', 'approved')]), 'internet'), 0, 'internet', '')).toBe(
-            'Shows 1 internet switch.',
+            'Shows 1 internet entry.',
         );
+    });
+});
+
+describe('internet views of the activity (issue #175)', () => {
+    it('offers the four kinds and knows the two internet ones', () => {
+        expect(KIND_FILTERS.map((k) => k.label)).toEqual([
+            'Everything',
+            'Platform calls',
+            'Internet access',
+            'Internet connections',
+        ]);
+        expect(isInternetKind('internet')).toBe(true);
+        expect(isInternetKind('connections')).toBe(true);
+        expect(isInternetKind('all')).toBe(false);
+        expect(isInternetKind('platform')).toBe(false);
+    });
+    it('never asks the platform route for the connections', () => {
+        const q = new URLSearchParams(activityQuery({ period: 'all', kind: 'connections' }));
+        expect(q.get('kind')).toBeNull();
+    });
+    it('writes and reads the link into the connections (the popover\'s "Show in Activity")', () => {
+        const link = internetActivityLink('chat-1');
+        expect(link).toBe('/ai-agent?tab=activity&kind=connections&result=blocked&chat=chat-1');
+        const search = link.slice(link.indexOf('?'));
+        expect(internetActivityParams(search)).toEqual({ kind: 'connections', result: 'blocked' });
+        expect(activityParams(search)).toEqual({ chat: 'chat-1', call: undefined });
+        expect(internetActivityLink('c', '')).toBe('/ai-agent?tab=activity&kind=connections&chat=c');
+    });
+    it('drops what it does not know in a hand-made link', () => {
+        expect(internetActivityParams('?kind=platform&result=maybe')).toEqual({ kind: undefined, result: undefined });
+        expect(internetActivityParams('?kind=internet&result=allowed')).toEqual({
+            kind: 'internet',
+            result: 'allowed',
+        });
+        expect(internetActivityParams('')).toEqual({ kind: undefined, result: undefined });
+    });
+    it('builds the filter of the connection table from the period, chat, result and origin', () => {
+        const now = new Date(2026, 9, 6, 15, 30);
+        expect(sinceOf('today', now)).toBe(new Date(2026, 9, 6).toISOString().replace('.000Z', 'Z'));
+        expect(sinceOf('all', now)).toBeUndefined();
+        const f = connectionFilterOf({ period: 'all', chat: 'c1', result: 'blocked', origin: '' });
+        expect(f).toEqual({ since: undefined, chat: 'c1', result: 'blocked', origin: undefined, limit: undefined });
+    });
+    it('counts approvals once and the data of each grant once for the summary line (A16)', () => {
+        const g = (id: number, bytes: number) => ({
+            id,
+            kind: 'domains' as const,
+            domains: ['a.org'],
+            packages: [],
+            bytes,
+            max_bytes: 0,
+            state: 'ended' as const,
+            origin: 'agent' as const,
+        });
+        const calls = [
+            inet(1, 'internet', 'approved', { grant: g(1, 1024 * 1024) }),
+            inet(2, 'internet_end', 'time', { grant: g(1, 1024 * 1024) }),
+            inet(3, 'internet', 'rejected'),
+            inet(4, 'internet_set', 'on', { via: 'user', grant: g(2, 2 * 1024 * 1024) }),
+            call(5, 'a'),
+        ];
+        expect(accessTotals(calls)).toEqual({ approvals: 2, bytes: 3 * 1024 * 1024 });
+        expect(accessSummaryOf(calls, 4)).toBe('2 approvals · 3 MB · 4 blocked');
+        expect(accessSummaryOf([], 0)).toBe('0 approvals · 0 B · 0 blocked');
+    });
+    it('writes the Allowed and Limits rows of an approval', () => {
+        expect(allowedLine({ kind: 'packages', domains: [], packages: ['pip:torch', 'pip:timm==1.0.11'] })).toBe(
+            'pip torch any version · pip timm 1.0.11 · and the packages these need',
+        );
+        expect(allowedLine({ kind: 'domains', domains: ['a.org', 'b.org'], packages: [] })).toBe('a.org · b.org');
+        expect(allowedLine({ kind: 'search', domains: [], packages: [] })).toContain('Commands stay offline');
+        expect(allowedLine({ kind: 'full', domains: [], packages: [] })).toContain('Any address');
+        const t = '2026-10-21T14:00:00Z';
+        const u = '2026-10-21T14:30:00Z';
+        expect(grantLimitsText({ kind: 'domains', max_bytes: 500 * 1024 * 1024, started_at: t, expires_at: u })).toBe(
+            'Ends after 30 min or 500 MB, whichever comes first. You can switch it off any time.',
+        );
+        expect(
+            grantLimitsText({ kind: 'packages', max_bytes: 4096 * 1024 * 1024, started_at: t, expires_at: u }),
+        ).toContain('Ends when these packages are installed');
+        expect(grantLimitsText({ kind: 'full', max_bytes: 0 })).toBe('');
     });
 });
 
@@ -305,14 +458,20 @@ describe('viaLabel', () => {
 });
 
 describe('isSystemRead', () => {
-    it('knows the gateway\'s own reads for approval summaries', () => {
+    it("knows the gateway's own reads for approval summaries", () => {
         expect(isSystemRead(call(1, 'a', { op: 'summary_read', via: 'orchestrator' }))).toBe(true);
         expect(isSystemRead(call(2, 'a'))).toBe(false);
         expect(isSystemRead(call(3, 'a', { op: 'internet' }))).toBe(false);
     });
 
     it('keeps a summary read out of the figures and out of the tool-call log', () => {
-        const p = page([call(1, 'a', { op: 'summary_read', via: 'orchestrator', detail: 'for approval 12345678 (proposed): GET /datasets/16' })]);
+        const p = page([
+            call(1, 'a', {
+                op: 'summary_read',
+                via: 'orchestrator',
+                detail: 'for approval 12345678 (proposed): GET /datasets/16',
+            }),
+        ]);
         const rows = activityRows(p, 'platform');
         expect(rows).toHaveLength(1);
         expect(isSystemRead(rows[0].call)).toBe(true);
@@ -320,8 +479,8 @@ describe('isSystemRead', () => {
     });
 });
 
-describe('shownText with the gateway\'s own reads', () => {
-    it('counts the system\'s reads apart from the calls of the agent', () => {
+describe("shownText with the gateway's own reads", () => {
+    it("counts the system's reads apart from the calls of the agent", () => {
         const reads = [
             call(1, 'a'),
             call(2, 'a', { op: 'summary_read', via: 'orchestrator' }),
