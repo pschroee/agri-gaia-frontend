@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -30,9 +31,9 @@ export default function MyAppBar({ toggleSideNav }: { toggleSideNav: () => void 
             <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
                 <Toolbar>
                     <AgriGaiaLogo onClick={toggleSideNav} />
-                    <Box sx={{ flexGrow: 1 }}>
-                        <Button onClick={() => navigate('/')} color="inherit">
-                            <Typography variant="h6" component="div" sx={{ textTransform: 'none' }}>
+                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        <Button onClick={() => navigate('/')} color="inherit" sx={{ minWidth: 0, maxWidth: '100%' }}>
+                            <Typography variant="h6" component="div" noWrap sx={{ textTransform: 'none' }}>
                                 Agri-Gaia
                             </Typography>
                         </Button>

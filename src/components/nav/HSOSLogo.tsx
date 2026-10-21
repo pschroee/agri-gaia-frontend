@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -15,8 +16,8 @@ import hsosLogo from '../../imgs/hsos-logo-compact.png';
 
 export default function HSOSLogo() {
     return (
-        <Box sx={{ mr: 2 }}>
-            <img src={hsosLogo} height="40px" />
+        <Box sx={{ mr: { xs: 1, sm: 2 }, flex: 'none' }}>
+            <Box component="img" src={hsosLogo} alt="" sx={{ height: { xs: 28, sm: 40 }, display: 'block' }} />
         </Box>
     );
 }
