@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // SPDX-FileCopyrightText: 2026 Philipp Schröer
 //
 // SPDX-License-Identifier: MIT

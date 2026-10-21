@@ -110,7 +110,8 @@ describe('where the controls sit (#182)', () => {
     it('uses icon buttons with labels for stopping in the panel, text buttons for the rest', () => {
         const { container } = render1(mockSearch(), mockTrials(), {}, 'panel');
         const [head, foot] = Array.from(container.querySelectorAll('[data-variant="card"]')) as HTMLElement[];
-        expect(within(head).getByLabelText('Stop search')).toBeTruthy();
+        // the tooltip's wrapper span carries the label too, so the button is found by its role
+        expect(within(head).getByRole('button', { name: 'Stop search' })).toBeTruthy();
         expect(within(head).queryByText('Stop search')).toBeNull();
         expect(within(foot).getByText('Change budget')).toBeTruthy();
     });
