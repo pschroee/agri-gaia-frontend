@@ -233,6 +233,26 @@ describe('InternetAccessView', () => {
         expect(screen.getByText('2.6 GB')).toBeTruthy();
     });
 
+    it('shows the user\'s switch-off as one row that opens to the approvals it ended (issue #185)', async () => {
+        const ended = (id: number, kind: 'search' | 'full') => ({ ...grant, id, kind, domains: [], packages: [] });
+        const rows = activityRows(
+            accessPage([
+                {
+                    ...entry(3, 'internet_set', 'off', { via: 'user' }),
+                    ended: [ended(1, 'search'), ended(2, 'full')],
+                },
+            ]),
+            'internet',
+        );
+        render(<InternetAccessView rows={rows} emptyText="none" />);
+        expect(screen.getAllByTestId('access-row')).toHaveLength(1);
+        expect(screen.getByText('Switched off by you · ended 2 approvals')).toBeTruthy();
+        fireEvent.click(screen.getByTestId('access-row'));
+        await waitFor(() => screen.getByTestId('ended-approvals'));
+        expect(screen.getAllByTestId('ended-approval')).toHaveLength(2);
+        expect(screen.getByTestId('ended-approvals').textContent).toContain('Approvals ended');
+    });
+
     it('says so when there is nothing', () => {
         render(<InternetAccessView rows={[]} emptyText="No internet access in total." />);
         expect(screen.getByText('No internet access in total.')).toBeTruthy();

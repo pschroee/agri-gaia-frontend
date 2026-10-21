@@ -385,6 +385,8 @@ export type ActivityCall = SocketCall & {
     internet?: ActivityInternet;
     /** Internet entries: the grant the entry belongs to (absent for a refused request). */
     grant?: ActivityGrant;
+    /** The user's switch-off: the grants it ended (issue #185); their single end entries are not listed. */
+    ended?: ActivityGrant[];
     approval?: { id: string; state: Approval['state']; created_at: string; decided_at?: string };
 };
 

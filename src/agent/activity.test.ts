@@ -22,6 +22,7 @@ import {
     isInternetKind,
     KIND_FILTERS,
     sinceOf,
+    endedTitle,
     internetEvent,
     internetOf,
     isSystemRead,
@@ -491,5 +492,29 @@ describe("shownText with the gateway's own reads", () => {
         expect(shownText(rows, 1, 'all', '')).toBe('Shows 1 of 1 platform call and 2 reads by the system.');
         // An outcome filter is about the agent's calls.
         expect(shownText(rows, 1, 'platform', 'ok')).toBe('Shows 1 call with this result.');
+    });
+});
+
+describe('the user\'s switch-off with ended approvals (issue #185)', () => {
+    const g = (id: number, bytes: number) => ({
+        id,
+        kind: 'search' as const,
+        domains: [],
+        packages: [],
+        bytes,
+        max_bytes: 0,
+        state: 'ended' as const,
+        origin: 'user' as const,
+    });
+    it('names the number of ended approvals and sums their data', () => {
+        const one = { ...inet(1, 'internet_set', 'off', { via: 'user' }), ended: [g(7, 1024 * 1024)] };
+        expect(internetEvent(one)).toMatchObject({ title: 'Switched off by you · ended 1 approval' });
+        expect(internetEvent(one).data).not.toBe('–');
+        const two = { ...inet(2, 'internet_set', 'off', { via: 'user' }), ended: [g(7, 1024 * 1024), g(8, 1024 * 1024)] };
+        expect(internetEvent(two)).toMatchObject({ title: 'Switched off by you · ended 2 approvals', result: 'switched off' });
+        expect(endedTitle(3)).toBe('Switched off by you · ended 3 approvals');
+    });
+    it('keeps the old title without ended approvals', () => {
+        expect(internetEvent(inet(3, 'internet_set', 'off', { via: 'user' })).title).toBe('Internet access switched off by you');
     });
 });
