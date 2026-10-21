@@ -40,6 +40,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import Paper from '@mui/material/Paper';
 import { alpha } from '@mui/material/styles';
+import type { SxProps, Theme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
@@ -221,16 +222,21 @@ export function Technical({
     open,
     testId,
     full,
+    sx,
 }: {
     text: string;
     open?: boolean;
     testId?: string;
     /** No height limit (irreversible calls show their body in full). */
     full?: boolean;
+    sx?: SxProps<Theme>;
 }) {
     return (
-        <Box component="details" open={open} sx={{ mt: 0.5 }} data-testid={testId}>
-            <Box component="summary" sx={{ fontSize: 12, cursor: 'pointer', color: agentColors.muted }}>
+        <Box component="details" open={open} sx={[{ mt: 0.5 }, ...(Array.isArray(sx) ? sx : sx ? [sx] : [])]} data-testid={testId}>
+            <Box
+                component="summary"
+                sx={{ fontSize: 12, cursor: 'pointer', color: agentColors.muted, whiteSpace: 'nowrap' }}
+            >
                 Technical details
             </Box>
             <Box component="pre" sx={{ ...PRE_SX, ...(full ? { maxHeight: 'none', overflow: 'visible' } : {}) }}>
