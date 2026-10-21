@@ -372,6 +372,11 @@ export type InternetEvent = {
 };
 
 /** Texts of an internet entry for the Internet access view. */
+/** Title of the user's switch-off that ended `n` approvals (issue #185). */
+export function endedTitle(n: number): string {
+    return `Switched off by you · ended ${n} approval${n === 1 ? '' : 's'}`;
+}
+
 export function internetEvent(c: ActivityCall): InternetEvent {
     const i = internetOf(c);
     const g = c.grant;
@@ -447,6 +452,14 @@ export function internetEvent(c: ActivityCall): InternetEvent {
     }
     const on = i.result === 'on' || i.result === 'already_on';
     if (i.result === 'on') return ev(`${name} switched on by you`, 'switched on', 'Check', 'ok');
+    if (i.result === 'off' && c.ended?.length) {
+        const bytes = c.ended.reduce((sum, e) => sum + e.bytes, 0);
+        return ev(endedTitle(c.ended.length), 'switched off', 'PublicOff', 'muted', 'PublicOff', {
+            data: formatData(bytes),
+            kind: undefined,
+            list: undefined,
+        });
+    }
     if (i.result === 'off')
         return ev(`${name} switched off by you`, 'switched off', 'PublicOff', 'muted', 'PublicOff', { data: moved });
     if (i.result === 'error') return ev('Internet switched by you', 'failed', 'ErrorOutline', 'bad');

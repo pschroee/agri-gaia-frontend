@@ -45,6 +45,7 @@ import {
     endInfo,
     formatData,
     KIND_CHIP,
+    KIND_NAME,
     NO_CONNECTIONS_TEXT,
     reasonText,
     unlistedText,
@@ -93,6 +94,28 @@ export function AccessResultCell({ event }: { event: InternetEvent }) {
     );
 }
 
+/** The kind chip of an approval (SITES, PACKAGES, EVERYTHING, …); full access is drawn in the warning colours. */
+export function KindChip({ kind }: { kind: NonNullable<InternetEvent['kind']> }) {
+    const full = kind === 'full';
+    return (
+        <Chip
+            size="small"
+            variant="outlined"
+            label={KIND_CHIP[kind]}
+            sx={{
+                height: 20,
+                fontSize: 11,
+                letterSpacing: 0.5,
+                borderRadius: '4px',
+                flex: 'none',
+                color: full ? WARNING_TEXT_COLOR : agentColors.green,
+                borderColor: full ? WARNING_AREA_COLOR : agentColors.greenLine,
+                bgcolor: full ? '#fff3e0' : agentColors.greenTint,
+            }}
+        />
+    );
+}
+
 /** Call column of an internet entry: symbol and title, below the kind chip and the list (hosts, packages, …). */
 export function AccessCallCell({ event }: { event: InternetEvent }) {
     const full = event.kind === 'full';
@@ -104,21 +127,7 @@ export function AccessCallCell({ event }: { event: InternetEvent }) {
                 <Typography sx={{ fontSize: 14 }}>{event.title}</Typography>
                 {event.kind && (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5, minWidth: 0 }}>
-                        <Chip
-                            size="small"
-                            variant="outlined"
-                            label={KIND_CHIP[event.kind]}
-                            sx={{
-                                height: 20,
-                                fontSize: 11,
-                                letterSpacing: 0.5,
-                                borderRadius: '4px',
-                                flex: 'none',
-                                color: full ? WARNING_TEXT_COLOR : agentColors.green,
-                                borderColor: full ? WARNING_AREA_COLOR : agentColors.greenLine,
-                                bgcolor: full ? '#fff3e0' : agentColors.greenTint,
-                            }}
-                        />
+                        <KindChip kind={event.kind} />
                         {event.list && (
                             <Typography
                                 noWrap
@@ -187,6 +196,10 @@ export function AccessDetails({ row }: { row: ActivityRow }) {
     if (g?.ended_at) {
         const e = endInfo(g.ended_reason);
         lines.push({ at: g.ended_at, text: `ended: ${e.long} · ${formatData(g.bytes)}` });
+    }
+    const ended = call.ended ?? [];
+    for (const e of ended) {
+        if (e.ended_at) lines.push({ at: e.ended_at, text: `ended: ${KIND_NAME[e.kind]} · ${formatData(e.bytes)}` });
     }
     if (lines.length === 0) {
         lines.push({
@@ -297,6 +310,41 @@ export function AccessDetails({ row }: { row: ActivityRow }) {
                     </Box>
                 )}
             </Box>
+            {ended.length > 0 && (
+                <Box data-testid="ended-approvals">
+                    <Typography sx={{ fontSize: 14, fontWeight: 500, pb: 1 }}>Approvals ended</Typography>
+                    <Table size="small" sx={{ bgcolor: '#fff', '& td, & th': { fontSize: 13 } }}>
+                        <TableHead>
+                            <TableRow>
+                                {['Kind', 'Allowed', 'Started', 'Data'].map((t) => (
+                                    <TableCell
+                                        key={t}
+                                        sx={{ fontWeight: 500, color: 'text.secondary', fontSize: '12px !important' }}
+                                    >
+                                        {t}
+                                    </TableCell>
+                                ))}
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {ended.map((e) => (
+                                <TableRow key={e.id} data-testid="ended-approval">
+                                    <TableCell>
+                                        <KindChip kind={e.kind} />
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: MONO, fontSize: '12px !important', overflowWrap: 'anywhere' }}>
+                                        {allowedLine(e)}
+                                    </TableCell>
+                                    <TableCell sx={{ fontFamily: MONO, fontSize: '12px !important', whiteSpace: 'nowrap' }}>
+                                        {e.started_at ? formatClock(e.started_at, true) : '–'}
+                                    </TableCell>
+                                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{formatData(e.bytes)}</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                </Box>
+            )}
             {g && (
                 <Box data-testid="grant-connections">
                     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1.5, pb: 1 }}>
