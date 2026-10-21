@@ -13,6 +13,7 @@ import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import { artifactApprovalView } from '../files';
 import { approvalEffect } from '../effect';
 import type { Approval } from '../types';
+import ApprovalFooter from './ApprovalFooter';
 import EffectChip from './EffectChip';
 import NotebookRunApproval from './NotebookRunApproval';
 import CodeChangeApproval from './search/CodeChangeApproval';
@@ -27,7 +28,6 @@ import PlanCard, {
     PlanReference,
     ProposedSummary,
     SummaryDetails,
-    Technical,
 } from './PlanCard';
 import InternetApproval from './internet/InternetApproval';
 import UploadFiles from './UploadFiles';
@@ -110,20 +110,12 @@ function ArtifactItem({ approval, onDecide }: { approval: Approval; onDecide: (a
             <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75 }}>
                 Allowing stores the file with the chat's files, where you can download it.
             </Typography>
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
-                    Allow
-                </Button>
-                <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    disabled={busy}
-                    onClick={() => void decide(false)}
-                >
-                    Reject
-                </Button>
-            </Box>
+            <ApprovalFooter
+                approveLabel="Allow"
+                busy={busy}
+                onApprove={() => void decide(true)}
+                onReject={() => void decide(false)}
+            />
         </Box>
     );
 }
@@ -187,9 +179,7 @@ function ApprovalItem({
                     This cannot be undone. Check every parameter below before you approve.
                 </Typography>
             )}
-            {summary ? (
-                <Technical text={technical} open={irreversible} full={irreversible} testId="agent-approval-technical" />
-            ) : (
+            {!summary &&
                 body && (
                     <Box
                         component="pre"
@@ -212,8 +202,7 @@ function ApprovalItem({
                     >
                         {body}
                     </Box>
-                )
-            )}
+                )}
             {summaryChanged(approval) && (
                 <>
                     <ChangedAlert />
@@ -222,20 +211,16 @@ function ApprovalItem({
                     )}
                 </>
             )}
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
-                    Approve
-                </Button>
-                <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    disabled={busy}
-                    onClick={() => void decide(false)}
-                >
-                    Reject
-                </Button>
-            </Box>
+            <ApprovalFooter
+                technical={
+                    summary
+                        ? { text: technical, open: irreversible, full: irreversible, testId: 'agent-approval-technical' }
+                        : undefined
+                }
+                busy={busy}
+                onApprove={() => void decide(true)}
+                onReject={() => void decide(false)}
+            />
         </Box>
     );
 }

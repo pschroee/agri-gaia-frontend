@@ -193,6 +193,23 @@ describe('the pending approval', () => {
     });
 });
 
+describe('the footer', () => {
+    it('offers Expand as an icon button in the panel and as a text button on the page', () => {
+        render(<NotebookRunApproval approval={approval()} data={data()} layout="panel" />);
+        const icon = screen.getByRole('button', { name: 'Expand' });
+        expect(icon.textContent).toBe('');
+        cleanup();
+        render(<NotebookRunApproval approval={approval()} data={data()} layout="page" />);
+        expect(screen.getByRole('button', { name: 'Expand' }).textContent).toContain('Expand');
+    });
+
+    it('orders Technical details, Expand, Reject, Approve', () => {
+        render(<NotebookRunApproval approval={approval()} data={data()} layout="page" />);
+        const footer = screen.getByTestId('agent-approval-footer');
+        expect(within(footer).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Expand', 'Reject', 'Approve']);
+    });
+});
+
 describe('the expand dialog', () => {
     it('opens on Expand, shows the code without a limit and decides from its footer', async () => {
         const onApprove = vi.fn(async () => undefined);

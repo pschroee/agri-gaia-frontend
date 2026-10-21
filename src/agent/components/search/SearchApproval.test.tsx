@@ -72,7 +72,7 @@ describe('the proposal', () => {
         // Both buttons are disabled while a decision is sent, so the second click comes after the first settled.
         fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
         const names = screen.getAllByRole('button').map((b) => b.textContent);
-        expect(names.indexOf('Approve')).toBeLessThan(names.indexOf('Reject'));
+        expect(names.indexOf('Reject')).toBeLessThan(names.indexOf('Approve'));
         expect(onApprove).toHaveBeenCalledTimes(1);
         await waitFor(() => expect((screen.getByRole('button', { name: 'Reject' }) as HTMLButtonElement).disabled).toBe(false));
         fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
@@ -131,11 +131,11 @@ describe('the code change', () => {
         expect(screen.getByText('Approving makes version 2 the code of the following trials. Trials 1–5 keep version 1.')).toBeTruthy();
     });
 
-    it('shows the wait on the pending card and lists Approve before Reject (#182)', () => {
+    it('shows the wait on the pending card and lists Reject before Approve (#190)', () => {
         render(<CodeChangeApproval approval={approval({ kind: 'platform_write' })} data={mockCodeChange()} />);
         expect(screen.getByText(/^Waiting for you/)).toBeTruthy();
         const names = screen.getAllByRole('button').map((b) => b.textContent);
-        expect(names.indexOf('Approve')).toBeLessThan(names.indexOf('Reject'));
+        expect(names.indexOf('Reject')).toBeLessThan(names.indexOf('Approve'));
     });
 
     it('shows the whole new file when the diff is too long', () => {
