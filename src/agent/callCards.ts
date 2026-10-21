@@ -36,6 +36,8 @@ export type CallCardsCtx = {
     annotation: readonly AnnotationItem[];
     checks: readonly CheckItem[];
     plans?: readonly PlacedPlan[];
+    /** Steps (`subagent` calls) that started subagent runs; their card stands right below the call (#197). */
+    subagentCalls?: ReadonlySet<string>;
 };
 
 /**
@@ -56,7 +58,8 @@ export function callAnchors(steps: readonly Step[], ctx: CallCardsCtx): Set<stri
                     (ctx.approvals ?? []).some((a) => a.kind === 'search' && boundTo(a, s) && isProposal(a.search)))) ||
             deploymentCardsIn([s], ctx.jobs).length > 0 ||
             annotationCardsIn([s], ctx.annotation).length > 0 ||
-            checkCardsIn([s], ctx.checks).length > 0;
+            checkCardsIn([s], ctx.checks).length > 0 ||
+            !!ctx.subagentCalls?.has(s.id);
         if (hit) out.add(s.id);
     }
     return out;

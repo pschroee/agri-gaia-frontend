@@ -21,7 +21,7 @@ import { annotationCardsIn, cardsTrigger, mergeAnnotation, useAnnotation } from 
 import type { AnnotationItem } from '../annotation';
 import { checkCardsIn, mergeChecks, useChecks } from '../assess';
 import type { CheckItem } from '../assess';
-import { backgroundByCall } from '../background';
+import { backgroundByCall, backgroundById } from '../background';
 import { callAnchors, splitAfter } from '../callCards';
 import { noticeAnchor } from '../commands';
 import { deploymentCardsIn } from '../deploymentCard';
@@ -278,6 +278,7 @@ export function AgentBlock({
             </>
         );
     };
+    // the runs of the whole answer; the card of each stands below its `subagent` call (#197), the rest at the end
     const runs = useMemo(() => {
         if (!subagents) return [];
         const seen = new Set<string>();
@@ -290,6 +291,34 @@ export function AgentBlock({
                 }
         return out;
     }, [item.parts, subagents]);
+    const subagentCalls = useMemo(() => {
+        const out = new Set<string>();
+        if (subagents) for (const s of answerSteps(item.parts)) if (subagents.byCall.get(s.id)?.length) out.add(s.id);
+        return out;
+    }, [item.parts, subagents]);
+    const cardShown = new Set<string>();
+    const subagentCard = (items: SubagentNavItem[]) =>
+        subagents && items.length > 0 ? (
+            <SubagentCard
+                items={items}
+                onOpen={subagents.onOpen}
+                onStop={subagents.stop?.onStop}
+                stopStateOf={subagents.stop?.stateOf}
+                stopErrorOf={subagents.stop?.errorOf}
+                onDismissStopError={subagents.stop?.dismissError}
+            />
+        ) : null;
+    // the runs of one piece of calls, each run only once in the whole answer
+    const runsOfSeg = (seg: readonly { id: string }[]) => {
+        const out: SubagentNavItem[] = [];
+        for (const s of seg)
+            for (const r of subagents?.byCall.get(s.id) ?? [])
+                if (!cardShown.has(r.runId)) {
+                    cardShown.add(r.runId);
+                    out.push(r);
+                }
+        return out;
+    };
     return (
         <Box
             data-testid="agent-answer"
@@ -338,6 +367,7 @@ export function AgentBlock({
                         annotation: planEnv?.annotation ?? [],
                         checks: planEnv?.checks ?? [],
                         plans: placedPlans.byPart.get(i),
+                        subagentCalls,
                     }),
                 );
                 // a plan stands after the piece with its `propose_plan` call, the rest after the last piece
@@ -370,6 +400,7 @@ export function AgentBlock({
                                         base={planEnv?.cvatBase}
                                         layout={dense ? 'panel' : 'page'}
                                     />
+                                    {subagentCard(runsOfSeg(seg))}
                                     {last && files && <AgentFileMessage chatId={fileChatId} artifacts={files} />}
                                     {placedPlans.byPart.get(i)?.filter((pl) => planSeg(pl) === k).map(planCard)}
                                 </Fragment>
@@ -386,16 +417,7 @@ export function AgentBlock({
                     {abortLineText(item.abortReason)}
                 </Typography>
             )}
-            {runs.length > 0 && subagents && (
-                <SubagentCard
-                    items={runs}
-                    onOpen={subagents.onOpen}
-                    onStop={subagents.stop?.onStop}
-                    stopStateOf={subagents.stop?.stateOf}
-                    stopErrorOf={subagents.stop?.errorOf}
-                    onDismissStopError={subagents.stop?.dismissError}
-                />
-            )}
+            {subagentCard(runs.filter((r) => !cardShown.has(r.runId)))}
             {placed.rest.length > 0 && <AgentFileMessage chatId={fileChatId} artifacts={placed.rest} />}
             {/* a plan whose call is not among the parts of this answer stays under the whole answer (as before #138) */}
             {placedPlans.rest.map(planCard)}
@@ -455,14 +477,13 @@ function CommandLine({ notice }: { notice: CommandNotice }) {
                 gap: 0.75,
                 fontSize: 12,
                 color: error ? 'error.main' : 'text.secondary',
-                px: 0.5,
                 minWidth: 0,
             }}
         >
             {error ? (
-                <ErrorOutlineIcon sx={{ fontSize: 14, mt: '2px' }} />
+                <ErrorOutlineIcon sx={{ fontSize: 15, mt: '2px' }} />
             ) : (
-                <TerminalIcon sx={{ fontSize: 14, mt: '2px' }} />
+                <TerminalIcon sx={{ fontSize: 15, mt: '2px' }} />
             )}
             <Box component="span" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
                 <Box component="code" sx={{ fontFamily: 'monospace', fontSize: 11.5, color: 'text.primary', mr: 0.75 }}>
@@ -485,10 +506,9 @@ function Notice({ text, label }: { text: string; label?: string }) {
                 gap: 0.75,
                 fontSize: 12,
                 color: 'text.secondary',
-                px: 0.5,
             }}
         >
-            <InfoOutlinedIcon sx={{ fontSize: 14, mt: '2px' }} />
+            <InfoOutlinedIcon sx={{ fontSize: 15, mt: '2px' }} />
             <span>Gateway notice: {first}</span>
         </Box>
     );
@@ -618,6 +638,7 @@ export default function Conversation({
             onStop: stopTool,
             onBackground: backgroundTool,
             background: backgroundByCall(background),
+            backgroundById: backgroundById(background),
             subagents,
         }),
         [runningTools, stopTool, backgroundTool, background, subagents],
