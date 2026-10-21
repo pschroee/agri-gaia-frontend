@@ -494,7 +494,7 @@ export function SearchControls({ search, trial, variant, actions, compact, part 
                 </Alert>
             )}
             {dlg === 'hint' && (
-                <HintForm search={search} actions={actions} inline={variant === 'panel'} onClose={close} />
+                <HintForm search={search} actions={actions} inline={variant === 'panel' || !!compact} onClose={close} />
             )}
             {dlg === 'budget' && <BudgetDialog search={search} actions={actions} onClose={close} />}
             <Confirm

@@ -7,7 +7,7 @@
 // trial, the ends (target, budget, patience, stopped, adopted, failed) and the lost connection. The rules behind the
 // words are checked in searchView.test.ts; here the card only has to put them together. Written in phase A, run in B.
 
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { ExperimentsActions, ExperimentsState, Search, Trial } from '../../experiments';
@@ -94,6 +94,14 @@ describe('a running search', () => {
 });
 
 describe('where the controls sit (#182)', () => {
+    it('opens the hint as a field under the card in the panel, not as a dialog', () => {
+        const { container } = render1(mockSearch(), mockTrials(), {}, 'panel');
+        const foot = Array.from(container.querySelectorAll('[data-variant="card"]'))[1] as HTMLElement;
+        fireEvent.click(within(foot).getByRole('button', { name: 'Give a hint' }));
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.getByRole('textbox', { name: /hint/i })).toBeTruthy();
+    });
+
     it('keeps a disabled Stop trial between two trials, as in the design', () => {
         const { container } = render1(mockSearch({ running_trial: null }), mockTrials().slice(0, 3));
         const [head] = Array.from(container.querySelectorAll('[data-variant="card"]')) as HTMLElement[];
