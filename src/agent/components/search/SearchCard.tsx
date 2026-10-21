@@ -388,7 +388,15 @@ export default function SearchCard({ search, env }: { search: Search; env: Searc
                 </Typography>
                 <SearchStateChip kind={view.kind} label={view.chip} />
                 <Box sx={{ flex: 1 }} />
+                {live && env.chatId && !compact && (
+                    <SearchControls chatId={env.chatId} variant="card" part="stop" search={search} trial={open} actions={env.actions} compact={false} />
+                )}
             </Box>
+            {live && env.chatId && compact && (
+                <Box sx={{ display: 'flex', alignItems: 'center', mt: -0.5 }}>
+                    <SearchControls chatId={env.chatId} variant="card" part="stop" search={search} trial={open} actions={env.actions} compact />
+                </Box>
+            )}
             <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: -0.75 }}>
                 {`${words.label} · ${directionText(o)} · ${wayLabel(search)}`}
             </Typography>
@@ -398,7 +406,7 @@ export default function SearchCard({ search, env }: { search: Search; env: Searc
             {failedTrial && <FailedTrial search={search} trial={failedTrial} list={list} env={env} />}
             {view.ended && <Result search={search} list={list} checks={env.checks} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mx: -0.75, mb: -0.5 }}>
-                {live && env.chatId && <SearchControls chatId={env.chatId} variant="card" search={search} trial={open} actions={env.actions} compact={compact} />}
+                {live && env.chatId && <SearchControls chatId={env.chatId} variant="card" part="adjust" search={search} trial={open} actions={env.actions} compact={compact} />}
                 <Box sx={{ flex: 1 }} />
                 <OpenInExperiments chatId={env.chatId} searchId={search.id} />
             </Box>

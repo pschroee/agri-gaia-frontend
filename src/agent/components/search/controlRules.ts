@@ -6,7 +6,7 @@
 // offered, how long a hint may be and what the gateway receives. Pure, so a test can pin them down.
 
 import type { Search, Trial } from '../../experiments';
-import { isOpen } from '../../searchView';
+import { epochText, isOpen, minutesText } from '../../searchView';
 
 export const HINT_MAX = 500;
 
@@ -42,7 +42,7 @@ export function hintError(text: string): string | undefined {
     return undefined;
 }
 
-export const hintCounter = (text: string): string => `${text.length}/${HINT_MAX}`;
+export const hintCounter = (text: string): string => `${text.length} / ${HINT_MAX}`;
 
 export const ADOPT_TEXT = (idx: number): { title: string; body: string; action: string } => ({
     title: `Adopt trial ${idx} as the result?`,
@@ -57,3 +57,26 @@ export const STOP_SEARCH_TEXT = {
 
 export const BUDGET_DIALOG_TEXT =
     'A limit below what is already used ends the search. A lower compute time also stops the running trial.';
+
+const FINAL_TEST_TEXT = 'The final test runs once for the winner.';
+
+/** The second line of the "Stop the training search?" dialog: what happens to the open trial. */
+export function stopSearchDetail(trial?: Pick<Trial, 'idx' | 'state' | 'epoch' | 'epochs'>): string {
+    if (trial && (trial.state === 'running' || trial.state === 'declared'))
+        return `Trial ${trial.idx} (${epochText(trial).toLowerCase()}) is stopped and not considered. ${FINAL_TEST_TEXT}`;
+    return FINAL_TEST_TEXT;
+}
+
+/** "Training search · tf-flowers · used so far: 3 runs, 1 h 12 min" under the title of the budget dialog. */
+export function budgetUsedText(search: Pick<Search, 'used' | 'base'>): string {
+    const runs = search.used?.runs ?? 0;
+    const parts = ['Training search'];
+    const dataset = search.base?.dataset?.name;
+    if (dataset) parts.push(dataset);
+    parts.push(`used so far: ${runs} ${runs === 1 ? 'run' : 'runs'}, ${minutesText(search.used?.compute_minutes ?? 0)}`);
+    return parts.join(' · ');
+}
+
+export const HINT_INTRO = 'The agent reads it before it chooses the next trial.';
+export const HINT_SENT_AS = 'Sent as your message: “Hint for the training search: …”';
+export const HINT_SENT_AS_INLINE = 'Sent as your message in this chat';
