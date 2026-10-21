@@ -18,6 +18,7 @@ import {
     decidedWithoutJob,
     entryTitle,
     exitCodeOf,
+    failedCellOf,
     expiryMinutes,
     factText,
     formatDuration,
@@ -234,6 +235,22 @@ describe('the state of a run', () => {
         expect(exitCodeOf('exit 124')).toBe(124);
         expect(exitCodeOf('running, at most 120 minutes')).toBeUndefined();
         expect(exitCodeOf(undefined)).toBeUndefined();
+    });
+
+    it('reads a notebook run that names its cell (issue #193)', () => {
+        const fail = 'cell 2 failed (ZeroDivisionError) after 4 s';
+        const limit = 'cell 1 was running at the time limit after 1 min 0 s';
+        expect(exitCodeOf(fail)).toBe(1);
+        expect(exitCodeOf(limit)).toBe(124);
+        expect(runViewOf({ state: 'failed', message: fail })).toBe('failed');
+        expect(runViewOf({ state: 'failed', message: limit })).toBe('timeout');
+        expect(failedCellOf(fail)).toEqual({ cell: 2, what: 'ZeroDivisionError', limit: false });
+        expect(failedCellOf('cell 3 failed after 5 s')).toEqual({ cell: 3, what: undefined, limit: false });
+        expect(failedCellOf(limit)).toEqual({ cell: 1, limit: true });
+        expect(failedCellOf('exit 1 after 41 s')).toBeUndefined();
+        const facts = runFacts({ state: 'failed', message: fail, started_at: '2026-10-16T14:05:00.000Z', ended_at: '2026-10-16T14:05:04.000Z' }, undefined, Date.now());
+        expect(facts.map((f) => f.label)).toEqual(['Exit code', 'Failed cell', 'Duration', 'Started']);
+        expect(facts[1]).toEqual({ label: 'Failed cell', value: '2 (ZeroDivisionError)', tone: 'error' });
     });
 
     it('counts the seconds of a live run and of an ended one', () => {
