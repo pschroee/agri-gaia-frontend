@@ -54,9 +54,10 @@ import type { SearchApprovalData } from '../../searchApproval';
 import { compactNumber, goalSign, metricWords, directionText, minutesText, specText } from '../../searchView';
 import type { Approval } from '../../types';
 import { useNow } from '../../useNow';
+import ApprovalFooter from '../ApprovalFooter';
 import EffectChip from '../EffectChip';
 import { DecisionIcon, DialogDecision, Facts, FileView, TONE_COLOR } from '../NotebookRunApproval';
-import { AgentText, Technical } from '../PlanCard';
+import { AgentText } from '../PlanCard';
 import { MONO } from '../tokens';
 
 const overline = { fontSize: 11, letterSpacing: '0.8px', textTransform: 'uppercase', color: 'text.secondary', mb: 0.5 } as const;
@@ -317,15 +318,12 @@ export default function SearchApproval({
                     <Line icon={<InfoOutlinedIcon />}>{endsByText(config?.search_max_hours)}</Line>
                 </Box>
                 {data.note && <AgentText label={AGENT_NOTE_LABEL} text={data.note} testId="agent-search-approval-note" />}
-                <Technical text={approval.summary ?? approval.name} testId="agent-approval-technical" />
-                <Box sx={{ display: 'flex', gap: 1, mt: 1.25 }}>
-                    <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
-                        Approve
-                    </Button>
-                    <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>
-                        Reject
-                    </Button>
-                </Box>
+                <ApprovalFooter
+                    technical={{ text: approval.summary ?? approval.name, testId: 'agent-approval-technical' }}
+                    busy={busy}
+                    onApprove={() => void decide(true)}
+                    onReject={() => void decide(false)}
+                />
             </Box>
             {data.code && (
                 <Dialog open={dialog} onClose={() => setDialog(false)} fullWidth maxWidth="lg" PaperProps={{ sx: { height: 'calc(100% - 64px)' } }} aria-labelledby={`agent-search-approval-title-${approval.id}`}>

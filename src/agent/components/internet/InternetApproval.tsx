@@ -61,6 +61,7 @@ import {
     WARNING_TEXT_COLOR,
 } from '../../internetView';
 import type { Approval } from '../../types';
+import ApprovalFooter from '../ApprovalFooter';
 import { AgentText } from '../PlanCard';
 import { agentColors, MONO } from '../tokens';
 
@@ -242,14 +243,13 @@ function LegacyRequest({ approval, onDecide }: { approval: Approval; onDecide: (
                 <Typography sx={{ fontSize: 13, fontWeight: 500 }}>The agent asks for internet access</Typography>
             </Box>
             {note && <AgentText label={AGENT_NOTE_LABEL} text={note} testId="agent-internet-note" />}
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Button size="small" variant="contained" startIcon={<PublicIcon />} disabled={busy} onClick={() => void decide(true)}>
-                    Allow internet
-                </Button>
-                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>
-                    Reject
-                </Button>
-            </Box>
+            <ApprovalFooter
+                approveLabel="Allow internet"
+                approveProps={{ startIcon: <PublicIcon /> }}
+                busy={busy}
+                onApprove={() => void decide(true)}
+                onReject={() => void decide(false)}
+            />
         </Box>
     );
 }
@@ -297,22 +297,17 @@ export default function InternetApproval({
             <Allowed data={data} />
             <IconLine icon={<ScheduleIcon />}>{limitsLine(data)}</IconLine>
             {expires && <IconLine icon={<HourglassEmptyIcon />}>{expires}</IconLine>}
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.25 }}>
-                <Button
-                    size="small"
-                    variant="contained"
-                    color={full ? 'warning' : 'primary'}
-                    startIcon={<KindIconPlain kind={data.kind} />}
-                    disabled={busy}
-                    aria-label={allowAria(data)}
-                    onClick={() => void decide(true)}
-                >
-                    {allowLabel(data)}
-                </Button>
-                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>
-                    REJECT
-                </Button>
-            </Box>
+            <ApprovalFooter
+                approveLabel={allowLabel(data)}
+                approveProps={{
+                    color: full ? 'warning' : 'primary',
+                    startIcon: <KindIconPlain kind={data.kind} />,
+                    'aria-label': allowAria(data),
+                }}
+                busy={busy}
+                onApprove={() => void decide(true)}
+                onReject={() => void decide(false)}
+            />
         </Box>
     );
 }

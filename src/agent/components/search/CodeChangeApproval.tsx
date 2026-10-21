@@ -11,7 +11,6 @@ import { useState } from 'react';
 
 import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import Chip from '@mui/material/Chip';
 import { alpha } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -23,9 +22,9 @@ import { codeChangeFoot, codeChangeSummary, diffCounts, diffRows, waitingText } 
 import type { SearchCodeChange, SearchFileChange } from '../../searchApproval';
 import { shortSha } from '../../notebook';
 import type { Approval } from '../../types';
+import ApprovalFooter from '../ApprovalFooter';
 import EffectChip from '../EffectChip';
 import { DecisionIcon, TONE_COLOR } from '../NotebookRunApproval';
-import { Technical } from '../PlanCard';
 import { MONO } from '../tokens';
 import { useNow } from '../../useNow';
 
@@ -144,11 +143,12 @@ export default function CodeChangeApproval({
                 <FileDiff key={f.name} file={f} />
             ))}
             <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 1 }}>{codeChangeFoot(data)}</Typography>
-            <Technical text={approval.summary ?? approval.name} testId="agent-approval-technical" />
-            <Box sx={{ display: 'flex', gap: 1, mt: 1.25 }}>
-                <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>Approve</Button>
-                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>Reject</Button>
-            </Box>
+            <ApprovalFooter
+                technical={{ text: approval.summary ?? approval.name, testId: 'agent-approval-technical' }}
+                busy={busy}
+                onApprove={() => void decide(true)}
+                onReject={() => void decide(false)}
+            />
         </Box>
     );
 }

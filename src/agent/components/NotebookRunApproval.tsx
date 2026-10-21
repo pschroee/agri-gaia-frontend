@@ -62,7 +62,8 @@ import {
 import type { NotebookApprovalData, NotebookCell, NotebookFile } from '../notebook';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
-import { AgentText, Technical } from './PlanCard';
+import ApprovalFooter from './ApprovalFooter';
+import { AgentText } from './PlanCard';
 import { agentColors, MONO } from './tokens';
 
 /** The size the card is drawn in: the panel, the chat column of /ai-agent, or the full-height dialog. */
@@ -284,12 +285,16 @@ function Note({ data }: { data: NotebookApprovalData }) {
     return data.note ? <AgentText label={AGENT_NOTE_LABEL} text={data.note} testId="agent-notebook-approval-note" /> : null;
 }
 
-/** Approve and Reject; both are locked while one of them runs. */
-function Actions({
+/** Technical details, Expand, Reject and Approve in the shared footer; both decisions are locked while one runs. */
+function Footer({
+    technical,
+    layout,
     onApprove,
     onReject,
     onExpand,
 }: {
+    technical: string;
+    layout: 'panel' | 'page';
     onApprove?: () => Promise<void>;
     onReject?: () => Promise<void>;
     onExpand?: () => void;
@@ -303,27 +308,33 @@ function Actions({
             setBusy(false);
         }
     };
+    // The 400 px panel has no room for a text button next to Reject and Approve; it gets the icon (issue #190).
+    const expand = !onExpand ? undefined : layout === 'panel' ? (
+        <Tooltip title="Expand">
+            <IconButton size="small" onClick={onExpand} aria-label="Expand" aria-haspopup="dialog" sx={{ flex: 'none' }}>
+                <OpenInFullIcon fontSize="small" />
+            </IconButton>
+        </Tooltip>
+    ) : (
+        <Button
+            size="small"
+            variant="text"
+            startIcon={<OpenInFullIcon fontSize="small" />}
+            onClick={onExpand}
+            aria-haspopup="dialog"
+            sx={{ flex: 'none' }}
+        >
+            Expand
+        </Button>
+    );
     return (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.25 }}>
-            <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>
-                Approve
-            </Button>
-            <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>
-                Reject
-            </Button>
-            {onExpand && (
-                <Button
-                    size="small"
-                    variant="text"
-                    startIcon={<OpenInFullIcon fontSize="small" />}
-                    onClick={onExpand}
-                    aria-haspopup="dialog"
-                    sx={{ ml: 'auto', flex: 'none' }}
-                >
-                    Expand
-                </Button>
-            )}
-        </Box>
+        <ApprovalFooter
+            technical={{ text: technical, testId: 'agent-approval-technical' }}
+            start={expand}
+            busy={busy}
+            onApprove={() => void decide(true)}
+            onReject={() => void decide(false)}
+        />
     );
 }
 
@@ -452,11 +463,13 @@ export default function NotebookRunApproval({
                 <Note data={data} />
                 <Facts data={data} size={layout} />
                 <FileView data={data} size={layout} tab={tab} onTab={setTab} />
-                <Technical
-                    text={[approval.name, approval.preview ?? ''].filter(Boolean).join('\n\n')}
-                    testId="agent-approval-technical"
+                <Footer
+                    technical={[approval.name, approval.preview ?? ''].filter(Boolean).join('\n\n')}
+                    layout={layout}
+                    onApprove={onApprove}
+                    onReject={onReject}
+                    onExpand={() => setDialog(true)}
                 />
-                <Actions onApprove={onApprove} onReject={onReject} onExpand={() => setDialog(true)} />
             </Box>
             <Dialog
                 open={dialog}
