@@ -294,8 +294,23 @@ export function runViewOf(job: { state?: string; message?: string }): NotebookRu
 
 /** The exit code of a run out of the job's line ("exit 0 after 12 min 8 s"); undefined while it has none. */
 export function exitCodeOf(message: string | undefined): number | undefined {
-    const m = /^exit\s+(\d+)\b/.exec((message ?? '').trim());
-    return m ? Number(m[1]) : undefined;
+    const t = (message ?? '').trim();
+    const m = /^exit\s+(\d+)\b/.exec(t);
+    if (m) return Number(m[1]);
+    // A notebook entry runs cell by cell (issue #193): its line names the cell instead of the code. The starter ends
+    // with 124 at the time limit and with 1 when a cell fails.
+    if (/^cell\s+\d+\s+was running at the time limit\b/.test(t)) return 124;
+    if (/^cell\s+\d+\s+failed\b/.test(t)) return 1;
+    return undefined;
+}
+
+/** The cell a notebook run names in its line ("cell 2 failed (ZeroDivisionError) after 4 s"); undefined for other runs. */
+export function failedCellOf(message: string | undefined): { cell: number; what?: string; limit: boolean } | undefined {
+    const t = (message ?? '').trim();
+    const lim = /^cell\s+(\d+)\s+was running at the time limit\b/.exec(t);
+    if (lim) return { cell: Number(lim[1]), limit: true };
+    const m = /^cell\s+(\d+)\s+failed(?:\s+\((.+?)\))?(?:\s+after\b.*)?$/.exec(t);
+    return m ? { cell: Number(m[1]), what: m[2], limit: false } : undefined;
 }
 
 /**
@@ -363,6 +378,13 @@ export function runFacts(
     const code = exitCodeOf(job.message);
     if (code !== undefined)
         out.push({ label: 'Exit code', value: String(code), tone: code === 124 ? 'warning' : code === 0 ? undefined : 'error' });
+    const cell = failedCellOf(job.message);
+    if (cell)
+        out.push({
+            label: cell.limit ? 'Cell at the limit' : 'Failed cell',
+            value: cell.what ? `${cell.cell} (${cell.what})` : String(cell.cell),
+            tone: cell.limit ? 'warning' : 'error',
+        });
     if (duration) out.push({ label: 'Duration', value: duration });
     if (started) out.push({ label: 'Started', value: started });
     // who stopped it stands in the job (gateway issue #92); without the field nothing is claimed (gap L14)
