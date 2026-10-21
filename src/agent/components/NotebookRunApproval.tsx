@@ -400,7 +400,7 @@ export default function NotebookRunApproval({
                 sx={{
                     border: 1,
                     borderColor: 'divider',
-                    borderLeft: `3px solid ${TONE_COLOR[decision.tone]}`,
+                    borderLeft: 3, borderLeftColor: TONE_COLOR[decision.tone],
                     borderRadius: 1,
                     minWidth: 0,
                 }}

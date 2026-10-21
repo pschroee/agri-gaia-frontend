@@ -67,4 +67,13 @@ describe('PlatformDecidedRow', () => {
         expect(platformDecidedOf(steps, [approval({ notebook: {} as never })])).toHaveLength(0);
         expect(platformDecidedOf(steps, [approval({ tool_call_id: 'zz' })])).toHaveLength(0);
     });
+
+    it('keeps the 3 px rule on rejected and expired rows (a theme path in the border shorthand is dropped)', () => {
+        for (const state of ['approved', 'rejected', 'expired'] as const) {
+            cleanup();
+            show(approval({ state }));
+            const style = getComputedStyle(screen.getByTestId('agent-platform-decided'));
+            expect(style.borderLeftWidth, state).toBe('3px');
+        }
+    });
 });
