@@ -140,6 +140,14 @@ describe('dialog lines (#182)', () => {
         );
     });
 
+    it('falls back to the dataset id when the name is missing, and skips the part without a dataset', () => {
+        const used = { runs: 2, compute_minutes: 5, since_improvement: 0 };
+        expect(budgetUsedText({ used, base: { container_id: 1, dataset: { id: 59 } } } as Search)).toBe(
+            'Training search · dataset #59 · used so far: 2 runs, 5 min',
+        );
+        expect(budgetUsedText({ used } as Search)).toBe('Training search · used so far: 2 runs, 5 min');
+    });
+
     it('counts the hint with spaces around the slash', () => {
         expect(hintCounter('a'.repeat(25))).toBe(`25 / ${HINT_MAX}`);
     });
