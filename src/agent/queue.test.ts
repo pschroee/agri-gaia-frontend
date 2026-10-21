@@ -487,7 +487,7 @@ describe('queued messages with a page context', () => {
                     entry('q2', 'y', { context: { page: 'datasets', object: { kind: 'dataset', id: 42 } } as never }),
                 ],
             },
-            running,
+            idleHeld, // a background note is only listed while the queue is held (#197)
         );
         expect(rows.map((r) => r.context)).toEqual([undefined, undefined]);
     });
@@ -529,7 +529,7 @@ describe('notes to the main agent about messages to a subagent (issue #82)', () 
                 ...emptyQueue,
                 entries: [entry('b1', 'Background task b1 ended', { kind: 'system', note: 'background', refs: ['b1'] })],
             },
-            undefined,
+            idleHeld,
         );
         expect(rows[0].subagent).toBeUndefined();
         expect(rows[0].system).toBe(true);
