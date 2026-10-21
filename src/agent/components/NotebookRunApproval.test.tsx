@@ -327,7 +327,7 @@ describe('the decided line sits flush with the tool groups (issue #192)', () => 
         render(<NotebookRunApproval approval={approval({ state: 'approved' })} data={data()} layout="panel" />);
         const box = screen.getByTestId('agent-notebook-approval');
         const style = getComputedStyle(box);
-        expect(['', '0px']).toContain(style.marginLeft);
-        expect(['', '0px']).toContain(style.marginRight);
+        expect(['', '0', '0px']).toContain(style.marginLeft);
+        expect(['', '0', '0px']).toContain(style.marginRight);
     });
 });
