@@ -71,8 +71,8 @@ export function stopSearchDetail(trial?: Pick<Trial, 'idx' | 'state' | 'epoch' |
 export function budgetUsedText(search: Pick<Search, 'used' | 'base'>): string {
     const runs = search.used?.runs ?? 0;
     const parts = ['Training search'];
-    const dataset = search.base?.dataset?.name;
-    if (dataset) parts.push(dataset);
+    const ds = search.base?.dataset;
+    if (ds) parts.push(ds.name || `dataset #${ds.id}`);
     parts.push(`used so far: ${runs} ${runs === 1 ? 'run' : 'runs'}, ${minutesText(search.used?.compute_minutes ?? 0)}`);
     return parts.join(' · ');
 }
