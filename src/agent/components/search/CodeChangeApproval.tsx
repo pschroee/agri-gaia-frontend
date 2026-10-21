@@ -102,7 +102,7 @@ export default function CodeChangeApproval({
         const d = approvalDecision(approval, expiryMin);
         const tail = approval.state === 'approved' ? ` · version ${data.code_version_to} for trial ${data.trial} and later` : d.suffix;
         return (
-            <Box role="group" data-testid="agent-search-code-change" data-approval-id={approval.id} data-state={approval.state} sx={{ px: 1.5, py: 0.75, display: 'flex', alignItems: 'baseline', gap: 1, border: 1, borderColor: 'divider', borderLeft: `3px solid ${TONE_COLOR[d.tone]}`, borderRadius: 1, minWidth: 0 }}>
+            <Box role="group" data-testid="agent-search-code-change" data-approval-id={approval.id} data-state={approval.state} sx={{ px: 1.5, py: 0.75, display: 'flex', alignItems: 'baseline', gap: 1, border: 1, borderColor: 'divider', borderLeft: 3, borderLeftColor: TONE_COLOR[d.tone], borderRadius: 1, minWidth: 0 }}>
                 <DecisionIcon tone={d.tone} />
                 <Typography sx={{ fontSize: 12.5, color: TONE_COLOR[d.tone], flex: 'none' }}>{d.label}</Typography>
                 <Typography sx={{ fontSize: 12.5, minWidth: 0, overflowWrap: 'anywhere' }}>{`${title}${tail}`}</Typography>

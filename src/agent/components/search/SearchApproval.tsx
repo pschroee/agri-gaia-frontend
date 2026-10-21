@@ -275,7 +275,7 @@ export default function SearchApproval({
                 data-approval-id={approval.id}
                 data-state={approval.state}
                 aria-label={`${decision.label}: ${title} ${data.title}`}
-                sx={{ border: 1, borderColor: 'divider', borderLeft: `3px solid ${TONE_COLOR[decision.tone]}`, borderRadius: 1, minWidth: 0 }}
+                sx={{ border: 1, borderColor: 'divider', borderLeft: 3, borderLeftColor: TONE_COLOR[decision.tone], borderRadius: 1, minWidth: 0 }}
             >
                 <ListItemButton dense onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`${decision.label}: ${title} ${data.title}. ${open ? 'Hide details' : 'Show details'}`} sx={{ px: 1.5, gap: 1, alignItems: 'baseline', minWidth: 0 }}>
                     <DecisionIcon tone={decision.tone} />
