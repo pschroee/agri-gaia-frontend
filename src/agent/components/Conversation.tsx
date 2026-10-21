@@ -153,6 +153,8 @@ export type PlanEnv = {
     cvatBase?: string;
     /** The training searches of the chat (issue #168): the cards stand at the tool call that proposed them. */
     search?: SearchEnv;
+    /** The chat's agent is working: the next step of an approved plan shows 'Starting…' (issue #176). */
+    working?: boolean;
 };
 
 /**
@@ -226,6 +228,7 @@ export function AgentBlock({
             layout={planEnv?.layout}
             onNotify={planEnv ? (on) => planEnv.onNotify?.(p.id, on) : undefined}
             notifyOptIn={planEnv?.notifyOptIn}
+            working={planEnv?.working}
             onDecide={onDecide}
             dense={dense}
         />
@@ -538,6 +541,7 @@ export default function Conversation({
                     annotation: annotationItems,
                     checks: checkItems,
                     cvatBase: annotation.cvat_url,
+                    working: !!chat?.running,
                     search: experiments
                         ? {
                               chatId: stream.chat?.id,
@@ -562,6 +566,7 @@ export default function Conversation({
             experiments,
             checks,
             stream.chat?.id,
+            chat?.running,
             setPlanNotify,
             planNotifyOptIn,
         ],
@@ -619,6 +624,7 @@ export default function Conversation({
                 layout={dense ? 'panel' : 'page'}
                 onNotify={setPlanNotify ? (on) => setPlanNotify(p.id, on) : undefined}
                 notifyOptIn={planNotifyOptIn}
+                working={!!chat?.running}
                 onDecide={stream.decide}
                 dense={dense}
             />

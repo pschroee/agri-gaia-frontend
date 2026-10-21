@@ -496,6 +496,7 @@ export type StepPhase =
     | 'done'
     | 'approval'
     | 'open'
+    | 'starting'
     | 'queued'
     | 'running'
     | 'paused'
@@ -507,6 +508,7 @@ export const PHASE_LABEL: Record<StepPhase, string> = {
     done: 'Done',
     approval: 'Needs approval',
     open: 'Open',
+    starting: 'Starting…',
     queued: 'Queued',
     running: 'Running',
     paused: 'Paused',
@@ -515,7 +517,16 @@ export const PHASE_LABEL: Record<StepPhase, string> = {
     stopped: 'Stopped',
 };
 
-export function stepPhase(plan: Plan, step: PlanStep): StepPhase {
+/** No step runs or waits and this one is the first that is not finished: it is the one that starts next. */
+function isNextToStart(plan: Plan, step: PlanStep): boolean {
+    if (plan.steps.some((s) => s.state === 'running' || s.state === 'waiting')) return false;
+    const first = [...plan.steps]
+        .sort((a, b) => a.idx - b.idx)
+        .find((s) => s.state !== 'done' && s.state !== 'skipped');
+    return first?.idx === step.idx;
+}
+
+export function stepPhase(plan: Plan, step: PlanStep, working = false): StepPhase {
     if (step.state === 'done') return 'done';
     if (step.state === 'failed') return 'failed';
     if (step.state === 'skipped') return 'stopped';
@@ -525,6 +536,9 @@ export function stepPhase(plan: Plan, step: PlanStep): StepPhase {
     if (step.state === 'running' || step.state === 'waiting') return plan.state === 'paused' ? 'paused' : 'running';
     if (plan.state === 'failed') return 'notrun';
     if (!step.covered) return 'approval';
+    // The agent is working and this step is next: the gateway marks it running once the call arrives, about one
+    // model turn later (issue #176).
+    if (working && (plan.state === 'approved' || plan.approving) && isNextToStart(plan, step)) return 'starting';
     return plan.state === 'paused' ? 'queued' : 'open';
 }
 

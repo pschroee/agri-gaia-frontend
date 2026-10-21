@@ -421,3 +421,15 @@ describe('an upload step of many files (gateway issue #172)', () => {
         expect(screen.queryByTestId('agent-upload-files')).toBeNull();
     });
 });
+
+describe('PlanCard step starting (#176)', () => {
+    it('shows the first step of an approved plan as Starting while the agent works', () => {
+        const p = plan({ steps: [step({ idx: 1 }), step({ idx: 2, path: '/datasets/1', method: 'PATCH' })] });
+        render(<PlanCard plan={p} layout="panel" onControl={vi.fn()} working />);
+        const rows = screen.getAllByTestId('agent-plan-step');
+        expect(rows[0].getAttribute('data-status')).toBe('starting');
+        expect(within(rows[0]).getByText('Starting…')).toBeTruthy();
+        expect(within(rows[0]).queryByText('Open')).toBeNull();
+        expect(rows[1].getAttribute('data-status')).toBe('open');
+    });
+});

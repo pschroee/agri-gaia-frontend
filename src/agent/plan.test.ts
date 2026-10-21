@@ -438,6 +438,21 @@ describe('stepPhase', () => {
         expect(stepPhase(auto({ state: 'cancelled' }), step({ state: 'skipped' }))).toBe('stopped');
         expect(stepPhase(auto({ state: 'cancelled' }), step({ state: 'open' }))).toBe('notrun');
     });
+
+    it('shows the next step as starting while the agent works on an approved plan (#176)', () => {
+        const two = (first: PlanStep['state']) =>
+            auto({ steps: [step({ idx: 1, state: first }), step({ idx: 2, state: 'open' })] });
+        expect(stepPhase(two('open'), step({ idx: 1 }), true)).toBe('starting');
+        expect(stepPhase(two('open'), step({ idx: 1 }), false)).toBe('open');
+        expect(stepPhase(two('open'), step({ idx: 2 }), true)).toBe('open');
+        expect(stepPhase(two('running'), step({ idx: 2 }), true)).toBe('open');
+        expect(stepPhase(two('done'), step({ idx: 2 }), true)).toBe('starting');
+        const one = [step({ idx: 1, state: 'open' })];
+        expect(stepPhase(auto({ state: 'proposed', approving: true, steps: one }), step(), true)).toBe('starting');
+        expect(stepPhase(auto({ state: 'proposed', steps: one }), step(), true)).toBe('open');
+        expect(stepPhase(auto(), step({ covered: false }), true)).toBe('approval');
+        expect(stepPhase(auto({ state: 'paused' }), step(), true)).toBe('queued');
+    });
 });
 
 describe('the time texts', () => {
