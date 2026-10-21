@@ -400,6 +400,9 @@ describe('refusals', () => {
         expect(showsUnderCall(conn({ origin: 'exec', reason: 'not_listed' }))).toBe(false);
         expect(showsUnderCall(conn({ origin: 'pi', tool_call_id: 't1', reason: 'not_listed' }))).toBe(false);
         expect(showsUnderCall(conn({ origin: 'exec', tool_call_id: 't1' }))).toBe(false);
+        // pip and npm go through the package gate; a refusal there belongs under the bash call as well
+        expect(showsUnderCall(conn({ origin: 'pkg', tool_call_id: 't1', reason: 'too_large' }))).toBe(true);
+        expect(showsUnderCall(conn({ origin: 'pkg', reason: 'too_large' }))).toBe(false);
     });
 });
 
