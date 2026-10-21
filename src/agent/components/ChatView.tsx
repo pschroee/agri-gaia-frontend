@@ -34,6 +34,7 @@ import { useNow } from '../useNow';
 
 import { useChatDraft, useSharedChatStream } from '../sharedChatStream';
 import { todoTimeline } from '../tasks';
+import { InternetProvider } from '../InternetContext';
 import { PlanCardRegistryProvider } from '../planRegistry';
 import { usePlans } from '../usePlans';
 import { useExperiments } from '../experiments';
@@ -76,7 +77,10 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
     const experiments = useExperiments(chatId, !readOnly);
     const { messages, approvals, socketCalls, executions, chat, live, thinkingTimes, partials, send } = stream;
     const pending = approvals.filter((a) => a.state === 'pending');
-    const runState = runStateOf(chat, { pendingApprovals: pending.length, resumeRunning: resumeRunning(stream.resumes) });
+    const runState = runStateOf(chat, {
+        pendingApprovals: pending.length,
+        resumeRunning: resumeRunning(stream.resumes),
+    });
     // the open chat's live state goes to the chat list and the panel header
     // a read-only view leaves the chat lists, the header and the subagent selection alone
     const agent = useAgentOptional();
@@ -190,11 +194,11 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
     const count = subRun
         ? subRun.entries.length
         : countEntries(items) +
-        pending.length +
-        liveCount +
-        stream.resumes.length +
-        stream.commandNotices.length +
-        (stream.pending ? 1 : 0);
+          pending.length +
+          liveCount +
+          stream.resumes.length +
+          stream.commandNotices.length +
+          (stream.pending ? 1 : 0);
     const { scrollRef, contentRef, stuck, unseen, jumpToLatest } = useStickToBottom(count);
     // opening a subagent or going back starts at the end, like opening a chat
     useEffect(() => {
@@ -252,178 +256,186 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
 
     return (
         // one place of decision per plan: the approval list sees which plan cards this view shows (issue #72)
-        <PlanCardRegistryProvider>
-            <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
-                <Box
-                    sx={{
-                        flex: 'none',
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr)',
-                        gap: 1.25,
-                        px: dense ? 2 : 0,
-                        pt: dense ? 2 : 0,
-                        pr: dense ? 2 : 1,
-                        pb: dense ? 0.5 : 1.25,
-                    }}
-                >
-                    {header}
-                    <TaskStrip
-                        chatId={chatId}
-                        chatRunning={!!chat?.running}
-                        background={stream.background}
-                        onStopBackground={stream.stopBackground}
-                        subagentEntries={stream.subagentEntries}
-                        subagentRuns={stream.subagentRuns}
-                        llmCalls={stream.llmCalls}
-                        onOpenSubagent={selectSubagent}
-                        subagentsElsewhere={dense}
-                    />
-                </Box>
-                <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
-                    <Box
-                        ref={scrollRef}
-                        data-testid="agent-transcript"
-                        sx={{
-                            flex: 1,
-                            minHeight: 0,
-                            overflowY: 'auto',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            px: dense ? 2 : 0,
-                            pr: dense ? 2 : 1,
-                            pt: 1.5,
-                            pb: 1,
-                        }}
-                    >
-                        <Box
-                            ref={contentRef}
-                            // grows to the box's height, so the empty chat sits in the middle (design)
-                            sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, flex: '1 0 auto', minWidth: 0 }}
-                        >
-                            {stream.error && (
-                                <Alert severity="warning" sx={{ fontSize: 12.5 }}>
-                                    {stream.error}
-                                </Alert>
-                            )}
-                            {subRun && subStatus ? (
-                                <SubagentTranscript
-                                    run={subRun}
-                                    status={subStatus}
-                                    dense={dense}
-                                    chatId={chatId}
-                                    executions={stream.executions}
-                                    artifacts={stream.artifacts}
-                                    plans={plans}
-                                    approvals={stream.approvals}
-                                    onDecide={stream.decide}
-                                    messages={subMessages}
-                                    onResend={onResend}
-                                    onStop={stream.stopSubagent}
-                                    stopStateOf={stream.subagentStopState}
-                                    stopErrorOf={stream.subagentStopError}
-                                    onDismissStopError={stream.clearSubagentStopError}
-                                />
-                            ) : (
-                                <Conversation
-                                    stream={stream}
-                                    items={items}
-                                    dense={dense}
-                                    subagents={subagentLinks}
-                                    plans={plans}
-                                    experiments={experiments}
-                                />
-                            )}
-                            <ApprovalCard
-                                approvals={pending}
-                                onDecide={stream.decide}
-                                plans={plans}
-                                layout={dense ? 'panel' : 'page'}
-                            />
-                        </Box>
-                    </Box>
-                    {!stuck && (
-                        <Button
-                            size="small"
-                            variant="contained"
-                            startIcon={<ArrowDownwardIcon fontSize="small" />}
-                            onClick={jumpToLatest}
-                            sx={{
-                                position: 'absolute',
-                                bottom: 12,
-                                left: '50%',
-                                transform: 'translateX(-50%)',
-                                borderRadius: 999,
-                                textTransform: 'none',
-                                fontSize: 12.5,
-                                boxShadow: 3,
-                                whiteSpace: 'nowrap',
-                            }}
-                        >
-                            {unseen > 0 ? `Jump to latest · ${unseen} new` : 'Jump to latest'}
-                        </Button>
-                    )}
-                </Box>
-                {!readOnly && (
+        <InternetProvider chatId={chatId} initialBlocked={chat?.internet_blocked} enabled={!readOnly}>
+            <PlanCardRegistryProvider>
+                <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
                     <Box
                         sx={{
                             flex: 'none',
-                            bgcolor: '#fff',
-                            ...(subRun && subStatus
-                                ? { borderTop: 1, borderColor: 'divider', px: dense ? 2 : 0, py: 1.5 }
-                                : { px: dense ? 1.5 : 0, pt: 1, pb: dense ? 1.5 : 0 }),
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(0, 1fr)',
+                            gap: 1.25,
+                            px: dense ? 2 : 0,
+                            pt: dense ? 2 : 0,
+                            pr: dense ? 2 : 1,
+                            pb: dense ? 0.5 : 1.25,
                         }}
                     >
-                        {/* the subagent's field (issue #81) replaces the chat's; the chat's input stays mounted (hidden), so a
-                            draft and staged files are still there after the way back (top left) */}
-                        {subRun && inputState && (
-                            <SubagentInput
-                                key={subRun.runId}
-                                state={inputState}
-                                limit={agent?.config?.max_subagents}
-                                onSend={sendToSubagent}
-                                prefill={resend}
-                            />
-                        )}
-                        <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
-                            <QueueList
-                                chat={stream.chat}
-                                rows={stream.queue}
-                                error={stream.queueError}
-                                onRemove={stream.unqueue}
-                                onSendNow={stream.sendQueueNow}
-                            />
-                            <ChatInput
-                                onSend={onSend}
-                                onUpload={stream.uploadFiles}
-                                maxFileMb={agent?.config?.artifact_max_mb}
-                                chatId={chatId}
-                                running={stream.chat?.running}
-                                runState={runState}
-                                onAbort={stream.abort}
-                                placeholder={placeholder}
-                                commands={commands}
-                                onCommand={onCommand}
-                                onCommandsOpen={stream.refreshCommands}
-                                pageContext={pageContext}
-                                start={start}
-                                onStartTaken={onStartTaken}
-                                initialText={draft.initial}
-                                onTextChange={draft.save}
-                                                        toolbar={
-                                    <ModelEffortPicker
-                                        chat={stream.chat}
-                                        models={agent?.models ?? []}
-                                        dense={dense}
-                                        onModel={stream.setModel}
-                                        onEffort={stream.setEffort}
-                                        tooLargeRequest={stream.commandTooLarge}
-                                    />
-                                }
-                            />
-                        </Box>
+                        {header}
+                        <TaskStrip
+                            chatId={chatId}
+                            chatRunning={!!chat?.running}
+                            background={stream.background}
+                            onStopBackground={stream.stopBackground}
+                            subagentEntries={stream.subagentEntries}
+                            subagentRuns={stream.subagentRuns}
+                            llmCalls={stream.llmCalls}
+                            onOpenSubagent={selectSubagent}
+                            subagentsElsewhere={dense}
+                        />
                     </Box>
-                )}
-            </Box>
-        </PlanCardRegistryProvider>
+                    <Box sx={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+                        <Box
+                            ref={scrollRef}
+                            data-testid="agent-transcript"
+                            sx={{
+                                flex: 1,
+                                minHeight: 0,
+                                overflowY: 'auto',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                px: dense ? 2 : 0,
+                                pr: dense ? 2 : 1,
+                                pt: 1.5,
+                                pb: 1,
+                            }}
+                        >
+                            <Box
+                                ref={contentRef}
+                                // grows to the box's height, so the empty chat sits in the middle (design)
+                                sx={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: 2.5,
+                                    flex: '1 0 auto',
+                                    minWidth: 0,
+                                }}
+                            >
+                                {stream.error && (
+                                    <Alert severity="warning" sx={{ fontSize: 12.5 }}>
+                                        {stream.error}
+                                    </Alert>
+                                )}
+                                {subRun && subStatus ? (
+                                    <SubagentTranscript
+                                        run={subRun}
+                                        status={subStatus}
+                                        dense={dense}
+                                        chatId={chatId}
+                                        executions={stream.executions}
+                                        artifacts={stream.artifacts}
+                                        plans={plans}
+                                        approvals={stream.approvals}
+                                        onDecide={stream.decide}
+                                        messages={subMessages}
+                                        onResend={onResend}
+                                        onStop={stream.stopSubagent}
+                                        stopStateOf={stream.subagentStopState}
+                                        stopErrorOf={stream.subagentStopError}
+                                        onDismissStopError={stream.clearSubagentStopError}
+                                    />
+                                ) : (
+                                    <Conversation
+                                        stream={stream}
+                                        items={items}
+                                        dense={dense}
+                                        subagents={subagentLinks}
+                                        plans={plans}
+                                        experiments={experiments}
+                                    />
+                                )}
+                                <ApprovalCard
+                                    approvals={pending}
+                                    onDecide={stream.decide}
+                                    plans={plans}
+                                    layout={dense ? 'panel' : 'page'}
+                                />
+                            </Box>
+                        </Box>
+                        {!stuck && (
+                            <Button
+                                size="small"
+                                variant="contained"
+                                startIcon={<ArrowDownwardIcon fontSize="small" />}
+                                onClick={jumpToLatest}
+                                sx={{
+                                    position: 'absolute',
+                                    bottom: 12,
+                                    left: '50%',
+                                    transform: 'translateX(-50%)',
+                                    borderRadius: 999,
+                                    textTransform: 'none',
+                                    fontSize: 12.5,
+                                    boxShadow: 3,
+                                    whiteSpace: 'nowrap',
+                                }}
+                            >
+                                {unseen > 0 ? `Jump to latest · ${unseen} new` : 'Jump to latest'}
+                            </Button>
+                        )}
+                    </Box>
+                    {!readOnly && (
+                        <Box
+                            sx={{
+                                flex: 'none',
+                                bgcolor: '#fff',
+                                ...(subRun && subStatus
+                                    ? { borderTop: 1, borderColor: 'divider', px: dense ? 2 : 0, py: 1.5 }
+                                    : { px: dense ? 1.5 : 0, pt: 1, pb: dense ? 1.5 : 0 }),
+                            }}
+                        >
+                            {/* the subagent's field (issue #81) replaces the chat's; the chat's input stays mounted (hidden), so a
+                            draft and staged files are still there after the way back (top left) */}
+                            {subRun && inputState && (
+                                <SubagentInput
+                                    key={subRun.runId}
+                                    state={inputState}
+                                    limit={agent?.config?.max_subagents}
+                                    onSend={sendToSubagent}
+                                    prefill={resend}
+                                />
+                            )}
+                            <Box sx={{ display: subRun && subStatus ? 'none' : 'block' }}>
+                                <QueueList
+                                    chat={stream.chat}
+                                    rows={stream.queue}
+                                    error={stream.queueError}
+                                    onRemove={stream.unqueue}
+                                    onSendNow={stream.sendQueueNow}
+                                />
+                                <ChatInput
+                                    onSend={onSend}
+                                    onUpload={stream.uploadFiles}
+                                    maxFileMb={agent?.config?.artifact_max_mb}
+                                    chatId={chatId}
+                                    running={stream.chat?.running}
+                                    runState={runState}
+                                    onAbort={stream.abort}
+                                    placeholder={placeholder}
+                                    commands={commands}
+                                    onCommand={onCommand}
+                                    onCommandsOpen={stream.refreshCommands}
+                                    pageContext={pageContext}
+                                    start={start}
+                                    onStartTaken={onStartTaken}
+                                    initialText={draft.initial}
+                                    onTextChange={draft.save}
+                                    toolbar={
+                                        <ModelEffortPicker
+                                            chat={stream.chat}
+                                            models={agent?.models ?? []}
+                                            dense={dense}
+                                            onModel={stream.setModel}
+                                            onEffort={stream.setEffort}
+                                            tooLargeRequest={stream.commandTooLarge}
+                                        />
+                                    }
+                                />
+                            </Box>
+                        </Box>
+                    )}
+                </Box>
+            </PlanCardRegistryProvider>
+        </InternetProvider>
     );
 }
