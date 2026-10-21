@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import type { ActivityGrant, InternetApproval, InternetBlocked, InternetGrant } from './internet';
 import type { PageContext } from './pageContext';
 import type { NotebookApprovalData } from './notebook';
 import type { SearchApproval } from './searchApproval';
@@ -94,6 +95,10 @@ export type Chat = {
     running: boolean;
     running_since?: string;
     internet: boolean;
+    /** The active internet grants with their counters (gateway issue #175); missing on an older gateway. */
+    internet_grants?: InternetGrant[];
+    /** Refusals of the chat since the oldest active grant (15 min back without one); missing when there are none. */
+    internet_blocked?: InternetBlocked;
     /** pi's thinking level (effort); missing until the gateway has read it. */
     thinking_level?: string;
     /** Thinking levels pi reports for the chat's model; missing or empty while unknown. */
@@ -277,6 +282,8 @@ export type Approval = {
     preview?: string;
     session?: string;
     tool_call_id?: string;
+    /** internet_access (gateway issue #175): what the user approves, built by the gateway; `preview` has it as text. */
+    internet?: InternetApproval;
     /** platform_write: class of the call (gateway issue #63; missing on older entries). */
     effect?: 'read' | 'write' | 'compute' | 'irreversible';
     /**
@@ -359,6 +366,8 @@ export type ActivityCall = SocketCall & {
     outcome?: ActivityOutcome;
     /** Internet entries only. */
     internet?: ActivityInternet;
+    /** Internet entries: the grant the entry belongs to (absent for a refused request). */
+    grant?: ActivityGrant;
     approval?: { id: string; state: Approval['state']; created_at: string; decided_at?: string };
 };
 
