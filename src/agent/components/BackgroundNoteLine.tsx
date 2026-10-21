@@ -23,7 +23,7 @@ export default function BackgroundNoteLine({ note, text }: { note: BackgroundNot
     const [open, setOpen] = useState(false);
     const hasDetails = note.command !== undefined || note.lines.length > 0 || !!note.error || note.noOutput;
     return (
-        <Box data-testid="agent-background-note" role="note" sx={{ fontSize: 12, color: 'text.secondary', px: 0.5 }}>
+        <Box data-testid="agent-background-note" role="note" sx={{ fontSize: 12, color: 'text.secondary' }}>
             <ButtonBase
                 onClick={() => setOpen(!open)}
                 disabled={!hasDetails}
@@ -32,7 +32,7 @@ export default function BackgroundNoteLine({ note, text }: { note: BackgroundNot
                 sx={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 0.75,
+                    gap: 0.5,
                     width: '100%',
                     justifyContent: 'flex-start',
                     textAlign: 'left',
@@ -44,14 +44,14 @@ export default function BackgroundNoteLine({ note, text }: { note: BackgroundNot
             >
                 <ChevronRightIcon
                     sx={{
-                        fontSize: 14,
+                        fontSize: 16,
                         flex: 'none',
                         visibility: hasDetails ? 'visible' : 'hidden',
                         transform: open ? 'rotate(90deg)' : 'none',
                         transition: 'transform 150ms',
                     }}
                 />
-                <NotificationsNoneOutlinedIcon sx={{ fontSize: 14, flex: 'none', color: TONE[note.tone] }} />
+                <NotificationsNoneOutlinedIcon sx={{ fontSize: 15, flex: 'none', color: TONE[note.tone] }} />
                 <Box
                     component="span"
                     sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
@@ -60,7 +60,7 @@ export default function BackgroundNoteLine({ note, text }: { note: BackgroundNot
                 </Box>
             </ButtonBase>
             <Collapse in={open} unmountOnExit>
-                <Box sx={{ ml: 2.75, mt: 0.5, pl: 1.25, borderLeft: 2, borderColor: 'divider', minWidth: 0 }}>
+                <Box sx={{ ml: '7px', mt: 0.5, pl: 1.5, borderLeft: 2, borderColor: 'divider', minWidth: 0 }}>
                     {note.command !== undefined && (
                         <Box sx={{ fontFamily: MONO, fontSize: 11.5, overflowWrap: 'anywhere' }} title="Command">
                             {note.command}
