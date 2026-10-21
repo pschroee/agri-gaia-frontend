@@ -8,7 +8,7 @@
 // once), a val_loss search and "All runs". The rules behind the words are checked in experimentsTab.test.ts and
 // searchView; here the pieces only have to be put together.
 
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -17,7 +17,7 @@ import { emptyExperiments } from '../../experiments';
 import { epochRows, lossSearch, lossTrials, makeSearch, makeTrial, trials } from '../../experimentsFixtures';
 import ExperimentsTab from './ExperimentsTab';
 
-const h = vi.hoisted(() => ({ state: undefined as unknown, stopTrial: vi.fn(async () => undefined), checks: [] as unknown[] }));
+const h = vi.hoisted(() => ({ state: undefined as unknown, stopTrial: vi.fn(async () => undefined), checks: [] as unknown[], switching: false }));
 
 vi.mock('../../AgentContext', () => ({
     useAgent: () => ({ chats: [{ id: 'c1', title: 'Train flowers classifier' }], selectedChatId: 'c1' }),
@@ -29,6 +29,7 @@ vi.mock('../../experiments', async (orig) => {
         ...real,
         useExperiments: () => ({
             state: h.state,
+            switching: h.switching,
             actions: { stopTrial: h.stopTrial, stopSearch: vi.fn(), changeBudget: vi.fn(), giveHint: vi.fn(), adoptTrial: vi.fn(), reload: vi.fn() },
         }),
         useTrialDetail: () => ({ detail: { trial: trials()[3], epochs: epochRows(7), gpu: [], log_tail: 'epoch 7/20\nTraceback (most recent call last)\nRuntimeError: out of memory' }, loading: false }),
@@ -49,6 +50,7 @@ const mount = (url = '/ai-agent?tab=experiments') =>
 afterEach(cleanup);
 beforeEach(() => {
     h.checks = [];
+    h.switching = false;
     h.stopTrial.mockClear();
 });
 
@@ -166,5 +168,48 @@ describe('ExperimentsTab', () => {
         load({ searches: [makeSearch()], trials: trials(), reconnecting: true, lastAt: '2026-10-20T09:52:14Z' });
         mount();
         expect(screen.getByText(/Reconnecting… · showing the last values from/)).toBeTruthy();
+    });
+
+    it('shows a single run with its name and offers to open it in JupyterHub', () => {
+        const single = makeTrial(0, { id: 'x1', idx: 0, seq: 1, search_id: undefined, path: 'notebook', state: 'done', name: 'gpu_check.py', link: 'https://hub.example/lab/tree/run1' });
+        load({ trials: [single] });
+        mount();
+        expect(within(screen.getByTestId('trial-table')).getByText('Run')).toBeTruthy();
+        expect(screen.getByText('gpu_check.py')).toBeTruthy();
+        fireEvent.click(screen.getByRole('button', { name: /Actions for run 1/ }));
+        const item = screen.getByRole('menuitem', { name: 'Open in JupyterHub' });
+        expect(item.getAttribute('href')).toBe('https://hub.example/lab/tree/run1');
+        expect(item.getAttribute('target')).toBe('_blank');
+    });
+
+    it('has no Run column in the table of a search', () => {
+        load({ searches: [makeSearch()], trials: trials() });
+        mount();
+        expect(within(screen.getByTestId('trial-table')).queryByText('Run')).toBeNull();
+    });
+
+    it('keeps the previous content while another chat loads and dims after 300 ms', () => {
+        vi.useFakeTimers();
+        try {
+            load({ searches: [makeSearch()], trials: trials(), chatId: 'c0' });
+            h.switching = true;
+            mount();
+            expect(screen.queryByTestId('experiments-empty')).toBeNull();
+            expect(screen.queryByTestId('experiments-loading')).toBeNull();
+            expect(screen.getByTestId('experiments-search')).toBeTruthy();
+            expect(screen.getByTestId('experiments-body').getAttribute('aria-busy')).toBeNull();
+            act(() => {
+                vi.advanceTimersByTime(300);
+            });
+            expect(screen.getByTestId('experiments-body').getAttribute('aria-busy')).toBe('true');
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('chat select shows the chosen title', () => {
+        load({});
+        mount();
+        expect(screen.getByRole('combobox', { name: /^Chat/ }).textContent).toBe('Train flowers classifier');
     });
 });

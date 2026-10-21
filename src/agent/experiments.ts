@@ -156,6 +156,10 @@ export type Trial = {
     duration_s?: number;
     /** The end the watcher expects, from epoch / epochs. */
     eta?: string | null;
+    /** What ran (the entry file of a notebook run, the training container); from the gateway. */
+    name?: string;
+    /** The address of the run, from the gateway; never built here. */
+    link?: string;
 };
 
 /** The figures of one epoch by name (`train_loss`, `val_acc` …), plus `epoch` and `at`. */
@@ -183,6 +187,8 @@ export type ExperimentsState = {
     reconnecting: boolean;
     /** When the last event arrived. */
     lastAt?: string;
+    /** The chat this state was loaded for (set by `useExperiments`). */
+    chatId?: string;
 };
 
 export const emptyExperiments: ExperimentsState = {
@@ -372,7 +378,12 @@ export type ExperimentsActions = {
     reload: () => Promise<void>;
 };
 
-export type ExperimentsHandle = { state: ExperimentsState; actions: ExperimentsActions };
+export type ExperimentsHandle = {
+    state: ExperimentsState;
+    actions: ExperimentsActions;
+    /** Another chat is loading; `state` is still the previous chat's (issue #195). */
+    switching?: boolean;
+};
 
 /** The text of a failed control for the dialog that called it. */
 export function controlError(e: unknown): string {
@@ -386,7 +397,9 @@ export function controlError(e: unknown): string {
  * says so (`reconnecting`) and keeps the last values.
  */
 export function useExperiments(chatId: string | undefined, enabled = true, hooks: ExperimentsHooks = defaultHooks): ExperimentsHandle {
-    const [state, setState] = useState<ExperimentsState>(emptyExperiments);
+    const [working, setState] = useState<ExperimentsState>(emptyExperiments);
+    // The last state of a chat that was loaded: it stays on screen while the next chat loads (issue #195).
+    const shown = useRef<ExperimentsState>();
     const chatRef = useRef(chatId);
     chatRef.current = chatId;
     const stopRequested = useRef(new Set<string>());
@@ -397,16 +410,20 @@ export function useExperiments(chatId: string | undefined, enabled = true, hooks
         try {
             const list = await hooks.load(id);
             if (chatRef.current !== id) return;
-            setState((s) => ({ ...s, ...list, loaded: true, error: undefined }));
+            // the lists are replaced as a whole; what belongs to the chat (progress, stopping) is kept
+            setState((s) => ({ ...(s.chatId === id ? s : emptyExperiments), ...list, chatId: id, loaded: true, error: undefined }));
         } catch (e) {
             if (chatRef.current !== id) return;
-            setState((s) => ({ ...s, loaded: true, error: controlError(e) }));
+            setState((s) => ({ ...(s.chatId === id ? s : emptyExperiments), chatId: id, loaded: true, error: controlError(e) }));
         }
     }, [hooks]);
 
     useEffect(() => {
         setState(emptyExperiments);
-        if (!chatId || !enabled) return undefined;
+        if (!chatId || !enabled) {
+            shown.current = undefined;
+            return undefined;
+        }
         let alive = true;
         void reload();
         const src = hooks.openStream(chatId);
@@ -460,7 +477,10 @@ export function useExperiments(chatId: string | undefined, enabled = true, hooks
         };
     }, [reload]);
 
-    return { state, actions };
+    const ready = working.loaded && !!chatId && working.chatId === chatId;
+    if (ready) shown.current = working;
+    if (ready || !chatId || !enabled || !shown.current) return { state: working, actions, switching: false };
+    return { state: shown.current, actions, switching: true };
 }
 
 /**

@@ -125,7 +125,18 @@ export function groupRows(searches: Search[], trials: Trial[], bestOf: (s: Searc
 export function trialTitle(t: Trial): string {
     const arch = t.params?.architecture;
     const head = t.idx > 0 ? `Trial ${t.idx}` : `Single run ${t.seq}`;
-    return typeof arch === 'string' && arch ? `${head} · ${arch}` : head;
+    if (typeof arch === 'string' && arch) return `${head} · ${arch}`;
+    return t.idx === 0 && t.name ? `${head} · ${t.name}` : head;
+}
+
+/** The address of the run for "Open in JupyterHub": only what the gateway gave, and only https. */
+export function trialLink(t: Pick<Trial, 'link'>): string | undefined {
+    if (!t.link) return undefined;
+    try {
+        return new URL(t.link).protocol === 'https:' ? t.link : undefined;
+    } catch {
+        return undefined;
+    }
 }
 
 export const pathWord = (p: SearchPath): string => (p === 'notebook' ? 'notebook' : 'template');
@@ -145,13 +156,14 @@ export function tableFooter(search: Search | undefined, rows: TrialRow[], single
 
 // The row menu (G8): Adopt only for a finished trial of the running search, Stop only for the open trial of a
 // running search, otherwise just "Show details".
-export type RowMenu = { adopt: boolean; stop: boolean };
+export type RowMenu = { adopt: boolean; stop: boolean; open: boolean };
 
 export function rowMenu(row: TrialRow, search: Search | undefined): RowMenu {
     const running = search?.state === 'running';
     return {
         adopt: !!running && row.trial.state === 'done' && row.trial.idx > 0,
         stop: !!running && isOpen(row.trial),
+        open: !!trialLink(row.trial),
     };
 }
 

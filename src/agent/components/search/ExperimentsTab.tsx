@@ -13,6 +13,7 @@ import { useSearchParams } from 'react-router-dom';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import LinearProgress from '@mui/material/LinearProgress';
 import Chip from '@mui/material/Chip';
 import MenuItem from '@mui/material/MenuItem';
 import Paper from '@mui/material/Paper';
@@ -37,6 +38,20 @@ import TrialTable from './TrialTable';
 /** The trial the detail shows when the user chose none: the open one, else the winner or best, else the last. */
 export function defaultTrial(search: Search, list: Trial[]): Trial | undefined {
     return openTrialOf(list) ?? winnerOf(search, list) ?? bestTrialOf(search, list) ?? list[list.length - 1];
+}
+
+/** True once `on` has held for `ms`: a quick switch of the chat shows no sign of loading (issue #195). */
+function useDelayedFlag(on: boolean, ms: number): boolean {
+    const [flag, setFlag] = useState(false);
+    useEffect(() => {
+        if (!on) {
+            setFlag(false);
+            return undefined;
+        }
+        const timer = setTimeout(() => setFlag(true), ms);
+        return () => clearTimeout(timer);
+    }, [on, ms]);
+    return flag;
 }
 
 function Loading() {
@@ -97,18 +112,22 @@ export default function ExperimentsTab({ onOpenChat }: { onOpenChat?: (chatId: s
     useEffect(() => {
         if (!chatId && (selectedChatId ?? chats[0]?.id)) setChatId(selectedChatId ?? chats[0]?.id);
     }, [chatId, selectedChatId, chats]);
-    const { state, actions } = useExperiments(chatId);
+    const { state, actions, switching = false } = useExperiments(chatId);
+    const dimmed = useDelayedFlag(switching, 300);
     const [want, setWant] = useState<string | undefined>(params.get('search') ?? undefined);
     const [selectedId, setSelectedId] = useState<string>();
     const [error, setError] = useState<string>();
-    // Another chat clears the choice; the first render keeps what ?search= asked for.
-    const shownChat = useRef(chatId);
+    // The content of another chat clears the choice, once it is there (the previous chat stays as it was until
+    // then); the first content keeps what ?search= asked for.
+    const shownChat = useRef<string>();
     useEffect(() => {
-        if (shownChat.current === chatId) return;
-        shownChat.current = chatId;
+        if (!state.chatId || shownChat.current === state.chatId) return;
+        const first = shownChat.current === undefined;
+        shownChat.current = state.chatId;
+        if (first) return;
         setWant(undefined);
         setSelectedId(undefined);
-    }, [chatId]);
+    }, [state.chatId]);
 
     const show = resolveShow(want, state.searches);
     const options = showOptions(state.searches, state.trials);
@@ -226,7 +245,14 @@ export default function ExperimentsTab({ onOpenChat }: { onOpenChat?: (chatId: s
                     {error}
                 </Alert>
             )}
-            {body}
+            <Box
+                data-testid="experiments-body"
+                aria-busy={dimmed || undefined}
+                sx={{ position: 'relative', transition: 'opacity 120ms', ...(dimmed ? { opacity: 0.6, pointerEvents: 'none' } : {}) }}
+            >
+                {dimmed && <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }} />}
+                {body}
+            </Box>
         </Box>
     );
 }
