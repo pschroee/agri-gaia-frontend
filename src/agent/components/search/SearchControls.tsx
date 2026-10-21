@@ -49,6 +49,7 @@ import {
     HINT_SENT_AS,
     HINT_SENT_AS_INLINE,
     STOP_SEARCH_TEXT,
+    adoptDetail,
     canAdopt,
     budgetUsedText,
     canStopTrial,
@@ -512,6 +513,7 @@ export function SearchControls({ search, trial, variant, actions, compact, part 
                 open={dlg === 'adopt'}
                 title={adopt.title}
                 body={adopt.body}
+                detail={adoptDetail(search, adoptIdx)}
                 action={adopt.action}
                 busy={busy}
                 error={dlg === 'adopt' ? error : undefined}

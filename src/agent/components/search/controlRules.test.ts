@@ -8,6 +8,7 @@ import type { Search, Trial } from '../../experiments';
 import { budgetErrors, budgetForm } from '../../searchView';
 import { figuresMissing, gpuMissing } from '../../searchView';
 import {
+    adoptDetail,
     ADOPT_TEXT,
     HINT_MAX,
     budgetUsedText,
@@ -150,5 +151,13 @@ describe('dialog lines (#182)', () => {
 
     it('counts the hint with spaces around the slash', () => {
         expect(hintCounter('a'.repeat(25))).toBe(`25 / ${HINT_MAX}`);
+    });
+});
+
+describe('adoptDetail', () => {
+    it('names the running trial that is stopped, and nothing without one', () => {
+        expect(adoptDetail({ running_trial: 4 }, 2)).toBe('Trial 4 (running) is stopped and not considered.');
+        expect(adoptDetail({ running_trial: null }, 2)).toBeUndefined();
+        expect(adoptDetail({ running_trial: 2 }, 2)).toBeUndefined();
     });
 });
