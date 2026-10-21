@@ -50,6 +50,12 @@ export const ADOPT_TEXT = (idx: number): { title: string; body: string; action: 
     action: `Adopt trial ${idx}`,
 });
 
+/** The second line of the adopt dialog: a trial that still runs is stopped and not considered. */
+export const adoptDetail = (search: Pick<Search, 'running_trial'>, adopted: number): string | undefined =>
+    typeof search.running_trial === 'number' && search.running_trial !== adopted
+        ? `Trial ${search.running_trial} (running) is stopped and not considered.`
+        : undefined;
+
 export const STOP_SEARCH_TEXT = {
     title: 'Stop the training search?',
     body: 'Results so far stay. The winner is chosen from finished trials.',
