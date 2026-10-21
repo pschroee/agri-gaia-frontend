@@ -20,15 +20,6 @@ const SETTING_LABEL: Record<Setting, string> = {
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-/** Tooltip of the internet switch: what on and off mean, and when a change takes effect. */
-export function internetHint(chat: Pick<Chat, 'internet' | 'state'>): string {
-    const base = chat.internet
-        ? 'Internet access on: the agent can reach the web. The agent can switch it off again itself, without approval. The language model and the gateway are always reachable.'
-        : 'Internet access off: the agent reaches only the language model and the gateway. The agent can ask for internet; you approve it in the chat.';
-    const when = chat.state === 'dormant' ? ' The change takes effect once the chat has loaded.' : '';
-    return `${base}${when}`;
-}
-
 /** Why switching a setting failed, in words. */
 export function settingErrorText(setting: Setting, e: unknown): string {
     if (setting === 'compact') return compactErrorText(e);

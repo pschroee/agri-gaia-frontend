@@ -42,7 +42,7 @@ import { useChatSubagentGroups } from '../useChatSubagentGroups';
 import { useSubagentNav } from '../useSubagentNav';
 import { isHovered, isTruncated } from './EllipsisText';
 import EllipsisText from './EllipsisText';
-import InternetToggle from './InternetToggle';
+import InternetIndicator from './internet/InternetIndicator';
 import NewChatButton, { NewChatError } from './NewChatButton';
 import RunStateChip from './RunStateChip';
 import { SubagentIcon, SubagentState } from './SubagentState';
@@ -514,7 +514,7 @@ export default function ChatSelector() {
                     </Box>
                 </Box>
                 <NewChatButton compact />
-                {selected && <InternetToggle chat={selected} compact />}
+                {selected && <InternetIndicator chat={selected} compact />}
             </Box>
             <NewChatError />
             <Popover

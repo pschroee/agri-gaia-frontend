@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { FULL_POPOVER_LINE, POPOVER_EMPTY, switchOnText } from './internetView';
 import { describe, expect, it } from 'vitest';
 
 import { attachHint } from './files';
@@ -12,7 +13,6 @@ import { olderChatsLabel } from './chatSearch';
 import { newChatErrorText } from './newChat';
 import { RUN_STATE_HINT } from './runState';
 import { RESUME_STEP_LABEL, resumeSummary } from './resume';
-import { internetHint } from './settings';
 import { EXCERPT_NOTE } from './stepDetail';
 import { runStatusLabel, subagentStateText, subagentStopErrorText } from './subagents';
 import { abortLabel, abortLineText } from './transcript';
@@ -21,7 +21,8 @@ import type { ResumeView } from './resume';
 // Visible texts of the agent UI name no infrastructure terms (issue #78, thesis #75/#78).
 const INFRA = /sandbox|pool|slot|orchestrator|\/workspace/i;
 
-const resume = (over: Partial<ResumeView>) => ({ state: 'running', start: false, steps: [], ...over }) as unknown as ResumeView;
+const resume = (over: Partial<ResumeView>) =>
+    ({ state: 'running', start: false, steps: [], ...over } as unknown as ResumeView);
 
 describe('visible agent UI texts', () => {
     it('resume steps and summaries', () => {
@@ -50,9 +51,10 @@ describe('visible agent UI texts', () => {
     });
 
     it('internet and attachment hints', () => {
-        expect(internetHint({ internet: true, state: 'dormant' })).not.toMatch(INFRA);
-        expect(internetHint({ internet: false, state: 'active' })).not.toMatch(INFRA);
         expect(attachHint(10)).not.toMatch(INFRA);
+        expect(POPOVER_EMPTY).not.toMatch(INFRA);
+        expect(switchOnText()).not.toMatch(INFRA);
+        expect(FULL_POPOVER_LINE).not.toMatch(INFRA);
     });
 
     it('the activity names the gateway without an infrastructure term', () => {
