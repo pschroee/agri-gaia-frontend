@@ -19,9 +19,6 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import BlockIcon from '@mui/icons-material/Block';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
-import PublicIcon from '@mui/icons-material/Public';
-import PublicOffIcon from '@mui/icons-material/PublicOff';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import SearchIcon from '@mui/icons-material/Search';
 
 import {
@@ -29,9 +26,6 @@ import {
     activityChatName,
     formatDuration,
     internetEvent,
-    InternetEvent,
-    internetOf,
-    InternetTone,
     isSystemRead,
     kindOf,
     viaLabel,
@@ -46,6 +40,7 @@ import {
 import { callEffect } from '../effect';
 import type { ActivityCall } from '../types';
 import EffectChip from './EffectChip';
+import { AccessCallCell, AccessDetails, AccessResultCell } from './internet/InternetAccessView';
 import { agentColors, MONO } from './tokens';
 import { agentApi } from '../api';
 import { needsLlmLoad, sentCallText, sentChatText, sentToModel } from '../sentToModel';
@@ -72,70 +67,6 @@ function OutcomeCell({ outcome }: { outcome: Outcome }) {
     );
 }
 
-const TONE_COLOR: Record<InternetTone, string> = {
-    ok: agentColors.ok,
-    bad: agentColors.red,
-    warn: agentColors.amberText,
-    muted: agentColors.muted,
-};
-
-function InternetResultCell({ event }: { event: InternetEvent }) {
-    const icon: Record<InternetTone, JSX.Element> = {
-        ok: <CheckIcon sx={{ fontSize: 16 }} />,
-        bad: <CloseIcon sx={{ fontSize: 16 }} />,
-        warn: <HourglassEmptyIcon sx={{ fontSize: 16 }} />,
-        muted: <Box component="span" sx={{ width: 16 }} />,
-    };
-    return (
-        <Box
-            sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 0.75,
-                color: TONE_COLOR[event.tone],
-                fontSize: 14,
-                // One line where the table has room; narrow windows wrap rather than scroll the table.
-                whiteSpace: { xs: 'normal', lg: 'nowrap' },
-            }}
-        >
-            {icon[event.tone]}
-            {event.result}
-        </Box>
-    );
-}
-
-/** Call column of an internet entry: what happened, with the agent's reason of a request below. */
-function InternetCallCell({ call, event }: { call: ActivityRow['call']; event: InternetEvent }) {
-    const i = internetOf(call);
-    const on = i.action === 'request' || i.result === 'on' || i.result === 'already_on';
-    const Icon = on ? PublicIcon : PublicOffIcon;
-    return (
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <Icon sx={{ fontSize: 18, color: 'text.secondary', mt: '1px', flex: 'none' }} />
-            <Box sx={{ minWidth: 0 }}>
-                <Typography sx={{ fontSize: 14 }}>{event.title}</Typography>
-                {event.reason && (
-                    <Typography
-                        sx={{
-                            fontSize: 13,
-                            color: 'text.secondary',
-                            overflowWrap: 'anywhere',
-                            // Two lines at most; the details show the whole reason.
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                        }}
-                        title={event.reason}
-                    >
-                        Reason: {event.reason}
-                    </Typography>
-                )}
-            </Box>
-        </Box>
-    );
-}
-
 /**
  * The gateway's own read for the summary of an approval (gateway issue L2/#119): the system read the platform, the
  * agent did not. What was read is the delivered detail.
@@ -156,94 +87,6 @@ function SystemReadCell({ call }: { call: ActivityRow['call'] }) {
                 >
                     {call.detail}
                 </Typography>
-            </Box>
-        </Box>
-    );
-}
-
-/** Details of an internet entry: its time line (request, approval, result) and who acted. */function InternetLog({ row }: { row: ActivityRow }) {
-    const { call, chat } = row;
-    const event = internetEvent(call);
-    const i = internetOf(call);
-    const lines: { at: string; text: string; tone?: InternetTone }[] = [];
-    const approval = call.approval;
-    if (approval) {
-        lines.push({ at: approval.created_at, text: 'approval requested', tone: 'warn' });
-        if (approval.decided_at) {
-            lines.push({
-                at: approval.decided_at,
-                text: `approval ${approval.state}`,
-                tone: approval.state === 'approved' ? undefined : 'bad',
-            });
-        }
-    }
-    lines.push({
-        at: call.created_at,
-        text: `${event.title}  →  ${event.result}`,
-        tone: event.tone === 'bad' ? 'bad' : undefined,
-    });
-    lines.sort((a, b) => a.at.localeCompare(b.at));
-    return (
-        <Box sx={{ py: 2, pl: 4.5, pr: 2, bgcolor: '#f4f7f5' }}>
-            <Box
-                sx={{
-                    bgcolor: '#fff',
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                    p: 1.5,
-                    fontFamily: MONO,
-                    fontSize: 12.5,
-                    lineHeight: 1.75,
-                }}
-            >
-                {lines.map((l, idx) => (
-                    <Box key={idx} sx={{ display: 'flex', gap: 2 }}>
-                        <Box component="span" sx={{ color: 'text.disabled', flex: 'none' }}>
-                            {formatClock(l.at, true)}
-                        </Box>
-                        <Box
-                            component="span"
-                            sx={{ color: l.tone ? TONE_COLOR[l.tone] : 'inherit', overflowWrap: 'anywhere' }}
-                        >
-                            {l.text}
-                        </Box>
-                    </Box>
-                ))}
-            </Box>
-            <Box
-                component="dl"
-                sx={{
-                    display: 'grid',
-                    gridTemplateColumns: '180px minmax(0, 1fr)',
-                    gap: '6px 16px',
-                    m: 0,
-                    mt: 2,
-                    fontSize: 13,
-                    '& dt': { color: 'text.secondary' },
-                    '& dd': { m: 0, overflowWrap: 'anywhere' },
-                }}
-            >
-                <dt>Chat</dt>
-                <dd>{chat.title || chat.id}</dd>
-                <dt>By</dt>
-                <dd>
-                    {i.origin === 'user'
-                        ? 'You, with the internet switch'
-                        : `${event.by === 'Subagent' ? 'A subagent' : 'The agent'} · ${viaLabel(call.via)}`}
-                </dd>
-                {event.reason && (
-                    <>
-                        <dt>Reason</dt>
-                        <dd>{event.reason}</dd>
-                    </>
-                )}
-                {call.tool_call_id && (
-                    <>
-                        <dt>Tool call</dt>
-                        <dd style={{ fontFamily: MONO, fontSize: 12 }}>{call.tool_call_id}</dd>
-                    </>
-                )}
             </Box>
         </Box>
     );
@@ -489,7 +332,7 @@ export default function ActivityTable({
                                     </TableCell>
                                     {internet ? (
                                         <TableCell sx={{ minWidth: 160 }} data-testid="activity-internet">
-                                            <InternetCallCell call={call} event={internet} />
+                                            <AccessCallCell event={internet} />
                                         </TableCell>
                                     ) : systemRead ? (
                                         <TableCell sx={{ minWidth: 160 }}>
@@ -508,12 +351,12 @@ export default function ActivityTable({
                                         </TableCell>
                                     )}
                                     <TableCell sx={{ color: 'text.secondary' }}>
-                                        {viaLabel(internet?.by === 'You' ? 'user' : call.via)}
+                                        {internet ? internet.via : viaLabel(call.via)}
                                     </TableCell>
                                     <TableCell data-effect={effect}>{effect && <EffectChip effect={effect} />}</TableCell>
                                     <TableCell>
                                         {internet ? (
-                                            <InternetResultCell event={internet} />
+                                            <AccessResultCell event={internet} />
                                         ) : (
                                             <OutcomeCell outcome={outcomeOfCall(call)} />
                                         )}
@@ -532,7 +375,7 @@ export default function ActivityTable({
                                 <TableRow>
                                     <TableCell colSpan={8} sx={{ p: 0, borderBottom: expanded ? undefined : 0 }}>
                                         <Collapse in={expanded} timeout="auto" unmountOnExit>
-                                            {internet ? <InternetLog row={row} /> : <CallLog row={row} sent={sent[chat.id]} />}
+                                            {internet ? <AccessDetails row={row} /> : <CallLog row={row} sent={sent[chat.id]} />}
                                         </Collapse>
                                     </TableCell>
                                 </TableRow>
