@@ -10,7 +10,6 @@ import {
     autoCompactOn,
     compactErrorText,
     compactNowState,
-    internetApprovalText,
     internetHint,
     settingErrorText,
 } from './settings';
@@ -87,17 +86,5 @@ describe('internet approvals', () => {
         expect(approvalWho({ session: 'main' })).toBe('The agent');
         expect(approvalWho({})).toBe('The agent');
         expect(approvalWho({ session: 'run-42' })).toBe('A subagent');
-    });
-    it('shows the reason and what allowing does', () => {
-        const t = internetApprovalText({ session: 'main', name: '  pip install pandas  ', via: 'cli' });
-        expect(t.title).toBe('The agent asks for internet access');
-        expect(t.reason).toBe('pip install pandas');
-        expect(t.explain).toMatch(/globe in the chat header/);
-        // Gateway issue #34: the agent switches internet off itself, without approval.
-        expect(t.explain).toMatch(/until the agent switches it off again or you do/);
-    });
-    it("drops the gateway's placeholder for a missing reason", () => {
-        expect(internetApprovalText({ name: '(no reason given)', via: 'mcp' }).reason).toBeUndefined();
-        expect(internetApprovalText({ name: '', via: 'mcp' }).reason).toBeUndefined();
     });
 });

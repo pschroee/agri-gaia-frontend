@@ -7,13 +7,11 @@ import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import PublicIcon from '@mui/icons-material/Public';
 import InsertDriveFileOutlinedIcon from '@mui/icons-material/InsertDriveFileOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 
 import { artifactApprovalView } from '../files';
 import { approvalEffect } from '../effect';
-import { internetApprovalText } from '../settings';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
 import NotebookRunApproval from './NotebookRunApproval';
@@ -31,6 +29,7 @@ import PlanCard, {
     SummaryDetails,
     Technical,
 } from './PlanCard';
+import InternetApproval from './internet/InternetApproval';
 import UploadFiles from './UploadFiles';
 import { agentColors, blockSx, MONO } from './tokens';
 import { LISTED_FILES } from '../uploads';
@@ -57,64 +56,6 @@ function useDecide(onDecide: (approve: boolean) => Promise<void>) {
         }
     };
     return { busy, decide };
-}
-
-/** The agent asks for internet access (agw-internet, MCP request_internet): reason and what allowing does. */
-function InternetItem({ approval, onDecide }: { approval: Approval; onDecide: (approve: boolean) => Promise<void> }) {
-    const { busy, decide } = useDecide(onDecide);
-    const t = internetApprovalText(approval);
-    return (
-        <Box
-            data-testid="agent-internet-approval"
-            data-approval-id={approval.id}
-            sx={{ px: 1.5, py: 1.25, borderTop: 1, borderColor: 'divider' }}
-        >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
-                <PublicIcon sx={{ fontSize: 17, color: agentColors.green }} aria-hidden />
-                <Typography sx={{ fontSize: 13, fontWeight: 500 }}>{t.title}</Typography>
-            </Box>
-            {t.reason ? (
-                <Box
-                    component="blockquote"
-                    sx={{
-                        m: 0,
-                        mt: 0.5,
-                        pl: 1.25,
-                        borderLeft: `2px solid ${agentColors.greenLine}`,
-                        fontSize: 13,
-                        fontStyle: 'italic',
-                        whiteSpace: 'pre-wrap',
-                        overflowWrap: 'anywhere',
-                    }}
-                >
-                    {t.reason}
-                </Box>
-            ) : (
-                <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>No reason given.</Typography>
-            )}
-            <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 0.75 }}>{t.explain}</Typography>
-            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                <Button
-                    size="small"
-                    variant="contained"
-                    startIcon={<PublicIcon />}
-                    disabled={busy}
-                    onClick={() => void decide(true)}
-                >
-                    Allow internet
-                </Button>
-                <Button
-                    size="small"
-                    variant="outlined"
-                    color="secondary"
-                    disabled={busy}
-                    onClick={() => void decide(false)}
-                >
-                    Reject
-                </Button>
-            </Box>
-        </Box>
-    );
 }
 
 /**
@@ -375,7 +316,7 @@ export default function ApprovalCard({
                         onDecide={onDecide}
                     />
                 ) : a.kind === 'internet_access' ? (
-                    <InternetItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
+                    <InternetApproval key={a.id} approval={a} layout={layout} onDecide={(approve) => onDecide(a, approve)} />
                 ) : a.kind === 'artifact_upload' ? (
                     <ArtifactItem key={a.id} approval={a} onDecide={(approve) => onDecide(a, approve)} />
                 ) : a.search && isCodeChange(a.search) ? (

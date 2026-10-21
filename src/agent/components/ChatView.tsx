@@ -43,6 +43,7 @@ import ApprovalCard from './ApprovalCard';
 import ChatInput from './ChatInput';
 import ModelEffortPicker from './ModelEffortPicker';
 import Conversation from './Conversation';
+import InternetEndedSnackbar from './internet/InternetEndedSnackbar';
 import QueueList from './QueueList';
 import SubagentInput from './SubagentInput';
 import { SubagentTranscript } from './SubagentView';
@@ -435,6 +436,7 @@ export default function ChatView({ chatId, dense = false, placeholder, header, r
                         </Box>
                     )}
                 </Box>
+                <InternetEndedSnackbar />
             </PlanCardRegistryProvider>
         </InternetProvider>
     );
