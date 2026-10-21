@@ -795,6 +795,9 @@ export function grantChip(b: GrantBrief | undefined): string {
     return b.kind === 'packages' ? packagesText((b.packages ?? []).length) : grantName({ kind: b.kind, domains: b.domains });
 }
 
-/** Whether a request is a refusal the chat should show under its `bash` call (A8): origin exec with a tool call. */
+/**
+ * Whether a request is a refusal the chat should show under its `bash` call (A8): a command of the sandbox (origin
+ * exec, or pkg for pip and npm through the package gate) with a tool call.
+ */
 export const showsUnderCall = (c: Pick<Connection, 'origin' | 'tool_call_id' | 'denied' | 'reason'>): boolean =>
-    c.origin === 'exec' && !!c.tool_call_id && (!!c.denied || !!c.reason);
+    (c.origin === 'exec' || c.origin === 'pkg') && !!c.tool_call_id && (!!c.denied || !!c.reason);

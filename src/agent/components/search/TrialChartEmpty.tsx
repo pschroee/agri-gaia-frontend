@@ -12,6 +12,7 @@ import InsertChartOutlinedIcon from '@mui/icons-material/InsertChartOutlined';
 import MemoryIcon from '@mui/icons-material/Memory';
 import SyncIcon from '@mui/icons-material/Sync';
 import Box from '@mui/material/Box';
+import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import type { ReactNode } from 'react';
@@ -91,9 +92,9 @@ export function ReconnectingHint({ since }: { since?: string }) {
     return (
         <Box
             role="status"
-            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 12, color: agentColors.amberText }}
+            sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 12, color: 'text.secondary' }}
         >
-            <SyncIcon sx={{ fontSize: 14 }} />
+            <CircularProgress size={12} thickness={5} aria-hidden />
             <span>{since ? `Reconnecting… · showing the last values from ${since}` : 'Reconnecting…'}</span>
         </Box>
     );
