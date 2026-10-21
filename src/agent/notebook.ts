@@ -48,6 +48,10 @@ export type NotebookApprovalData = {
 };
 
 /** The label of the agent's note: it names who wrote it and that nobody verified it (gateway issue #92). */
+/** Said at the link to JupyterHub once the run has ended: the hub stops an unused server and starts it again on request. */
+export const LAUNCH_HINT =
+    'If the notebook server was stopped after an hour without use, JupyterHub offers to start it again. The files stay.';
+
 export const AGENT_NOTE_LABEL = "Agent's note – not verified";
 
 /** The state a run card shows, derived from the observed job (`runViewOf`). */
