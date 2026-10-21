@@ -375,6 +375,9 @@ describe('refusals', () => {
         expect(blockedLine({ host: 'pypi.org', reason: 'too_large', package: 'torch' })).toBe(
             'Blocked: pip:torch is too large for the sandbox – use a notebook run',
         );
+        expect(blockedLine({ host: 'files.example.org', reason: 'too_large' })).toBe(
+            'Blocked: download from files.example.org is over 256 MB – too large for the sandbox',
+        );
     });
 
     it('writes the blocked line under a call', () => {
