@@ -31,6 +31,7 @@ import type {
 
 import type { Plan } from './plan';
 import type { Search, SearchBudget } from './experiments';
+import type { Connection, ConnectionsPage, InternetGrant } from './internet';
 import type { WatchJob } from './jobs';
 import type { UploadEntry } from './uploads';
 
@@ -236,6 +237,16 @@ export const agentApi = {
     setEffort: (id: string, level: string) => post<Chat>(`chats/${enc(id)}/effort`, { level }),
     /** Internet access of the sandbox; immediate for an active chat, otherwise on the next resume. */
     setInternet: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/internet`, { enabled }),
+    /** All internet grants of a chat, newest first (gateway issue #175); the elements are raw, `normalizeGrant` cleans them. */
+    internetGrants: (id: string) => request<unknown[]>(`chats/${enc(id)}/internet/grants`),
+    /** The user ends one active grant; 409 "the internet grant is not active" when it already ended. */
+    endInternetGrant: (id: string, grantId: number) =>
+        post<InternetGrant>(`chats/${enc(id)}/internet/grants/${grantId}/end`),
+    /** The connections of one chat through the web proxy, optionally of one grant. */
+    webRequests: (id: string, grantId?: number) =>
+        request<Connection[]>(`chats/${enc(id)}/web_requests${grantId ? `?grant=${grantId}` : ''}`),
+    /** Connections of the user's chats across all chats (query from `connectionsQuery`). */
+    connections: (query: string) => request<ConnectionsPage>(`activity/connections${query}`),
     /** Automatic compaction on or off. */
     setAutoCompact: (id: string, enabled: boolean) => post<Chat>(`chats/${enc(id)}/autocompact`, { enabled }),
     abort: (id: string) => post<Chat>(`chats/${enc(id)}/abort`),
