@@ -136,7 +136,21 @@ function HostList({ hosts }: { hosts: string[] }) {
     );
 }
 
-/** Packages as a table (ecosystem chip, name with extras, version); longer than PACKAGE_FOLD folds behind "Show all". */
+/** Splits a package label behind `-_./[,` and puts a `<wbr />` there: names wrap at separators, never per letter. */
+export function breakableName(label: string): ReactNode {
+    const parts = label.match(/[^-_./[,]*[-_./[,]?/g)?.filter((x) => x !== '') ?? [label];
+    return parts.map((part, i) => (
+        <span key={i}>
+            {part}
+            {i < parts.length - 1 && <wbr />}
+        </span>
+    ));
+}
+
+/**
+ * Packages as a table (ecosystem chip, name with extras, version); longer than PACKAGE_FOLD folds behind "Show all".
+ * `width: 1` in `sx` would be 100 %; columns shrink with '1%'. One table, so the columns line up after "Show all".
+ */
 function PackageTable({ packages }: { packages: string[] }) {
     const list = approvalPackages({ packages });
     const [all, setAll] = useState(false);
@@ -144,28 +158,31 @@ function PackageTable({ packages }: { packages: string[] }) {
     const fold = list.length > PACKAGE_FOLD;
     const row = (p: (typeof list)[number], i: number) => (
         <TableRow key={`${p.ecosystem}:${p.name}:${i}`}>
-            <TableCell sx={{ width: 1, whiteSpace: 'nowrap', pr: 0 }}>
+            <TableCell data-testid="agent-internet-package-eco" sx={{ width: '1%', whiteSpace: 'nowrap', pr: 0 }}>
                 <Chip size="small" variant="outlined" label={p.ecosystem} sx={{ height: 20, fontFamily: MONO, fontSize: 11 }} />
             </TableCell>
-            <TableCell sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'anywhere' }}>{packageLabel(p)}</TableCell>
-            <TableCell align="right" sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}>
+            <TableCell
+                data-testid="agent-internet-package-name"
+                sx={{ fontFamily: MONO, fontSize: 12.5, overflowWrap: 'break-word', wordBreak: 'normal' }}
+            >
+                {breakableName(packageLabel(p))}
+            </TableCell>
+            <TableCell
+                data-testid="agent-internet-package-version"
+                align="right"
+                sx={{ width: '1%', fontFamily: MONO, fontSize: 12, color: 'text.secondary', whiteSpace: 'nowrap' }}
+            >
                 {versionText(p.version)}
             </TableCell>
         </TableRow>
     );
     return (
         <Box data-testid="agent-internet-packages" sx={{ minWidth: 0 }}>
-            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1 }}>
-                <Table size="small" aria-label="Packages" sx={{ '& td': { py: 0.5 } }}>
+            <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1, overflowX: 'auto' }}>
+                <Table size="small" aria-label="Packages" sx={{ '& td': { py: 0.5, px: 1 } }}>
                     <TableBody>{list.slice(0, fold ? PACKAGE_FOLD : list.length).map(row)}</TableBody>
+                    {fold && <TableBody id={id}>{all ? list.slice(PACKAGE_FOLD).map((p, i) => row(p, i + PACKAGE_FOLD)) : null}</TableBody>}
                 </Table>
-                {fold && (
-                    <Collapse in={all} unmountOnExit id={id}>
-                        <Table size="small" aria-label="More packages" sx={{ '& td': { py: 0.5 } }}>
-                            <TableBody>{list.slice(PACKAGE_FOLD).map((p, i) => row(p, i + PACKAGE_FOLD))}</TableBody>
-                        </Table>
-                    </Collapse>
-                )}
             </Box>
             {fold && (
                 <Button

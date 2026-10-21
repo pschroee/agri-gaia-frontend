@@ -151,7 +151,7 @@ function RunningTrial({ search, trial, list, env, now }: { search: Search; trial
                     <Box sx={{ height: 4, width: `${pct ?? 0}%`, bgcolor: 'primary.main', transition: 'width .3s' }} />
                 </Box>
                 {/* a screen reader hears the epoch and the state, not every GPU sample */}
-                <Box aria-live="polite" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
+                <Box aria-live="polite" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
                     {`Trial ${trial.idx} · ${stopping ? 'stopping' : epochText(trial).toLowerCase()}`}
                 </Box>
             </Box>

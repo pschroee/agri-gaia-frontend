@@ -7,11 +7,12 @@
 // five packages, the full-access warning, the buttons and the decided line.
 
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { Fragment, type ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { InternetApproval as Data, InternetGrant } from '../../internet';
 import type { Approval } from '../../types';
-import InternetApproval, { agentNote, InternetDecided, InternetDecidedRows } from './InternetApproval';
+import InternetApproval, { agentNote, breakableName, InternetDecided, InternetDecidedRows } from './InternetApproval';
 
 afterEach(cleanup);
 
@@ -182,5 +183,76 @@ describe('the decided line', () => {
             />,
         );
         expect(screen.getAllByTestId('agent-internet-decided')).toHaveLength(1);
+    });
+});
+
+describe('the package table', () => {
+    const pkgs = (packages: string[]) => approval({}, data({ kind: 'packages', domains: [], packages }));
+    const css = (el: Element) => getComputedStyle(el);
+
+    it('sizes ecosystem and version columns to their content', () => {
+        render(<InternetApproval approval={pkgs(['pip:scikit-learn==1.5.2'])} onDecide={vi.fn()} />);
+        const eco = screen.getByTestId('agent-internet-package-eco');
+        const version = screen.getByTestId('agent-internet-package-version');
+        expect(css(eco).width).toBe('1%');
+        expect(css(version).width).toBe('1%');
+        expect(css(eco).width).not.toBe('100%');
+    });
+
+    it('wraps a package name at separators, never per letter', () => {
+        render(<InternetApproval approval={pkgs(['pip:opencv-python-headless'])} onDecide={vi.fn()} />);
+        const name = screen.getByTestId('agent-internet-package-name');
+        expect(css(name).overflowWrap).toBe('break-word');
+        expect(name.querySelectorAll('wbr')).toHaveLength(2);
+        expect(name.textContent).toBe('opencv-python-headless');
+    });
+
+    it('shows a scoped npm package with its version', () => {
+        render(<InternetApproval approval={pkgs(['npm:@tensorflow/tfjs-node@4.22.0'])} onDecide={vi.fn()} />);
+        expect(screen.getByTestId('agent-internet-package-name').textContent).toBe('@tensorflow/tfjs-node');
+        expect(screen.getByTestId('agent-internet-package-version').textContent).toContain('4.22.0');
+        expect(screen.getByTestId('agent-internet-package-eco').textContent).toBe('npm');
+    });
+
+    it('keeps one table for one, three and twelve packages', () => {
+        for (const n of [1, 3, 12]) {
+            const packages = Array.from({ length: n }, (_, i) => `pip:pkg${i}`);
+            const { unmount } = render(<InternetApproval approval={pkgs(packages)} onDecide={vi.fn()} />);
+            expect(screen.getAllByRole('table')).toHaveLength(1);
+            if (n === 12) {
+                expect(screen.getAllByTestId('agent-internet-package-name')).toHaveLength(5);
+                const more = screen.getByRole('button', { name: 'Show all 12' });
+                fireEvent.click(more);
+                expect(screen.getAllByRole('table')).toHaveLength(1);
+                expect(screen.getAllByTestId('agent-internet-package-name')).toHaveLength(12);
+                expect(document.getElementById(more.getAttribute('aria-controls') ?? '')).toBeTruthy();
+            }
+            unmount();
+        }
+    });
+
+    it('shows the same table in the opened decided line', () => {
+        render(
+            <InternetDecided
+                approval={approval({ state: 'approved', decided_at: '2026-10-21T14:08:00.000Z' }, data({ kind: 'packages', domains: [], packages: ['pip:scikit-learn'] }))}
+            />,
+        );
+        fireEvent.click(screen.getByRole('button', { expanded: false }));
+        expect(screen.getByTestId('agent-internet-package-name')).toBeTruthy();
+        expect(css(screen.getByTestId('agent-internet-package-eco')).width).toBe('1%');
+    });
+
+    it('breakableName keeps the text', () => {
+        const cases: [string, number][] = [
+            ['scikit-learn', 1],
+            ['torch[cuda,vision]', 2],
+            ['a', 0],
+        ];
+        for (const [label, breaks] of cases) {
+            const { container, unmount } = render(<Fragment>{breakableName(label) as ReactElement}</Fragment>);
+            expect(container.textContent).toBe(label);
+            expect(container.querySelectorAll('wbr')).toHaveLength(breaks);
+            unmount();
+        }
     });
 });
