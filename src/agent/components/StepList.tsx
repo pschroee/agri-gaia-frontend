@@ -16,7 +16,7 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CloseIcon from '@mui/icons-material/Close';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
-import MoveDownIcon from '@mui/icons-material/MoveDown';
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import RemoveIcon from '@mui/icons-material/Remove';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 
@@ -90,6 +90,8 @@ export type StepControls = {
     onBackground: (toolCallId: string) => Promise<BackgroundTask>;
     /** Background task per tool call that started it. */
     background: Map<string, BackgroundTask>;
+    /** Background task per ID ("bg-3"), for the rows of bg_output and bg_stop (#197). */
+    backgroundById?: Map<string, BackgroundTask>;
     /** The runs each `subagent` call started, listed in a card below the answer and opened on click (#48, #54). */
     subagents?: {
         byCall: Map<string, SubagentNavItem[]>;
@@ -115,6 +117,18 @@ export const stepOpenKey = (id: string) => `step:${id}`;
 
 const TONE_COLOR = { running: agentColors.green, ok: agentColors.ok, error: agentColors.red, muted: 'text.secondary' };
 
+/** The border of the chip follows the state, like its text (#197). */
+const TONE_LINE = { running: agentColors.greenLine, ok: agentColors.greenLine, error: agentColors.redLine, muted: 'divider' };
+
+/** The tools that name a task by its ID instead of starting it. */
+const BG_TOOLS = new Set(['bg_output', 'bg_stop']);
+
+function bgIdOf(s: Step): string | undefined {
+    if (!BG_TOOLS.has(s.name ?? s.tool)) return undefined;
+    const id = (s.args as { id?: unknown } | undefined)?.id;
+    return typeof id === 'string' ? id : undefined;
+}
+
 /** Small chip on a step that started (or became) a background task: "bg-3 · running". */
 function BackgroundChip({ task }: { task: BackgroundTask }) {
     const st = backgroundStatus(task);
@@ -130,11 +144,15 @@ function BackgroundChip({ task }: { task: BackgroundTask }) {
                     px: 0.6,
                     borderRadius: 0.75,
                     border: 1,
-                    borderColor: agentColors.greenLine,
+                    borderColor: TONE_LINE[st.tone],
                     color: TONE_COLOR[st.tone],
                     whiteSpace: 'nowrap',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '3px',
                 }}
             >
+                <LayersOutlinedIcon sx={{ fontSize: 12 }} />
                 {task.id} · {st.tone === 'running' ? 'running' : st.label}
             </Box>
         </Tooltip>
@@ -164,7 +182,8 @@ function RunningControls({
             setBusy(undefined);
         }
     };
-    const btn = { p: 0.25, flex: 'none' } as const;
+    // 16 px symbols with 2 px padding make the buttons 20 px high; the negative margin keeps the 18 px row from growing (#197)
+    const btn = { p: '2px', my: '-1px', flex: 'none' } as const;
     return (
         <Box sx={{ display: 'flex', flex: 'none', ml: 0.25 }}>
             <Tooltip title="Move to background: keeps running, the agent continues and is told when it ends">
@@ -177,7 +196,7 @@ function RunningControls({
                         onClick={() => void act('bg')}
                         sx={btn}
                     >
-                        {busy === 'bg' ? <CircularProgress size={14} /> : <MoveDownIcon sx={{ fontSize: 17 }} />}
+                        {busy === 'bg' ? <CircularProgress size={14} /> : <LayersOutlinedIcon sx={{ fontSize: 16 }} />}
                     </IconButton>
                 </span>
             </Tooltip>
@@ -189,13 +208,9 @@ function RunningControls({
                         data-testid="agent-step-stop"
                         disabled={!!busy}
                         onClick={() => void act('stop')}
-                        sx={btn}
+                        sx={{ ...btn, color: 'text.secondary', '&:hover': { color: agentColors.red } }}
                     >
-                        {busy === 'stop' ? (
-                            <CircularProgress size={14} />
-                        ) : (
-                            <StopCircleOutlinedIcon sx={{ fontSize: 17, color: agentColors.red }} />
-                        )}
+                        {busy === 'stop' ? <CircularProgress size={14} /> : <StopCircleOutlinedIcon sx={{ fontSize: 16 }} />}
                     </IconButton>
                 </span>
             </Tooltip>
@@ -216,7 +231,8 @@ function StepRow({
 }) {
     const [error, setError] = useState<string>();
     const controllable = s.status === 'running' && !!controls?.running.has(s.id);
-    const task = controls?.background.get(s.id);
+    const bgId = bgIdOf(s);
+    const task = controls?.background.get(s.id) ?? (bgId ? controls?.backgroundById?.get(bgId) : undefined);
     const skill = skillRead(s);
     const named = skill ? skillLabel(skill) : undefined;
     return (

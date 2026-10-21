@@ -17,6 +17,7 @@ import { canStopRun } from '../subagents';
 import type { StopState, SubagentNavItem } from '../subagents';
 import EllipsisText from './EllipsisText';
 import { SubagentIcon, SubagentState } from './SubagentState';
+import { agentColors } from './tokens';
 
 /**
  * The subagents an answer started (issue #54): one card with a row per run, robot, title, state and a chevron; a click
@@ -68,6 +69,8 @@ export default function SubagentCard({
                 display: 'flex',
                 flexDirection: 'column',
                 border: '1px solid rgba(0, 0, 0, 0.12)',
+                // the 3 px accent at the left, like the other cards of the answer (#192, #197)
+                borderLeft: `3px solid ${agentColors.subagent}`,
                 borderRadius: '4px',
                 overflow: 'hidden',
                 minWidth: 0,
@@ -106,7 +109,6 @@ export default function SubagentCard({
                             <span>
                                 <IconButton
                                     size="small"
-                                    color="error"
                                     data-testid="agent-subagent-stop"
                                     data-run={addressed(it)}
                                     aria-label={`Stop subagent ${it.title}`}
@@ -117,7 +119,7 @@ export default function SubagentCard({
                                         onStop(addressed(it));
                                     }}
                                     onMouseDown={(e) => e.stopPropagation()}
-                                    sx={{ flex: 'none' }}
+                                    sx={{ flex: 'none', color: 'text.secondary', '&:hover': { color: agentColors.red } }}
                                 >
                                     <StopCircleOutlinedIcon fontSize="small" />
                                 </IconButton>

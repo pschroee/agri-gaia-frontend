@@ -15,7 +15,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { TaskStatus } from '../../types/TaskStatus';
 import { IBackgroundTask } from '../../types/IBackgroundTask';
-import { getTaskStatusColor } from './utils';
+import { getTaskStatusColor, TASK_STATUS_LABEL } from './utils';
 
 export default function (props: {
     tasksList: IBackgroundTask[];
@@ -52,7 +52,7 @@ export default function (props: {
                                     </Grid>
                                     <Grid item xs={2}>
                                         <Typography sx={{ color: getTaskStatusColor(task.status) }}>
-                                            {task.status}
+                                            {TASK_STATUS_LABEL[task.status] ?? task.status}
                                         </Typography>
                                     </Grid>
                                     <Grid container item xs={2} alignItems="center">

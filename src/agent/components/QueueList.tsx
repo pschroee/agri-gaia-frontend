@@ -71,7 +71,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                         gridTemplateColumns: 'auto minmax(0, 1fr) auto',
                         alignItems: 'center',
                         columnGap: 1,
-                        px: 1.25,
+                        px: 1.5,
                         py: 0.75,
                     }}
                 >
@@ -115,7 +115,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                             display: 'flex',
                             alignItems: 'center',
                             gap: 1,
-                            px: 1.25,
+                            px: 1.5,
                             py: 0.5,
                             borderTop: 1,
                             borderColor: 'divider',
@@ -195,7 +195,7 @@ export default function QueueList({ chat, rows, error, onRemove, onSendNow }: Pr
                     sx={{
                         fontSize: 11.5,
                         color: 'error.main',
-                        px: 1.25,
+                        px: 1.5,
                         py: 0.5,
                         borderTop: rows.length ? 1 : 0,
                         borderColor: 'divider',

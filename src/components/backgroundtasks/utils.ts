@@ -6,6 +6,7 @@
 // SPDX-FileContributor: Maik Fruhner
 // SPDX-FileContributor: Prof. Dr.-Ing. Heiko Tapken
 // SPDX-FileContributor: Tobias Wamhof
+// SPDX-FileContributor: Philipp Schröer
 //
 // SPDX-License-Identifier: MIT
 
@@ -23,4 +24,17 @@ export function getTaskStatusColor(status: TaskStatusType) {
             return 'red';
     }
     return 'textPrimary';
+}
+
+/** What the list shows for a status: the raw values "created" and "inprogress" mean "queued" and "running". */
+export const TASK_STATUS_LABEL: Record<TaskStatusType, string> = {
+    [TaskStatus.created]: 'queued',
+    [TaskStatus.inprogress]: 'running',
+    [TaskStatus.completed]: 'completed',
+    [TaskStatus.failed]: 'failed',
+};
+
+/** Label of the footer button: "1 Task running · 1 queued", the same count as the tab "In Progress". */
+export function footerLabel(running: number, queued: number): string {
+    return `${running} ${running === 1 ? 'Task' : 'Tasks'} running${queued > 0 ? ` · ${queued} queued` : ''}`;
 }

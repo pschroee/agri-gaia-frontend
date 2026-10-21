@@ -102,6 +102,10 @@ describe('callAnchors', () => {
         expect(callAnchors(steps(3), ctx({ searches })).size).toBe(0);
         expect(callAnchors(steps(3), ctx({ searches, searchOn: true })).has('s2')).toBe(true);
     });
+    it('cuts after a subagent call: three and two calls make two pieces (#197)', () => {
+        const anchors = callAnchors(steps(5), ctx({ subagentCalls: new Set(['s3']) }));
+        expect(ids(splitAfter(steps(5), anchors))).toEqual(['s1,s2,s3', 's4,s5']);
+    });
     it('puts one piece at an anchor on the last call', () => {
         const anchors = callAnchors(steps(3), ctx({ approvals: [approval({ tool_call_id: 's3' })] }));
         expect(ids(splitAfter(steps(3), anchors))).toEqual(['s1,s2,s3']);

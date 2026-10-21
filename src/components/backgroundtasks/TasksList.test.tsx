@@ -35,4 +35,13 @@ describe('TasksList', () => {
         );
         expect(screen.getAllByLabelText('Started by the agent')).toHaveLength(1);
     });
+
+    it('shows queued and running instead of the raw statuses (#197)', () => {
+        const queued = { ...task(3), status: 'created' as const };
+        render(<TasksList tasksList={[task(1), queued]} onDelete={vi.fn()} rowHeight={60} onTaskDetails={vi.fn()} />);
+        expect(screen.getByText('running')).toBeTruthy();
+        expect(screen.getByText('queued')).toBeTruthy();
+        expect(screen.queryByText('created')).toBeNull();
+        expect(screen.queryByText('inprogress')).toBeNull();
+    });
 });

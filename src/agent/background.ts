@@ -7,6 +7,8 @@
 // gateway's note at the end of a task. Pure functions, after the gateway's own web/src/lib/background.ts and
 // systemnote.ts.
 import { formatElapsed } from './runState';
+import { RUN_STATUS_LABEL } from './subagents';
+import type { RunStatus } from './subagents';
 import type { BackgroundEvent, BackgroundState, BackgroundTask, PiEvent } from './types';
 
 /** Applies an SSE event "background". A throttled "output" does not overwrite an end that already arrived. */
@@ -119,6 +121,35 @@ export function backgroundSummary(list: BackgroundTask[]): string {
     const run = runningCount(list);
     const ended = list.length - run;
     return [run ? `${run} running` : '', ended ? `${ended} ended` : ''].filter(Boolean).join(' · ');
+}
+
+const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
+
+/**
+ * Title line of the "Background" strip (#197): "1 command running · 2 ended · 1 subagent done". The noun stands
+ * once per kind, at its first state; the subagent states are those of `runsSummary`.
+ */
+export function backgroundStripSummary(list: BackgroundTask[], statuses: RunStatus[]): string {
+    const run = runningCount(list);
+    const ended = list.length - run;
+    const parts: string[] = [];
+    if (run) parts.push(`${plural(run, 'command')} running`);
+    if (ended) parts.push(run ? `${ended} ended` : `${plural(ended, 'command')} ended`);
+    const order: RunStatus[] = ['running', 'idle', 'done', 'failed', 'stopped'];
+    let first = true;
+    for (const s of order) {
+        const n = statuses.filter((x) => x === s).length;
+        if (!n) continue;
+        const label = s === 'stopped' ? 'ended' : RUN_STATUS_LABEL[s];
+        parts.push(first ? `${plural(n, 'subagent')} ${label}` : `${n} ${label}`);
+        first = false;
+    }
+    return parts.join(' · ');
+}
+
+/** The tasks by their ID ("bg-3"), for the rows of bg_output and bg_stop. */
+export function backgroundById(list: BackgroundTask[]): Map<string, BackgroundTask> {
+    return new Map(list.map((t) => [t.id, t]));
 }
 
 /** Task per tool call that started it (bash with run_in_background, or moved there by the user). */
