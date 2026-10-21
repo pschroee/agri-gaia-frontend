@@ -648,7 +648,9 @@ export function blockedLine(c: Pick<Connection, 'host' | 'reason' | 'package' | 
         case 'version_mismatch':
             return `Blocked: ${pkg || c.host} is not the approved version`;
         case 'too_large':
-            return `Blocked: ${pkg || c.host} is too large for the sandbox – use a notebook run`;
+            return pkg
+                ? `Blocked: ${pkg} is too large for the sandbox – use a notebook run`
+                : `Blocked: download from ${c.host} is over 256 MB – too large for the sandbox`;
         case 'https_only':
             return `Blocked: ${c.host} – only https is allowed`;
         case 'sni_mismatch':
