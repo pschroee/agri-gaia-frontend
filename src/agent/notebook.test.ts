@@ -265,6 +265,37 @@ describe('the state of a run', () => {
         expect(runSeconds({ state: 'done', message: 'exit 0' }, NOW)).toBeUndefined();
     });
 
+    // Issue #203: the run's own start and end win over the job's times, which are the gateway's clock.
+    it('counts from the run\'s own start and end when the job carries them', () => {
+        const own = { run_started_at: '2026-10-16T14:05:02.000Z', run_ended_at: '2026-10-16T14:05:38.000Z' };
+        const jobTimes = { started_at: '2026-10-16T14:05:00.000Z', ended_at: '2026-10-16T14:05:46.000Z' };
+        expect(runSeconds({ state: 'done', message: 'exit 0 after 36 s', ...jobTimes, ...own }, NOW)).toBe(36);
+        // only the job's times: as before
+        expect(runSeconds({ state: 'done', message: 'exit 0', ...jobTimes }, NOW)).toBe(46);
+        // running: counted from the run's own start
+        expect(runSeconds({ state: 'running', message: 'running', started_at: jobTimes.started_at, run_started_at: own.run_started_at }, NOW)).toBe(
+            Math.floor((NOW - Date.parse(own.run_started_at)) / 1000),
+        );
+        // a run start without its end does not mix the two clocks
+        expect(
+            runSeconds({ state: 'done', message: 'exit 0', ...jobTimes, run_started_at: own.run_started_at }, NOW),
+        ).toBe(46);
+    });
+
+    it('shows the run\'s own start in the facts', () => {
+        const j = job({
+            state: 'done',
+            message: 'exit 0 after 36 s',
+            started_at: '2026-10-16T14:05:00.000Z',
+            ended_at: '2026-10-16T14:05:46.000Z',
+            run_started_at: '2026-10-16T14:06:02.000Z',
+            run_ended_at: '2026-10-16T14:06:38.000Z',
+        });
+        const facts = runFacts(j, data(), NOW);
+        expect(facts.find((f) => f.label === 'Duration')?.value).toBe('36 s');
+        expect(facts.find((f) => f.label === 'Started')?.value).toBe('14:06');
+    });
+
     it('writes the running time and the duration as the design does', () => {
         expect(formatRunClock(188)).toBe('3:08');
         expect(formatRunClock(222)).toBe('3:42');
