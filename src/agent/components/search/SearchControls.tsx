@@ -10,6 +10,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import StarIcon from '@mui/icons-material/Star';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import Alert from '@mui/material/Alert';
@@ -40,8 +41,11 @@ import {
     minutesText,
     targetFieldLabel,
     type BudgetForm,
+    metricWords,
+    paramsLine,
+    scoreText,
 } from '../../searchView';
-import { agentColors } from '../tokens';
+import { agentColors, MONO } from '../tokens';
 import {
     ADOPT_TEXT,
     BUDGET_DIALOG_TEXT,
@@ -72,6 +76,8 @@ type Props = {
     compact?: boolean;
     /** Which buttons: all (default), the stopping ones (card header) or the adjusting ones (card footer). */
     part?: 'all' | 'stop' | 'adjust';
+    /** The idx of the best trial so far: the adopt dialog marks it with a star. */
+    bestIdx?: number;
 };
 
 type Dlg = 'stop' | 'budget' | 'hint' | 'adopt' | undefined;
@@ -80,10 +86,28 @@ function useFullScreen(): boolean {
     return useMediaQuery('(max-width:599.95px)');
 }
 
+function adoptSummary(search: Search, trial: Trial, bestIdx?: number): ReactNode {
+    const o = search.objective;
+    const hasScore = typeof trial.score === 'number';
+    const params = hasScore ? paramsLine(trial.params, Object.keys(search.space ?? {})) : '';
+    return (
+        <>
+            <Box sx={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                {bestIdx === trial.idx && <StarIcon sx={{ fontSize: 16, color: 'primary.main' }} aria-label="Best trial so far" />}
+                <span>{hasScore ? `Trial ${trial.idx} · ${metricWords(o).short} ${scoreText(trial.score, o)}` : `Trial ${trial.idx}`}</span>
+            </Box>
+            {params && (
+                <Box sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', overflowWrap: 'anywhere' }}>{params}</Box>
+            )}
+        </>
+    );
+}
+
 function Confirm(props: {
     open: boolean;
     title: string;
     body: string;
+    summary?: ReactNode;
     detail?: string;
     action: string;
     danger?: boolean;
@@ -104,6 +128,11 @@ function Confirm(props: {
             <DialogTitle sx={{ fontSize: 17 }}>{props.title}</DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{ fontSize: 14 }}>{props.body}</DialogContentText>
+                {props.summary && (
+                    <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 1.5, py: 1.25, mt: 1.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {props.summary}
+                    </Box>
+                )}
                 {props.detail && (
                     <DialogContentText sx={{ fontSize: 13, color: 'text.secondary', mt: 1 }}>
                         {props.detail}
@@ -406,7 +435,7 @@ function HintForm(props: { search: Search; actions: ExperimentsActions; inline: 
     );
 }
 
-export function SearchControls({ search, trial, variant, actions, compact, part = 'all' }: Props) {
+export function SearchControls({ search, trial, variant, actions, compact, part = 'all', bestIdx }: Props) {
     const icons = part === 'adjust' ? false : (compact ?? variant === 'panel');
     const [dlg, setDlg] = useState<Dlg>();
     const [busy, setBusy] = useState(false);
@@ -540,6 +569,7 @@ export function SearchControls({ search, trial, variant, actions, compact, part 
                 open={dlg === 'adopt'}
                 title={adopt.title}
                 body={adopt.body}
+                summary={trial ? adoptSummary(search, trial, bestIdx) : undefined}
                 detail={adoptDetail(search, adoptIdx)}
                 action={adopt.action}
                 busy={busy}

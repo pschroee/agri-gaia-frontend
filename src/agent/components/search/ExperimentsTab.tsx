@@ -185,7 +185,7 @@ export default function ExperimentsTab({ onOpenChat }: { onOpenChat?: (chatId: s
         const ended = search.state === 'ended';
         body = (
             <Box sx={{ display: 'grid', gap: 2 }} data-testid="experiments-search">
-                <SearchHeader chatId={chatId} search={search} trials={list} stopping={state.stopping} trial={selected && search.state === 'running' ? selected : undefined} actions={actions} />
+                <SearchHeader chatId={chatId} search={search} trials={list} stopping={state.stopping} bestIdx={best?.idx} trial={selected && search.state === 'running' ? selected : undefined} actions={actions} />
                 {list.length > 0 && (
                     <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: ended ? 'minmax(260px, 5fr) minmax(0, 7fr)' : 'minmax(0, 1fr)', '@media (max-width: 1100px)': { gridTemplateColumns: 'minmax(0, 1fr)' } }}>
                         {ended && <FinalResult chatId={chatId} search={search} trials={list} check={check} />}
