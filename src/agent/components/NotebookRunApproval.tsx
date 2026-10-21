@@ -393,8 +393,6 @@ export default function NotebookRunApproval({
                 data-state={approval.state}
                 aria-label={`${decision.label}: ${fullTitle}`}
                 sx={{
-                    mt: 0.5,
-                    mx: 1,
                     border: 1,
                     borderColor: 'divider',
                     borderLeft: `3px solid ${TONE_COLOR[decision.tone]}`,
@@ -407,7 +405,7 @@ export default function NotebookRunApproval({
                     onClick={() => setOpen((o) => !o)}
                     aria-expanded={open}
                     aria-label={`${decision.label}: ${fullTitle}. ${open ? 'Hide code' : 'Show code'}`}
-                    sx={{ gap: 1, alignItems: 'baseline', minWidth: 0 }}
+                    sx={{ px: 1.5, gap: 1, alignItems: 'baseline', minWidth: 0 }}
                 >
                     <DecisionIcon tone={decision.tone} />
                     <Typography sx={{ fontSize: 12.5, color: TONE_COLOR[decision.tone], flex: 'none' }}>

@@ -37,6 +37,7 @@ import TimerOffIcon from '@mui/icons-material/TimerOff';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import UploadIcon from '@mui/icons-material/Upload';
 
+import { boundTo } from '../../callCards';
 import { useInternetContext } from '../../InternetContext';
 import { AGENT_NOTE_LABEL } from '../../notebook';
 import type { InternetApproval as InternetApprovalData, InternetGrant, InternetKind } from '../../internet';
@@ -383,14 +384,14 @@ export function InternetDecided({
             data-approval-id={approval.id}
             data-state={approval.state}
             aria-label={`${title}: ${state}`}
-            sx={{ mt: 0.5, mx: 1, border: 1, borderColor: 'divider', borderLeft: `3px solid ${agentColors.outline}`, borderRadius: 1, minWidth: 0 }}
+            sx={{ border: 1, borderColor: 'divider', borderLeft: `3px solid ${agentColors.outline}`, borderRadius: 1, minWidth: 0 }}
         >
             <ListItemButton
                 dense
                 onClick={() => setOpen((o) => !o)}
                 aria-expanded={open}
                 aria-controls={id}
-                sx={{ gap: 1, minWidth: 0, flexWrap: layout === 'panel' ? 'wrap' : 'nowrap', alignItems: 'center' }}
+                sx={{ px: 1.5, gap: 1, minWidth: 0, flexWrap: layout === 'panel' ? 'wrap' : 'nowrap', alignItems: 'center' }}
             >
                 {open ? <ExpandLessIcon fontSize="small" sx={{ flex: 'none' }} /> : <ExpandMoreIcon fontSize="small" sx={{ flex: 'none' }} />}
                 <KindIcon kind={data.kind} size={16} />
@@ -424,14 +425,13 @@ export function InternetDecidedRows({
     approvals,
     layout,
 }: {
-    steps: { id: string }[];
+    steps: { id: string; callId?: string }[];
     approvals: Approval[] | undefined;
     layout?: Layout;
 }) {
     const net = useInternetContext();
-    const ids = new Set(steps.map((s) => s.id));
     const list = (approvals ?? []).filter(
-        (a) => a.kind === 'internet_access' && !!a.internet && a.state !== 'pending' && !!a.tool_call_id && ids.has(a.tool_call_id),
+        (a) => a.kind === 'internet_access' && !!a.internet && a.state !== 'pending' && steps.some((s) => boundTo(a, s)),
     );
     if (list.length === 0) return null;
     return (

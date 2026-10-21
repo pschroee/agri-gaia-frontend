@@ -275,9 +275,9 @@ export default function SearchApproval({
                 data-approval-id={approval.id}
                 data-state={approval.state}
                 aria-label={`${decision.label}: ${title} ${data.title}`}
-                sx={{ mt: 0.5, mx: 1, border: 1, borderColor: 'divider', borderLeft: `3px solid ${TONE_COLOR[decision.tone]}`, borderRadius: 1, minWidth: 0 }}
+                sx={{ border: 1, borderColor: 'divider', borderLeft: `3px solid ${TONE_COLOR[decision.tone]}`, borderRadius: 1, minWidth: 0 }}
             >
-                <ListItemButton dense onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`${decision.label}: ${title} ${data.title}. ${open ? 'Hide details' : 'Show details'}`} sx={{ gap: 1, alignItems: 'baseline', minWidth: 0 }}>
+                <ListItemButton dense onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label={`${decision.label}: ${title} ${data.title}. ${open ? 'Hide details' : 'Show details'}`} sx={{ px: 1.5, gap: 1, alignItems: 'baseline', minWidth: 0 }}>
                     <DecisionIcon tone={decision.tone} />
                     <Typography sx={{ fontSize: 12.5, color: TONE_COLOR[decision.tone], flex: 'none' }}>{decision.label}</Typography>
                     <Typography sx={{ fontSize: 12.5, minWidth: 0, overflowWrap: 'anywhere' }}>{`${title} · ${data.title}${runs}${decision.suffix}`}</Typography>
