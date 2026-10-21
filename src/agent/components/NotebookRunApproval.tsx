@@ -169,7 +169,12 @@ function FileMeta({ file, entry }: { file: NotebookFile; entry: string }) {
                     {file.name}
                 </Typography>
                 <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-                    {file.name === entry && <Box component="span" sx={{ color: 'primary.main' }}>Entry file · </Box>}
+                    {file.name === entry && (
+                        <Box component="span" sx={{ color: 'primary.main' }}>
+                            {'Entry file · '}
+                            {entry.toLowerCase().endsWith('.ipynb') && 'runs as a notebook; outputs are saved · '}
+                        </Box>
+                    )}
                     {formatBytes(file.size)}
                     {file.sha256 && (
                         <>
