@@ -10,21 +10,8 @@ import {
     autoCompactOn,
     compactErrorText,
     compactNowState,
-    internetHint,
     settingErrorText,
 } from './settings';
-
-describe('internetHint', () => {
-    it('explains on and off', () => {
-        expect(internetHint({ internet: true, state: 'active' })).toMatch(/^Internet access on/);
-        expect(internetHint({ internet: true, state: 'active' })).toMatch(/agent can switch it off again itself/);
-        expect(internetHint({ internet: false, state: 'active' })).toMatch(/^Internet access off.*ask for internet/);
-    });
-    it('says when a change reaches a dormant chat', () => {
-        expect(internetHint({ internet: false, state: 'dormant' })).toMatch(/once the chat has loaded\.$/);
-        expect(internetHint({ internet: false, state: 'active' })).not.toMatch(/loaded/);
-    });
-});
 
 describe('settingErrorText and compactErrorText', () => {
     it('explains a 409 of /compact as the agent working', () => {

@@ -43,7 +43,7 @@ import PlanButton from './PlanButton';
 import PlanIndicator from './PlanIndicator';
 import SearchIndicator from './search/SearchIndicator';
 import TaskButton from './TaskButton';
-import InternetToggle from './InternetToggle';
+import InternetIndicator from './internet/InternetIndicator';
 import AgentDropZone from './AgentDropZone';
 import AgentMenuTheme from './AgentMenuTheme';
 import NewChatButton, { NewChatError } from './NewChatButton';
@@ -416,7 +416,7 @@ function ChatHeader() {
             >
                 {/* the same chip as in the panel header, only while something happens (issue #35) */}
                 <RunStateChip state={state} since={runSince(chat)} framed />
-                <InternetToggle chat={chat} />
+                <InternetIndicator chat={chat} />
                 <PlanIndicator
                     plan={shownPlan}
                     variant="page"
