@@ -269,7 +269,7 @@ export default function DeploymentCard({
                 minWidth: 0,
                 borderLeft: 3,
                 borderLeftColor: SIDE[view],
-                ...(wide ? { py: 1.25, pr: 2, pl: 1 } : { p: 1, pr: 1.5 }),
+                ...(wide ? { py: 1.25, pr: 2, pl: 1.5 } : { p: 1, pr: 1.5, pl: 1.5 }),
             }}
         >
             {head}

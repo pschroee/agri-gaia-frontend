@@ -227,7 +227,7 @@ export default function NotebookRunCard({
             aria-label={entry ? `Notebook run ${entry}: ${label}` : `Notebook run: ${label}`}
             sx={{ borderLeft: `3px solid ${EDGE[view]}`, overflow: 'hidden', minWidth: 0 }}
         >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: panel ? 1.5 : 2, py: panel ? 1 : 1.25 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: panel ? 1 : 1.25 }}>
                 <Box sx={{ flex: 'none', width: 18, display: 'flex', justifyContent: 'center' }}>
                     <StateIcon view={view} />
                 </Box>
@@ -273,7 +273,7 @@ export default function NotebookRunCard({
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 1.25,
-                    px: panel ? 1.5 : 2,
+                    px: 1.5,
                     py: panel ? 1.25 : 1.5,
                     minWidth: 0,
                 }}

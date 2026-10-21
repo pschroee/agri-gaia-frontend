@@ -16,6 +16,7 @@ import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 
+import { boundTo } from '../../callCards';
 import { isProposal } from '../../searchApproval';
 import { refusalText, searchToolOf } from '../../searchView';
 import type { Step } from '../../transcript';
@@ -32,7 +33,7 @@ export function SearchRefusedLine({ label, text, full }: { label: string; text: 
         <Box
             role="status"
             data-testid="agent-search-refused"
-            sx={{ mx: 1, mt: 0.5, border: 1, borderColor: 'divider', borderLeft: 3, borderLeftColor: 'error.main', borderRadius: 1, px: 1.5, py: 0.5, minWidth: 0 }}
+            sx={{ border: 1, borderColor: 'divider', borderLeft: 3, borderLeftColor: 'error.main', borderRadius: 1, px: 1.5, py: 0.5, minWidth: 0 }}
         >
             <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, minWidth: 0 }}>
                 <BlockOutlinedIcon sx={{ fontSize: 16, color: 'error.main', alignSelf: 'center', flex: 'none' }} aria-hidden />
@@ -65,10 +66,10 @@ export default function SearchBlocks({ steps, approvals, env }: { steps: Step[];
             blocks.push(<SearchRefusedLine key={`${step.id}-refused`} label="Refused ·" text={`Start a training search · ${refusalText(step.result?.text)}`} full={step.result?.text} />);
         if (tool === 'search_next' && failed)
             blocks.push(<SearchRefusedLine key={`${step.id}-refused`} label="Trial refused:" text={refusalText(step.result?.text)} full={step.result?.text} />);
-        const approval = approvals?.find((a) => a.kind === 'search' && a.tool_call_id === step.id && isProposal(a.search) && a.state !== 'pending');
+        const approval = approvals?.find((a) => a.kind === 'search' && boundTo(a, step) && isProposal(a.search) && a.state !== 'pending');
         if (approval && isProposal(approval.search))
             blocks.push(<SearchApproval key={`${approval.id}-decided`} approval={approval} data={approval.search} layout={env.layout} />);
-        for (const s of env.experiments.searches.filter((x) => x.tool_call_id === step.id))
+        for (const s of env.experiments.searches.filter((x) => boundTo(x, step)))
             blocks.push(<SearchCard key={s.id} search={s} env={env} />);
     }
     return blocks.length ? <>{blocks}</> : null;
