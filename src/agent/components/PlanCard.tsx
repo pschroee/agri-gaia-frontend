@@ -87,6 +87,8 @@ import {
     stepCount,
     stepMain,
     stepPhase,
+    stepRefLink,
+    stepRefs,
     stepRuntime,
     stepTechnical,
     stepTimeLine,
@@ -129,6 +131,7 @@ import {
     AGENT_TITLE_LABEL,
     ASKS_AGAIN,
     cancelAllowed,
+    stepRefText,
     waitingForApproval,
     WAITING_INFO,
 } from '../planText';
@@ -761,6 +764,36 @@ function StepProgress({ plan, step, now, working }: { plan: Plan; step: PlanStep
 }
 
 /** One step of the card: number, effect, state, the gateway's summary and, where there is one, its progress. */
+/** One line per placeholder that resolved: which object an earlier step created (gateway issue #177). */
+function StepRefs({ plan, step }: { plan: Plan; step: PlanStep }): ReactElement | null {
+    const refs = stepRefs(plan, step);
+    if (refs.length === 0) return null;
+    return (
+        <Box component="ul" data-testid="agent-plan-step-refs" sx={{ listStyle: 'none', m: 0, mt: 0.25, p: 0 }}>
+            {refs.map((r) => {
+                const href = stepRefLink(r);
+                const text = stepRefText(r);
+                const idAt = text.indexOf(` ${r.id}`) + 1;
+                return (
+                    <Typography key={r.step} component="li" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                        {href ? (
+                            <>
+                                {`◦ ${text.slice(0, idAt)}`}
+                                <Link href={href} underline="always" sx={{ fontSize: 12 }}>
+                                    {r.id}
+                                </Link>
+                                {text.slice(idAt + r.id.length)}
+                            </>
+                        ) : (
+                            `◦ ${text}`
+                        )}
+                    </Typography>
+                );
+            })}
+        </Box>
+    );
+}
+
 function StepItem({
     plan,
     step,
@@ -839,6 +872,7 @@ function StepItem({
                         {main.head}
                     </Typography>
                     <SummaryDetails details={main.details} />
+                    <StepRefs plan={plan} step={step} />
                     {/* Up to LISTED_FILES the summary lists the files itself; above it the step shows the folders and
                         the collapsed list of every file (gateway issue #172). */}
                     {step.uploads && step.uploads.files > LISTED_FILES && (

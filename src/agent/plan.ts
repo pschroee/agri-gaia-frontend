@@ -688,6 +688,32 @@ export function planOutputs(plan: Plan): WatchOutput[] {
     return out;
 }
 
+/** The object an earlier step created that a later step's path or body names with `{{stepN.id}}`. */
+export type StepRef = { step: number; resource: string; id: string; label?: string };
+
+/**
+ * The placeholders of a step that point at a finished step with a known object: path and body are searched, each
+ * number counts once, ascending. A step that is not done, or created nothing, leaves its placeholder out.
+ */
+export function stepRefs(plan: Plan, step: PlanStep): StepRef[] {
+    const text = `${step.path ?? ''} ${JSON.stringify(step.body ?? '')}`;
+    const numbers = new Set<number>();
+    for (const m of text.matchAll(/\{\{step([1-9][0-9]?)\.id\}\}/g)) numbers.add(Number(m[1]));
+    const refs: StepRef[] = [];
+    for (const n of [...numbers].sort((a, b) => a - b)) {
+        const ref = plan.steps.find((s) => s.idx === n);
+        if (!ref || ref.state !== 'done' || !ref.created_id) continue;
+        const label = ref.outputs?.find((o) => o.id === ref.created_id)?.label;
+        refs.push({ step: n, resource: ref.created_resource ?? '', id: ref.created_id, ...(label ? { label } : {}) });
+    }
+    return refs;
+}
+
+/** The platform page of a referenced object; a training container or a task has none. */
+export function stepRefLink(r: StepRef): string | undefined {
+    return outputLink({ resource: r.resource, id: r.id });
+}
+
 /** The kinds of object a plan has produced, as the sentences name them: "Dataset and model"; '' without any. */
 export function createdSubject(plan: Plan): string {
     const kinds = [...new Set(planOutputs(plan).map(outputKind))].filter((k): k is OutputKind => !!k);

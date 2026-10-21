@@ -42,6 +42,8 @@ import {
     stepMain,
     stepMessage,
     stepPhase,
+    stepRefLink,
+    stepRefs,
     stepStatus,
     stepTechnical,
     stepTimeLine,
@@ -664,5 +666,30 @@ describe('plan state from events (issue #166)', () => {
         expect(out[1].approving).toBeUndefined();
         expect(out[2].approving).toBeUndefined();
         expect(planLabel(out[0], Date.now())).toBe('Approving…');
+    });
+});
+
+describe('stepRefs (#177)', () => {
+    const done = step({ idx: 1, state: 'done', created_resource: 'dataset', created_id: '66' });
+    const later = (over: Partial<PlanStep> = {}) => step({ idx: 2, path: '/x/{{step1.id}}', ...over });
+    const planOf = (...steps: PlanStep[]) => ({ steps }) as unknown as Plan;
+
+    it('finds a placeholder in the path and in the body, each number once', () => {
+        const s = later({ body: { a: '{{step1.id}}', b: '{{step1.id}}' } });
+        expect(stepRefs(planOf(done, s), s)).toEqual([{ step: 1, resource: 'dataset', id: '66' }]);
+    });
+    it('is empty while the earlier step is not done or created nothing', () => {
+        const s = later();
+        expect(stepRefs(planOf({ ...done, state: 'running' }, s), s)).toEqual([]);
+        expect(stepRefs(planOf({ ...done, created_id: undefined }, s), s)).toEqual([]);
+    });
+    it('takes the label from the outputs of the earlier step', () => {
+        const d = { ...done, outputs: [{ resource: 'dataset', id: '66', label: 'mnist-train' }] };
+        const s = later();
+        expect(stepRefs(planOf(d, s), s)[0].label).toBe('mnist-train');
+    });
+    it('links datasets and models, not training containers', () => {
+        expect(stepRefLink({ step: 1, resource: 'dataset', id: '66' })).toBe('/data?dataset=66');
+        expect(stepRefLink({ step: 1, resource: 'training', id: '4' })).toBeUndefined();
     });
 });

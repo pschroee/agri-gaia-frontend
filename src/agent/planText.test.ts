@@ -27,6 +27,7 @@ import {
     runningPlansLine,
     statusProgress,
     statusWaiting,
+    stepRefText,
     stopJobAllowed,
 } from './planText';
 
@@ -316,5 +317,17 @@ describe('the log tail', () => {
         expect(kept[19]).toBe('line 29');
         expect(logTail('a\n\nb')).toBe('a\nb');
         expect(logTail(undefined)).toBe('');
+    });
+});
+
+describe('stepRefText (#177)', () => {
+    it('names the kind and the id, and the label when there is one', () => {
+        expect(stepRefText({ step: 1, resource: 'dataset', id: '66' })).toBe('Step 1 created dataset 66');
+        expect(stepRefText({ step: 1, resource: 'dataset', id: '66', label: 'a-train' })).toBe(
+            'Step 1 created dataset 66 "a-train"',
+        );
+        expect(stepRefText({ step: 3, resource: 'training', id: '4' })).toBe('Step 3 created training container 4');
+        expect(stepRefText({ step: 2, resource: 'model', id: '9' })).toBe('Step 2 created model 9');
+        expect(stepRefText({ step: 2, resource: '', id: '9' })).toBe('Step 2 created resource 9');
     });
 });

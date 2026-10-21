@@ -433,3 +433,23 @@ describe('PlanCard step starting (#176)', () => {
         expect(rows[1].getAttribute('data-status')).toBe('open');
     });
 });
+
+describe('plan step references (#177)', () => {
+    const refPlan = (first: Partial<PlanStep>) =>
+        plan({
+            steps: [
+                step({ idx: 1, created_resource: 'dataset', created_id: '66', ...first }),
+                step({ idx: 2, path: '/datasets/{{step1.id}}/split', state: 'running' }),
+            ],
+        });
+    it('RendersStepRefAfterRun', () => {
+        render(<PlanCard plan={refPlan({ state: 'done' })} onControl={vi.fn()} />);
+        const refs = screen.getByTestId('agent-plan-step-refs');
+        expect(refs.textContent).toContain('Step 1 created dataset 66');
+        expect(within(refs).getByRole('link').getAttribute('href')).toBe('/data?dataset=66');
+    });
+    it('NoStepRefBeforeRun', () => {
+        render(<PlanCard plan={refPlan({ state: 'open', created_id: undefined })} onControl={vi.fn()} />);
+        expect(screen.queryByTestId('agent-plan-step-refs')).toBeNull();
+    });
+});
