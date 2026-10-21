@@ -603,6 +603,8 @@ export function reasonText(code: string | undefined): string {
             return 'not in the list';
         case 'version_mismatch':
             return 'other version';
+        case 'too_large':
+            return 'too large for the sandbox';
         case 'https_only':
             return 'only https';
         case 'sni_mismatch':
@@ -645,6 +647,8 @@ export function blockedLine(c: Pick<Connection, 'host' | 'reason' | 'package' | 
             return `Blocked: ${pkg || c.host} is not in the allowed packages`;
         case 'version_mismatch':
             return `Blocked: ${pkg || c.host} is not the approved version`;
+        case 'too_large':
+            return `Blocked: ${pkg || c.host} is too large for the sandbox – use a notebook run`;
         case 'https_only':
             return `Blocked: ${c.host} – only https is allowed`;
         case 'sni_mismatch':

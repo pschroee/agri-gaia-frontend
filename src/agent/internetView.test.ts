@@ -370,6 +370,13 @@ describe('refusals', () => {
         expect(reasonText(undefined)).toBe('refused');
     });
 
+    it('words the too_large refusal', () => {
+        expect(reasonText('too_large')).toBe('too large for the sandbox');
+        expect(blockedLine({ host: 'pypi.org', reason: 'too_large', package: 'torch' })).toBe(
+            'Blocked: pip:torch is too large for the sandbox – use a notebook run',
+        );
+    });
+
     it('writes the blocked line under a call', () => {
         expect(blockedLine({ host: 'github.com', reason: 'not_listed' })).toBe('Blocked: github.com is not in the allowed sites');
         expect(blockedLine({ host: 'pypi.org', reason: 'package_not_listed', package: 'opencv-python' })).toBe(
