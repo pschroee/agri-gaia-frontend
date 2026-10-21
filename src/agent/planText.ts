@@ -457,5 +457,7 @@ export function stepRefText(r: StepRef): string {
             : res.startsWith('image') || res.startsWith('container')
               ? 'image'
               : 'resource';
-    return `Step ${r.step} created ${noun} ${r.id}${r.label ? ` "${r.label}"` : ''}`;
+    const label = r.label?.trim();
+    const repeats = !!label && label.toLowerCase() === `${noun} ${r.id}`;
+    return `Step ${r.step} created ${noun} ${r.id}${label && !repeats ? ` "${r.label}"` : ''}`;
 }
