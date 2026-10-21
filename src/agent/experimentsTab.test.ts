@@ -95,10 +95,10 @@ describe('table', () => {
     it('offers Adopt only for a finished trial of a running search and Stop only for the open one (G8)', () => {
         const s = makeSearch();
         const [t1, , , t4] = rowsOf(s, trials());
-        expect(rowMenu(t1, s)).toEqual({ adopt: true, stop: false });
-        expect(rowMenu(t4, s)).toEqual({ adopt: false, stop: true });
-        expect(rowMenu(t1, makeSearch({ state: 'ended' }))).toEqual({ adopt: false, stop: false });
-        expect(rowMenu({ ...t1, trial: makeTrial(0, { idx: 0 }) }, undefined)).toEqual({ adopt: false, stop: false });
+        expect(rowMenu(t1, s)).toEqual({ adopt: true, stop: false, open: false });
+        expect(rowMenu(t4, s)).toEqual({ adopt: false, stop: true, open: false });
+        expect(rowMenu(t1, makeSearch({ state: 'ended' }))).toEqual({ adopt: false, stop: false, open: false });
+        expect(rowMenu({ ...t1, trial: makeTrial(0, { idx: 0 }) }, undefined)).toEqual({ adopt: false, stop: false, open: false });
     });
 });
 
