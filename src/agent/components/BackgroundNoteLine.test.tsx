@@ -13,14 +13,15 @@ import BackgroundNoteLine from './BackgroundNoteLine';
 
 afterEach(cleanup);
 
-const TEXT = 'Background task bg-3 finished: exit 0, runtime 0:08\nCommand: sleep 8';
+const TEXT =
+    'Background task bg-3 finished: exit 0, runtime 0:08\n<<<agw-5f0c\nCommand: sleep 8\nLast lines (of 1):\ndone\nagw-5f0c>>>';
 
 describe('BackgroundNoteLine', () => {
     it('has no indent of its own', () => {
         render(<BackgroundNoteLine note={parseBackgroundNote(TEXT)} text={TEXT} />);
         const style = getComputedStyle(screen.getByTestId('agent-background-note'));
-        expect(style.paddingLeft).toBe('');
-        expect(style.paddingRight).toBe('');
+        expect(style.paddingLeft).toMatch(/^(0|0px)?$/);
+        expect(style.paddingRight).toMatch(/^(0|0px)?$/);
     });
 
     it('shows its details with the margin and rule of the thinking text', () => {
