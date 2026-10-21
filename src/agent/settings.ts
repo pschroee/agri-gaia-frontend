@@ -69,20 +69,3 @@ export const autoCompactOn = (chat: Pick<Chat, 'auto_compact'> | undefined): boo
 export const approvalWho = (a: Pick<Approval, 'session'>): string =>
     a.session && a.session !== 'main' ? 'A subagent' : 'The agent';
 
-/**
- * Texts of the approval card for an internet request (agw-internet, MCP request_internet, REST request_internet): who asks, the reason the
- * agent gave (the approval's name; the gateway writes "(no reason given)" without one), and what approving does.
- */
-export function internetApprovalText(a: Pick<Approval, 'session' | 'name' | 'via'>): {
-    title: string;
-    reason?: string;
-    explain: string;
-} {
-    const reason = a.name?.trim();
-    return {
-        title: `${approvalWho(a)} asks for internet access`,
-        reason: reason && reason !== '(no reason given)' ? reason : undefined,
-        explain:
-            'Allowing switches on internet access for this chat; it stays on until the agent switches it off again or you do with the globe in the chat header. Rejecting keeps the agent offline.',
-    };
-}

@@ -52,6 +52,8 @@ import StepList from './StepList';
 import type { StepControls } from './StepList';
 import SubagentCard from './SubagentCard';
 import NotebookRunApproval from './NotebookRunApproval';
+import { BlockedRowsProvider } from './internet/BlockedRows';
+import { InternetDecidedRows } from './internet/InternetApproval';
 import NotebookRunCard from './NotebookRunCard';
 import CodeChangeApproval from './search/CodeChangeApproval';
 import SearchBlocks from './search/SearchBlocks';
@@ -331,6 +333,7 @@ export function AgentBlock({
                     <Fragment key={`steps-${p.steps[0]?.id ?? i}`}>
                         <StepList steps={p.steps} controls={controls} expand={thinking} />
                         {notebookRuns(p.steps)}
+                        <InternetDecidedRows steps={p.steps} approvals={approvals} layout={dense ? 'panel' : 'page'} />
                         {planEnv?.search && <SearchBlocks steps={p.steps} approvals={approvals} env={planEnv.search} />}
                         {deployments.map((d) => (
                             <DeploymentCard key={d.key} data={d.data} job={d.job} layout={dense ? 'panel' : 'page'} />
@@ -717,6 +720,7 @@ export default function Conversation({
 
     return (
         // only the empty chat fills the height (its line sits in the middle); otherwise approvals follow right after
+        <BlockedRowsProvider chatId={chat?.id}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, flex: empty ? 1 : 'none', minWidth: 0 }}>
             {resumesPlaced.top.map((r) => (
                 <ResumeBlock key={`resume-${r.id}`} resume={r} onRetry={retryOf(r)} />
@@ -817,5 +821,6 @@ export default function Conversation({
                 <WorkingBar />
             )}
         </Box>
+        </BlockedRowsProvider>
     );
 }

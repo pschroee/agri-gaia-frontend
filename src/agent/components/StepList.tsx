@@ -29,6 +29,7 @@ import type { StepGroup } from '../skillStep';
 import type { StopState, SubagentNavItem } from '../subagents';
 import { abortLabel } from '../transcript';
 import type { Step, StepStatus } from '../transcript';
+import BlockedRows from './internet/BlockedRows';
 import StepDetail from './StepDetail';
 import { agentColors, blockSx, MONO } from './tokens';
 
@@ -345,6 +346,7 @@ function StepRow({
                     {error}
                 </Typography>
             )}
+            <BlockedRows toolCallId={s.id} tool={s.tool} />
             <Collapse in={open} unmountOnExit>
                 <StepDetail step={s} />
             </Collapse>
