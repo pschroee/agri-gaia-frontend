@@ -305,3 +305,13 @@ describe('a decided approval', () => {
         expect(screen.getByText(/no decision within the time limit, not run/)).toBeTruthy();
     });
 });
+
+describe('the decided line sits flush with the tool groups (issue #192)', () => {
+    it('has no side margin', () => {
+        render(<NotebookRunApproval approval={approval({ state: 'approved' })} data={data()} layout="panel" />);
+        const box = screen.getByTestId('agent-notebook-approval');
+        const style = getComputedStyle(box);
+        expect(['', '0px']).toContain(style.marginLeft);
+        expect(['', '0px']).toContain(style.marginRight);
+    });
+});

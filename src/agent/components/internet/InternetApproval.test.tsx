@@ -138,6 +138,13 @@ describe('the decided line', () => {
             ...over,
         }) as InternetGrant;
 
+    it('sits flush with the tool groups, without side margin (issue #192)', () => {
+        render(<InternetDecided approval={approval({ state: 'approved', decided_at: '2026-10-21T14:08:00.000Z' })} grant={grant()} />);
+        const style = getComputedStyle(screen.getByTestId('agent-internet-decided'));
+        expect(['', '0px']).toContain(style.marginLeft);
+        expect(['', '0px']).toContain(style.marginRight);
+    });
+
     it('opens to the list without buttons', () => {
         render(<InternetDecided approval={approval({ state: 'approved', decided_at: '2026-10-21T14:08:00.000Z' })} grant={grant()} />);
         const row = screen.getByTestId('agent-internet-decided');
