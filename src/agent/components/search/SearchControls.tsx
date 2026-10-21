@@ -10,6 +10,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import StarIcon from '@mui/icons-material/Star';
 import StopIcon from '@mui/icons-material/Stop';
 import TuneIcon from '@mui/icons-material/Tune';
 import Alert from '@mui/material/Alert';
@@ -22,6 +23,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
+import InputAdornment from '@mui/material/InputAdornment';
 import IconButton from '@mui/material/IconButton';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
@@ -39,8 +41,11 @@ import {
     minutesText,
     targetFieldLabel,
     type BudgetForm,
+    metricWords,
+    paramsLine,
+    scoreText,
 } from '../../searchView';
-import { agentColors } from '../tokens';
+import { agentColors, MONO } from '../tokens';
 import {
     ADOPT_TEXT,
     BUDGET_DIALOG_TEXT,
@@ -71,6 +76,8 @@ type Props = {
     compact?: boolean;
     /** Which buttons: all (default), the stopping ones (card header) or the adjusting ones (card footer). */
     part?: 'all' | 'stop' | 'adjust';
+    /** The idx of the best trial so far: the adopt dialog marks it with a star. */
+    bestIdx?: number;
 };
 
 type Dlg = 'stop' | 'budget' | 'hint' | 'adopt' | undefined;
@@ -79,10 +86,28 @@ function useFullScreen(): boolean {
     return useMediaQuery('(max-width:599.95px)');
 }
 
+function adoptSummary(search: Search, trial: Trial, bestIdx?: number): ReactNode {
+    const o = search.objective;
+    const hasScore = typeof trial.score === 'number';
+    const params = hasScore ? paramsLine(trial.params, Object.keys(search.space ?? {})) : '';
+    return (
+        <>
+            <Box sx={{ fontSize: 13, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                {bestIdx === trial.idx && <StarIcon sx={{ fontSize: 16, color: 'primary.main' }} aria-label="Best trial so far" />}
+                <span>{hasScore ? `Trial ${trial.idx} · ${metricWords(o).short} ${scoreText(trial.score, o)}` : `Trial ${trial.idx}`}</span>
+            </Box>
+            {params && (
+                <Box sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', overflowWrap: 'anywhere' }}>{params}</Box>
+            )}
+        </>
+    );
+}
+
 function Confirm(props: {
     open: boolean;
     title: string;
     body: string;
+    summary?: ReactNode;
     detail?: string;
     action: string;
     danger?: boolean;
@@ -103,6 +128,11 @@ function Confirm(props: {
             <DialogTitle sx={{ fontSize: 17 }}>{props.title}</DialogTitle>
             <DialogContent>
                 <DialogContentText sx={{ fontSize: 14 }}>{props.body}</DialogContentText>
+                {props.summary && (
+                    <Box sx={{ bgcolor: 'grey.100', borderRadius: 1, px: 1.5, py: 1.25, mt: 1.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {props.summary}
+                    </Box>
+                )}
                 {props.detail && (
                     <DialogContentText sx={{ fontSize: 13, color: 'text.secondary', mt: 1 }}>
                         {props.detail}
@@ -131,8 +161,42 @@ function Confirm(props: {
     );
 }
 
-/** One budget row: a number field and the box "Not set". */
+const BUDGET_GRID = {
+    display: 'grid',
+    gridTemplateColumns: { xs: 'minmax(0, 1fr)', sm: '120px minmax(0, 220px) 1fr' },
+    columnGap: 2,
+    rowGap: 0.75,
+    alignItems: 'start',
+    mb: 1.5,
+} as const;
+
+function RowName({ children }: { children: string }) {
+    return <Typography sx={{ fontSize: 14, pt: { xs: 0, sm: 1.25 } }}>{children}</Typography>;
+}
+
+function NotSet({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+    return (
+        <FormControlLabel
+            control={<Checkbox size="small" checked={checked} onChange={(e) => onChange(e.target.checked)} />}
+            label={<Typography sx={{ fontSize: 13 }}>Not set</Typography>}
+            sx={{ mt: 0.5 }}
+        />
+    );
+}
+
+function FieldNote(props: { error?: string; help?: string }) {
+    if (props.error)
+        return (
+            <Typography role="alert" sx={{ fontSize: 12, color: 'error.main', mt: 0.25 }}>
+                {props.error}
+            </Typography>
+        );
+    return props.help ? <Typography sx={{ fontSize: 12, color: agentColors.muted, mt: 0.25 }}>{props.help}</Typography> : null;
+}
+
+/** One budget row: row name, a number field with its note, and the box "Not set". */
 function BudgetRow(props: {
+    rowLabel: string;
     label: string;
     set: boolean;
     value: string;
@@ -141,10 +205,13 @@ function BudgetRow(props: {
     onSet: (set: boolean) => void;
     onValue: (v: string) => void;
     adornment?: string;
+    startAdornment?: string;
+    autoFocus?: boolean;
 }) {
     return (
-        <Box sx={{ mb: 1.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box sx={BUDGET_GRID}>
+            <RowName>{props.rowLabel}</RowName>
+            <Box>
                 <TextField
                     size="small"
                     type="number"
@@ -154,26 +221,20 @@ function BudgetRow(props: {
                     error={!!props.error}
                     onChange={(e) => props.onValue(e.target.value)}
                     inputProps={{ 'aria-label': props.label }}
-                    InputProps={props.adornment ? { endAdornment: <span>{props.adornment}</span> } : undefined}
-                    sx={{ flex: '1 1 200px' }}
+                    autoFocus={props.autoFocus}
+                    InputProps={{
+                        startAdornment: props.startAdornment ? (
+                            <InputAdornment position="start">{props.startAdornment}</InputAdornment>
+                        ) : undefined,
+                        endAdornment: props.adornment ? (
+                            <InputAdornment position="end">{props.adornment}</InputAdornment>
+                        ) : undefined,
+                    }}
+                    fullWidth
                 />
-                <FormControlLabel
-                    control={
-                        <Checkbox size="small" checked={!props.set} onChange={(e) => props.onSet(!e.target.checked)} />
-                    }
-                    label={<Typography sx={{ fontSize: 13 }}>Not set</Typography>}
-                    sx={{ mt: 0.5 }}
-                />
+                <FieldNote error={props.error} help={props.help} />
             </Box>
-            {props.error ? (
-                <Typography role="alert" sx={{ fontSize: 12, color: 'error.main', mt: 0.25 }}>
-                    {props.error}
-                </Typography>
-            ) : (
-                props.help && (
-                    <Typography sx={{ fontSize: 12, color: agentColors.muted, mt: 0.25 }}>{props.help}</Typography>
-                )
-            )}
+            <NotSet checked={!props.set} onChange={(v) => props.onSet(!v)} />
         </Box>
     );
 }
@@ -211,8 +272,9 @@ function BudgetDialog(props: { search: Search; actions: ExperimentsActions; onCl
             <DialogTitle sx={{ fontSize: 17, pb: 0.5 }}>Change budget</DialogTitle>
             <DialogContent>
                 <Typography sx={{ fontSize: 12, color: 'text.secondary', mb: 1.5 }}>{budgetUsedText(search)}</Typography>
-                <DialogContentText sx={{ fontSize: 13, mb: 2 }}>{BUDGET_DIALOG_TEXT}</DialogContentText>
                 <BudgetRow
+                    rowLabel="Runs"
+                    autoFocus
                     label="Number of runs"
                     set={form.runs.set}
                     value={form.runs.value}
@@ -221,51 +283,43 @@ function BudgetDialog(props: { search: Search; actions: ExperimentsActions; onCl
                     onSet={(set) => setForm({ ...form, runs: { ...form.runs, set } })}
                     onValue={(value) => setForm({ ...form, runs: { ...form.runs, value } })}
                 />
-                <Box sx={{ mb: 1.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, flexWrap: 'wrap' }}>
-                        <TextField
-                            size="small"
-                            type="number"
-                            label="Hours"
-                            value={form.timeSet ? form.hours : ''}
-                            disabled={!form.timeSet}
-                            error={!!errors.time}
-                            onChange={(e) => setForm({ ...form, hours: e.target.value })}
-                            sx={{ flex: '1 1 90px' }}
-                        />
-                        <TextField
-                            size="small"
-                            type="number"
-                            label="Minutes"
-                            value={form.timeSet ? form.minutes : ''}
-                            disabled={!form.timeSet}
-                            error={!!errors.time}
-                            onChange={(e) => setForm({ ...form, minutes: e.target.value })}
-                            sx={{ flex: '1 1 90px' }}
-                        />
-                        <FormControlLabel
-                            control={
-                                <Checkbox
-                                    size="small"
-                                    checked={!form.timeSet}
-                                    onChange={(e) => setForm({ ...form, timeSet: !e.target.checked })}
-                                />
-                            }
-                            label={<Typography sx={{ fontSize: 13 }}>Not set</Typography>}
-                            sx={{ mt: 0.5 }}
+                <Box sx={BUDGET_GRID}>
+                    <RowName>Compute time</RowName>
+                    <Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                            <TextField
+                                size="small"
+                                type="number"
+                                label="Hours"
+                                value={form.timeSet ? form.hours : ''}
+                                disabled={!form.timeSet}
+                                error={!!errors.time}
+                                onChange={(e) => setForm({ ...form, hours: e.target.value })}
+                                InputProps={{ endAdornment: <InputAdornment position="end">h</InputAdornment> }}
+                                sx={{ flex: 1, minWidth: 0 }}
+                            />
+                            <TextField
+                                size="small"
+                                type="number"
+                                label="Minutes"
+                                value={form.timeSet ? form.minutes : ''}
+                                disabled={!form.timeSet}
+                                error={!!errors.time}
+                                onChange={(e) => setForm({ ...form, minutes: e.target.value })}
+                                InputProps={{ endAdornment: <InputAdornment position="end">min</InputAdornment> }}
+                                sx={{ flex: 1, minWidth: 0 }}
+                            />
+                        </Box>
+                        <FieldNote
+                            error={errors.time}
+                            help={`Compute time · ${minutesText(used?.compute_minutes ?? 0)} used`}
                         />
                     </Box>
-                    {errors.time ? (
-                        <Typography role="alert" sx={{ fontSize: 12, color: 'error.main', mt: 0.25 }}>
-                            {errors.time}
-                        </Typography>
-                    ) : (
-                        <Typography sx={{ fontSize: 12, color: agentColors.muted, mt: 0.25 }}>
-                            Compute time · {minutesText(used?.compute_minutes ?? 0)} used
-                        </Typography>
-                    )}
+                    <NotSet checked={!form.timeSet} onChange={(v) => setForm({ ...form, timeSet: !v })} />
                 </Box>
                 <BudgetRow
+                    rowLabel="Target"
+                    startAdornment={goalSign(search.objective)}
                     label={targetFieldLabel(search.objective)}
                     set={form.target.set}
                     value={form.target.value}
@@ -275,6 +329,7 @@ function BudgetDialog(props: { search: Search; actions: ExperimentsActions; onCl
                     onValue={(value) => setForm({ ...form, target: { ...form.target, value } })}
                 />
                 <BudgetRow
+                    rowLabel="Patience"
                     label="Runs without improvement"
                     set={form.patience.set}
                     value={form.patience.value}
@@ -283,6 +338,7 @@ function BudgetDialog(props: { search: Search; actions: ExperimentsActions; onCl
                     onSet={(set) => setForm({ ...form, patience: { ...form.patience, set } })}
                     onValue={(value) => setForm({ ...form, patience: { ...form.patience, value } })}
                 />
+                <DialogContentText sx={{ fontSize: 13, mb: 1.5 }}>{BUDGET_DIALOG_TEXT}</DialogContentText>
                 {error && (
                     <Alert severity="error" sx={{ fontSize: 13 }}>
                         {error}
@@ -379,7 +435,7 @@ function HintForm(props: { search: Search; actions: ExperimentsActions; inline: 
     );
 }
 
-export function SearchControls({ search, trial, variant, actions, compact, part = 'all' }: Props) {
+export function SearchControls({ search, trial, variant, actions, compact, part = 'all', bestIdx }: Props) {
     const icons = part === 'adjust' ? false : (compact ?? variant === 'panel');
     const [dlg, setDlg] = useState<Dlg>();
     const [busy, setBusy] = useState(false);
@@ -513,6 +569,7 @@ export function SearchControls({ search, trial, variant, actions, compact, part 
                 open={dlg === 'adopt'}
                 title={adopt.title}
                 body={adopt.body}
+                summary={trial ? adoptSummary(search, trial, bestIdx) : undefined}
                 detail={adoptDetail(search, adoptIdx)}
                 action={adopt.action}
                 busy={busy}

@@ -406,7 +406,7 @@ export default function SearchCard({ search, env }: { search: Search; env: Searc
             {failedTrial && <FailedTrial search={search} trial={failedTrial} list={list} env={env} />}
             {view.ended && <Result search={search} list={list} checks={env.checks} />}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap', mx: -0.75, mb: -0.5 }}>
-                {live && env.chatId && <SearchControls chatId={env.chatId} variant="card" part="adjust" search={search} trial={open} actions={env.actions} compact={compact} />}
+                {live && env.chatId && <SearchControls chatId={env.chatId} variant="card" part="adjust" search={search} trial={open} bestIdx={bestTrialOf(search, list)?.idx} actions={env.actions} compact={compact} />}
                 <Box sx={{ flex: 1 }} />
                 <OpenInExperiments chatId={env.chatId} searchId={search.id} />
             </Box>

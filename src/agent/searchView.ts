@@ -560,12 +560,12 @@ export function figuresMissing(t: Pick<Trial, 'figures' | 'state'>, epochs: Epoc
 }
 
 /** Why the GPU chart has no curve; undefined when there is one. */
-export function gpuMissing(t: Pick<Trial, 'gpu_available' | 'state'>, gpu: GpuPoint[]): Missing | undefined {
+export function gpuMissing(t: Pick<Trial, 'gpu_available' | 'state'> & Partial<Pick<Trial, 'path'>>, gpu: GpuPoint[]): Missing | undefined {
     if (gpu.length > 0) return undefined;
-    if (t.gpu_available === false) return { icon: 'gpu', title: 'No GPU in this run', caption: 'The run did not see a GPU.' };
+    if (t.gpu_available === false) return { icon: 'gpu', title: 'No GPU in this run', caption: t.path === 'notebook' ? 'It runs on the CPU of your notebook server.' : 'It runs on the CPU of the platform.' };
     if (t.gpu_available === true && isOpen(t as Trial))
         return { icon: 'wait', title: 'No GPU samples yet', caption: 'The first sample comes within a few seconds.' };
-    return { icon: 'sync', title: 'GPU data not available', caption: 'This run reported no GPU values.' };
+    return { icon: 'sync', title: 'GPU data not available', caption: 'The platform sent no GPU figures for this run.' };
 }
 
 // ---------------------------------------------------------------------------------------------------------------

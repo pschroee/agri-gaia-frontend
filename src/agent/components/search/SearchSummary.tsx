@@ -131,11 +131,12 @@ type HeaderProps = {
     stopping: Record<string, true>;
     /** The trial selected in the table: the controls then offer to stop or adopt it as well. */
     trial?: Trial;
+    bestIdx?: number;
     actions: Parameters<typeof SearchControls>[0]['actions'];
 };
 
 /** Title, state chip, controls, line and the four meters of one search. */
-export function SearchHeader({ chatId, search, trials, stopping, trial, actions }: HeaderProps) {
+export function SearchHeader({ chatId, search, trials, stopping, trial, bestIdx, actions }: HeaderProps) {
     const view = searchView(search, trials);
     const meters = budgetMeters(search, trials, stopping);
     return (
@@ -147,7 +148,7 @@ export function SearchHeader({ chatId, search, trials, stopping, trial, actions 
                 <Chip size="small" variant="outlined" label={view.chip} color={CHIP_COLOR[view.kind]} data-testid="search-state" />
                 <Box sx={{ flex: 1 }} />
                 {search.state === 'running' && <ExportButton chatId={chatId} search={search} />}
-                <SearchControls chatId={chatId} search={search} trial={trial} variant="page" actions={actions} />
+                <SearchControls chatId={chatId} search={search} trial={trial} bestIdx={bestIdx} variant="page" actions={actions} />
             </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }} data-testid="search-subline">
                 {searchSubline(search)}
