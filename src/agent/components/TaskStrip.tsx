@@ -5,7 +5,6 @@
 import { useMemo, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
 import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import Collapse from '@mui/material/Collapse';
@@ -13,14 +12,17 @@ import IconButton from '@mui/material/IconButton';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import AccountTreeOutlinedIcon from '@mui/icons-material/AccountTreeOutlined';
+import CheckIcon from '@mui/icons-material/Check';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import StopCircleOutlinedIcon from '@mui/icons-material/StopCircleOutlined';
 
 import {
     backgroundStatus,
-    backgroundSummary,
+    backgroundStripSummary,
     commandPreview,
     formatBackgroundRuntime,
     runningCount,
@@ -34,7 +36,6 @@ import {
     runUsage,
     runDuration,
     runItems,
-    runsSummary,
     runStatus,
     runSubtitle,
     runTitle,
@@ -72,6 +73,28 @@ const sectionTitleSx = {
     mb: 0.25,
 } as const;
 
+/** The 16 px state symbol in front of an ID, so that the IDs of all rows stand below one another (#197). */
+function BgStateIcon({ tone }: { tone: keyof typeof TONE_COLOR }) {
+    const sx = { fontSize: 16, flex: 'none' } as const;
+    return (
+        <Box
+            data-testid="agent-bg-state-icon"
+            data-tone={tone}
+            sx={{ width: 16, height: 16, flex: 'none', display: 'grid', placeItems: 'center' }}
+        >
+            {tone === 'running' ? (
+                <CircularProgress size={12} thickness={5} />
+            ) : tone === 'ok' ? (
+                <CheckIcon sx={{ ...sx, color: agentColors.ok }} />
+            ) : tone === 'error' ? (
+                <ErrorOutlineIcon sx={{ ...sx, color: agentColors.red }} />
+            ) : (
+                <StopCircleOutlinedIcon sx={{ ...sx, color: 'text.secondary' }} />
+            )}
+        </Box>
+    );
+}
+
 function BackgroundRow({
     task,
     now,
@@ -105,7 +128,7 @@ function BackgroundRow({
             sx={{ py: 0.75, borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0 }, minWidth: 0 }}
         >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0 }}>
-                {running && <CircularProgress size={11} thickness={5} sx={{ flex: 'none' }} />}
+                <BgStateIcon tone={st.tone} />
                 <Typography component="span" sx={{ fontFamily: MONO, fontSize: 12, fontWeight: 500, flex: 'none' }}>
                     {task.id}
                 </Typography>
@@ -126,26 +149,30 @@ function BackgroundRow({
                     {formatBackgroundRuntime(task, now)}
                 </Typography>
                 {running && (
-                    <Button
-                        size="small"
-                        color="error"
-                        variant="outlined"
-                        disabled={busy}
-                        onClick={() => void stop()}
-                        aria-label={`Stop ${task.id}`}
-                        data-testid="agent-bg-stop"
-                        sx={{
-                            flex: 'none',
-                            minWidth: 0,
-                            py: 0,
-                            px: 1,
-                            fontSize: 11.5,
-                            textTransform: 'none',
-                            lineHeight: 1.6,
-                        }}
-                    >
-                        {busy ? <CircularProgress size={12} color="inherit" /> : 'Stop'}
-                    </Button>
+                    <Tooltip title="Stop this command">
+                        <span>
+                            <IconButton
+                                size="small"
+                                disabled={busy}
+                                onClick={() => void stop()}
+                                aria-label={`Stop ${task.id}`}
+                                data-testid="agent-bg-stop"
+                                sx={{
+                                    flex: 'none',
+                                    p: '2px',
+                                    my: '-2px',
+                                    color: 'text.secondary',
+                                    '&:hover': { color: agentColors.red },
+                                }}
+                            >
+                                {busy ? (
+                                    <CircularProgress size={16} color="inherit" />
+                                ) : (
+                                    <StopCircleOutlinedIcon sx={{ fontSize: 16 }} />
+                                )}
+                            </IconButton>
+                        </span>
+                    </Tooltip>
                 )}
             </Box>
             <Typography
@@ -383,12 +410,7 @@ export default function TaskStrip({
     // transcript keeps its height; issue #48); with background tasks they are listed here as well
     if (background.length === 0 && (runs.length === 0 || subagentsElsewhere)) return null;
     const busy = bgRunning + subRunning > 0;
-    const summary = [
-        background.length ? `Background ${backgroundSummary(background)}` : '',
-        runs.length ? `Subagents ${runsSummary(statuses)}` : '',
-    ]
-        .filter(Boolean)
-        .join(' · ');
+    const summary = backgroundStripSummary(background, statuses);
     return (
         <Box data-testid="agent-tasks" sx={{ ...blockSx, overflow: 'hidden' }}>
             <ButtonBase
@@ -410,7 +432,7 @@ export default function TaskStrip({
                 ) : (
                     <LayersOutlinedIcon sx={{ fontSize: 16, color: agentColors.green }} />
                 )}
-                <Typography sx={{ fontSize: 13, fontWeight: 500, flex: 'none' }}>Tasks</Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 500, flex: 'none' }}>Background</Typography>
                 <Typography noWrap title={summary} sx={{ fontSize: 12.5, color: 'text.secondary', minWidth: 0 }}>
                     {summary}
                 </Typography>
@@ -428,7 +450,7 @@ export default function TaskStrip({
                 <Box sx={{ px: 1.5, pb: 1, maxHeight: 340, overflowY: 'auto' }}>
                     {sorted.length > 0 && (
                         <Box sx={{ mt: 0.25 }}>
-                            <Typography sx={sectionTitleSx}>Background ({sorted.length})</Typography>
+                            <Typography sx={sectionTitleSx}>Commands ({sorted.length})</Typography>
                             <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
                                 {sorted.map((t) => (
                                     <BackgroundRow key={t.id} task={t} now={now} onStop={onStopBackground} />
