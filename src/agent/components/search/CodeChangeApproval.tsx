@@ -139,8 +139,8 @@ export default function CodeChangeApproval({
             <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: 1 }}>{codeChangeFoot(data)}</Typography>
             <Technical text={approval.summary ?? approval.name} testId="agent-approval-technical" />
             <Box sx={{ display: 'flex', gap: 1, mt: 1.25 }}>
-                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>Reject</Button>
                 <Button size="small" variant="contained" disabled={busy} onClick={() => void decide(true)}>Approve</Button>
+                <Button size="small" variant="outlined" color="error" disabled={busy} onClick={() => void decide(false)}>Reject</Button>
             </Box>
         </Box>
     );
