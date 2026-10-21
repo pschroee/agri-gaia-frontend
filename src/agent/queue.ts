@@ -303,7 +303,11 @@ export function queueRows(state: QueueState, chat: Pick<Chat, 'queue_held' | 'ru
         ...state.delivered.flatMap((d) =>
             d.entries.filter(isSubagentNote).map((e): QueueRow => ({ ...row(e, 'waiting'), id: undefined })),
         ),
-        ...state.entries.map((e) => row(e, state.removing.includes(e.id) ? 'removing' : held ? 'held' : 'waiting')),
+        // a note about a background task is not the user's message and the gateway delivers it at the end of the
+        // run; only a held queue shows it, so that "Send now" is understandable (#197)
+        ...state.entries
+            .filter((e) => held || !(e.kind === 'system' && e.note === 'background'))
+            .map((e) => row(e, state.removing.includes(e.id) ? 'removing' : held ? 'held' : 'waiting')),
         ...state.local.map(
             (l): QueueRow => ({
                 key: l.key,
