@@ -142,6 +142,7 @@ const PHASE_ICON: Record<StepPhase, ReactElement> = {
     done: <CheckCircleIcon sx={{ fontSize: 17, color: agentColors.ok }} aria-hidden />,
     approval: <HourglassEmptyIcon sx={{ fontSize: 17, color: agentColors.amber }} aria-hidden />,
     open: <RadioButtonUncheckedIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
+    starting: <CircularProgress size={14} sx={{ color: 'text.secondary' }} aria-hidden />,
     queued: <RadioButtonUncheckedIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
     running: <CircularProgress size={14} aria-hidden />,
     paused: <PauseCircleOutlineIcon sx={{ fontSize: 17, color: agentColors.amber }} aria-hidden />,
@@ -169,7 +170,7 @@ function edgeColor(plan: Plan): string {
 }
 
 /** The body of a step the card still expects work from (L7): anything else shows no note. */
-const NOTE_PHASES: StepPhase[] = ['open', 'running', 'paused', 'approval'];
+const NOTE_PHASES: StepPhase[] = ['open', 'starting', 'running', 'paused', 'approval'];
 
 export const PRE_SX = {
     fontFamily: MONO,
@@ -716,8 +717,8 @@ function LogTail({
 }
 
 /** The progress of a running step: the bar, the message, the runtime and the time left (design, D2.4/D4.6). */
-function StepProgress({ plan, step, now }: { plan: Plan; step: PlanStep; now: number }) {
-    const phase = stepPhase(plan, step);
+function StepProgress({ plan, step, now, working }: { plan: Plan; step: PlanStep; now: number; working?: boolean }) {
+    const phase = stepPhase(plan, step, working);
     const paused = phase === 'paused';
     const percent = typeof step.progress === 'number' ? step.progress : undefined;
     const message = stepMessage(step);
@@ -769,6 +770,7 @@ function StepItem({
     onControl,
     approvals,
     onDecide,
+    working,
 }: {
     plan: Plan;
     step: PlanStep;
@@ -778,8 +780,9 @@ function StepItem({
     onControl: (action: 'stop', step: number) => Promise<void>;
     approvals: Approval[];
     onDecide?: (a: Approval, approve: boolean) => Promise<void>;
+    working?: boolean;
 }) {
-    const phase = stepPhase(plan, step);
+    const phase = stepPhase(plan, step, working);
     const main = stepMain(step);
     const note = agentNote(step);
     const job = jobOfStep(jobs, step);
@@ -885,7 +888,7 @@ function StepItem({
                         />
                     )}
                     {(phase === 'running' || phase === 'paused' || waiting) && (
-                        <StepProgress plan={plan} step={step} now={now} />
+                        <StepProgress plan={plan} step={step} now={now} working={working} />
                     )}
                     {(phase === 'running' || phase === 'paused' || waiting) && (
                         <LogTail
@@ -1152,6 +1155,7 @@ export default function PlanCard({
     onControl,
     onNotify,
     notifyOptIn,
+    working,
 }: {
     plan: Plan;
     approval?: Approval;
@@ -1173,6 +1177,8 @@ export default function PlanCard({
     onNotify?: (on: boolean) => void;
     /** The choice that counts for a plan (the stored one, else the browser permission), from the agent context. */
     notifyOptIn?: (planId: string) => boolean;
+    /** The chat's agent is working: the next step of an approved plan shows 'Starting…' (#176). */
+    working?: boolean;
 }) {
     useRegisterPlanCard(plan.id, register);
     const now = Date.now();
@@ -1294,6 +1300,7 @@ export default function PlanCard({
                             approvals={allApprovals}
                             onDecide={onDecide}
                             onControl={runControl}
+                            working={working}
                         />
                     ))}
                 </Box>
