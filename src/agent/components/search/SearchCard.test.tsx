@@ -218,3 +218,26 @@ describe('searches that are not running', () => {
         expect(screen.queryByTestId('agent-search-card')).toBeNull();
     });
 });
+
+describe('the live region of the running trial (#209)', () => {
+    const live = () => {
+        render1(mockSearch(), [mockTrial(4, { state: 'running', epoch: 7, epochs: 20 })]);
+        return screen.getByTestId('agent-search-trial-live');
+    };
+    it('is visually hidden without taking space', () => {
+        const el = live();
+        expect(el.textContent).toBe('Trial 4 · epoch 7/20');
+        expect(el.getAttribute('aria-live')).toBe('polite');
+        const st = getComputedStyle(el);
+        expect(st.position).toBe('absolute');
+        expect(st.width).toBe('1px');
+        expect(st.height).toBe('1px');
+        expect(st.margin).toBe('-1px');
+        expect(st.whiteSpace).toBe('nowrap');
+    });
+    it('sits first in a positioned column', () => {
+        const el = live();
+        expect(getComputedStyle(el.parentElement as HTMLElement).position).toBe('relative');
+        expect(el.parentElement?.firstElementChild).toBe(el);
+    });
+});

@@ -69,6 +69,19 @@ export type SearchEnv = {
     layout: SearchLayout;
 };
 
+// "visually hidden" for the live region: out of sight, no space, no overflow of its box (#209)
+const srOnly = {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    margin: '-1px',
+    padding: 0,
+    border: 0,
+    overflow: 'hidden',
+    clip: 'rect(0 0 0 0)',
+    whiteSpace: 'nowrap',
+} as const;
+
 const wayLabel = (s: Search): string => (s.path === 'notebook' ? 'your notebook code' : 'platform template');
 
 /** The anchor id of a card, for the chip and the popover to scroll to. */
@@ -134,7 +147,11 @@ function RunningTrial({ search, trial, list, env, now }: { search: Search; trial
                 <TrialStateMark view={view} size={16} />
             </Box>
             <Typography sx={{ fontFamily: MONO, fontSize: 12, color: 'text.secondary', overflowWrap: 'anywhere' }}>{paramsLine(trial.params, spec)}</Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, position: 'relative' }}>
+                {/* a screen reader hears the epoch and the state, not every GPU sample */}
+                <Box aria-live="polite" data-testid="agent-search-trial-live" sx={srOnly}>
+                    {`Trial ${trial.idx} · ${stopping ? 'stopping' : epochText(trial).toLowerCase()}`}
+                </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, fontSize: 13 }}>
                     <span>{trial.state === 'declared' ? 'Starting' : epochText(trial)}</span>
                     {eta && <Typography component="span" sx={{ fontSize: 13, color: 'text.secondary' }}>{eta}</Typography>}
@@ -149,10 +166,6 @@ function RunningTrial({ search, trial, list, env, now }: { search: Search; trial
                     sx={{ height: 4, borderRadius: 2, bgcolor: 'action.hover', overflow: 'hidden' }}
                 >
                     <Box sx={{ height: 4, width: `${pct ?? 0}%`, bgcolor: 'primary.main', transition: 'width .3s' }} />
-                </Box>
-                {/* a screen reader hears the epoch and the state, not every GPU sample */}
-                <Box aria-live="polite" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)' }}>
-                    {`Trial ${trial.idx} · ${stopping ? 'stopping' : epochText(trial).toLowerCase()}`}
                 </Box>
             </Box>
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '10px 16px', alignItems: 'end' }}>
