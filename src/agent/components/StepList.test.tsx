@@ -58,6 +58,8 @@ describe('StepList controls', () => {
             const style = getComputedStyle(screen.getByTestId(id));
             expect(style.marginTop).toBe('-1px');
             expect(style.padding).toBe('2px');
+            // the tooltip wrapper is a flex box: an inline span would grow to 22 px around the button
+            expect(getComputedStyle(screen.getByTestId(id).parentElement as HTMLElement).display).toBe('flex');
         }
     });
 

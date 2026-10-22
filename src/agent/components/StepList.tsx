@@ -182,12 +182,12 @@ function RunningControls({
             setBusy(undefined);
         }
     };
-    // 16 px symbols with 2 px padding make the buttons 20 px high; the negative margin keeps the 18 px row from growing (#197)
+    // 16 px symbols with 2 px padding make the buttons 20 px high; the negative margin keeps the 18 px row from growing (#197); the tooltip wrappers are flex boxes, as inline spans they grew to 22 px
     const btn = { p: '2px', my: '-1px', flex: 'none' } as const;
     return (
         <Box sx={{ display: 'flex', flex: 'none', ml: 0.25 }}>
             <Tooltip title="Move to background: keeps running, the agent continues and is told when it ends">
-                <span>
+                <Box component="span" sx={{ display: 'flex' }}>
                     <IconButton
                         size="small"
                         aria-label="Move to background"
@@ -198,10 +198,10 @@ function RunningControls({
                     >
                         {busy === 'bg' ? <CircularProgress size={14} /> : <LayersOutlinedIcon sx={{ fontSize: 16 }} />}
                     </IconButton>
-                </span>
+                </Box>
             </Tooltip>
             <Tooltip title="Stop the command: the agent learns about it and continues">
-                <span>
+                <Box component="span" sx={{ display: 'flex' }}>
                     <IconButton
                         size="small"
                         aria-label="Stop command"
@@ -212,7 +212,7 @@ function RunningControls({
                     >
                         {busy === 'stop' ? <CircularProgress size={14} /> : <StopCircleOutlinedIcon sx={{ fontSize: 16 }} />}
                     </IconButton>
-                </span>
+                </Box>
             </Tooltip>
         </Box>
     );
