@@ -61,7 +61,7 @@ describe('useLivePolling', () => {
         const load = vi.fn(async () => ({ running: 0 }));
         renderHook(() => useLivePolling<Page>(load, { key: 'a', active: () => false }));
         await flush();
-        const ev = { changes: [], at: '', chat_id: '' } as never;
+        const ev = { changes: [], chat_id: 'c', source: 'test' };
         act(() => {
             reportPlatformChanged(ev);
             reportPlatformChanged(ev);
