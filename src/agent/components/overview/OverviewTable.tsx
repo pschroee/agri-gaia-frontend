@@ -30,7 +30,7 @@ export type OverviewColumn<R> = {
     minWidth?: number;
     align?: 'left' | 'right';
     /** Hidden below this width (MUI breakpoint); always shown when not given. */
-    hideBelow?: 'md' | 'lg';
+    hideBelow?: 'md' | 'lg' | 'xl';
     sortable?: boolean;
     /** Order of the first click on the header; `asc` if not given. */
     defaultOrder?: 'asc' | 'desc';
@@ -71,7 +71,7 @@ export function nextSort<R>(current: OverviewSort, col: OverviewColumn<R>): Over
 }
 
 /** The style that hides a column below its breakpoint. */
-const hideSx = (c: { hideBelow?: 'md' | 'lg' }) =>
+const hideSx = (c: { hideBelow?: 'md' | 'lg' | 'xl' }) =>
     c.hideBelow ? { display: { xs: 'none', [c.hideBelow]: 'table-cell' } } : {};
 
 const TONE_STYLE = {

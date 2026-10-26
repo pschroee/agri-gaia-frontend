@@ -139,7 +139,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
     ];
 
     const columns: OverviewColumn<RunRow>[] = [
-        { id: 'state', label: 'Status', width: 150, sortable: true, render: (r) => <RunStateCell state={r.state} /> },
+        { id: 'state', label: 'Status', width: 140, sortable: true, render: (r) => <RunStateCell state={r.state} /> },
         {
             id: 'title',
             label: 'Run',
@@ -156,11 +156,11 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
                 </Box>
             ),
         },
-        { id: 'progress', label: 'Progress', width: 240, render: (r, n) => <ProgressCell {...runProgress(r, n)} /> },
+        { id: 'progress', label: 'Progress', width: 210, render: (r, n) => <ProgressCell {...runProgress(r, n)} /> },
         {
             id: 'best',
             label: 'Best value',
-            width: 130,
+            width: 150,
             align: 'right',
             render: (r) => (
                 <Typography noWrap sx={{ fontFamily: MONO, fontSize: 12 }}>
@@ -168,11 +168,11 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
                 </Typography>
             ),
         },
-        { id: 'started', label: 'Started', width: 130, sortable: true, defaultOrder: 'desc', render: (r, n) => <Typography noWrap sx={{ fontSize: 14 }}>{startedText(r.started_at, n)}</Typography> },
+        { id: 'started', label: 'Started', width: 115, sortable: true, defaultOrder: 'desc', render: (r, n) => <Typography noWrap sx={{ fontSize: 14 }}>{startedText(r.started_at, n)}</Typography> },
         {
             id: 'duration',
             label: 'Duration',
-            width: 100,
+            width: 90,
             align: 'right',
             sortable: true,
             defaultOrder: 'desc',
@@ -181,7 +181,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
         {
             id: 'chat',
             label: 'Chat',
-            width: 220,
+            width: 180,
             sortable: true,
             render: (r) => (
                 <Link
