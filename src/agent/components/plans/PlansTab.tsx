@@ -131,7 +131,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'progress',
             label: 'Progress',
-            width: 140,
+            width: 120,
             render: (p) => {
                 const g = progressOf(p);
                 return (
@@ -174,7 +174,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
             id: 'started',
             label: 'Started',
             width: 120,
-            hideBelow: 'lg',
+            hideBelow: 'xl',
             render: (p) => {
                 const at = planStart(p);
                 return at === undefined ? (
@@ -223,7 +223,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'chat',
             label: 'Chat',
-            minWidth: 150,
+            width: 150,
             render: (p) => {
                 const title = p.chat_title?.trim() || chatTitle(chats.find((c) => c.id === p.chat_id));
                 return (

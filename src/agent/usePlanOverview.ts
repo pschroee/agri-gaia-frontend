@@ -39,7 +39,8 @@ export type PlanOverview = {
     loading: boolean;
     error?: string;
     reload: () => void;
-    live: 'live' | 'reconnecting';
+    /** 'connecting' until the stream first opens: no error yet, so nothing says it failed. */
+    live: 'connecting' | 'live' | 'reconnecting';
     /** When the list was last loaded or changed by an event. */
     updatedAt?: number;
 };
@@ -50,7 +51,7 @@ export function usePlanOverview(
 ): PlanOverview {
     const [page, setPage] = useState<PlanPage>();
     const [error, setError] = useState<string>();
-    const [live, setLive] = useState<'live' | 'reconnecting'>('reconnecting');
+    const [live, setLive] = useState<'connecting' | 'live' | 'reconnecting'>('connecting');
     const [updatedAt, setUpdatedAt] = useState<number>();
     const key = plansQuery(filters).toString();
 

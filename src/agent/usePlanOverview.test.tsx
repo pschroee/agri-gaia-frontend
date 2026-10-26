@@ -103,6 +103,13 @@ describe('usePlanOverview', () => {
         expect(load).toHaveBeenCalledTimes(2);
     });
 
+    it('is connecting, not failed, before the stream first opens', async () => {
+        const { hooks } = setup();
+        const { result } = renderHook(() => usePlanOverview(FILTERS, hooks));
+        await waitFor(() => expect(result.current.page).toBeDefined());
+        expect(result.current.live).toBe('connecting');
+    });
+
     it('reloads after a reconnect and says reconnecting on an error', async () => {
         const { hooks, sources, load } = setup();
         const { result } = renderHook(() => usePlanOverview(FILTERS, hooks));
