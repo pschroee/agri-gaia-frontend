@@ -50,7 +50,7 @@ export type RunRow = {
     /** First line of the error, at most 200 characters. */
     error?: string;
     plan_id?: string;
-    /** Index of the plan step, counted from 0 like `step_idx` of a job. */
+    /** Number of the plan step, counted from 1 like `idx` of a plan step and `step_idx` of a job. */
     plan_step?: number | null;
     tool_call_id?: string;
     link?: string;
@@ -199,9 +199,9 @@ export function runStateView(state: RunState): RunStateView {
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** "Plan step 4" for a run an agent plan started (`plan_step` counts from 0; the gateway leaves a 0 out). */
+/** "plan step 4" for a run an agent plan started (`plan_step` counts from 1 like the plan's `idx`). */
 export const planStepText = (r: Pick<RunRow, 'plan_id' | 'plan_step'>): string | undefined =>
-    r.plan_id ? `plan step ${(r.plan_step ?? 0) + 1}` : undefined;
+    r.plan_id ? (r.plan_step ? `plan step ${r.plan_step}` : 'plan step') : undefined;
 
 /** Second line of the "Run" cell: "Training search · template", "Training run · <what ran>", "Notebook run · prep.py". */
 export function runSubline(r: RunRow): string {

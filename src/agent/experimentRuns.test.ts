@@ -93,10 +93,10 @@ describe('progress texts', () => {
 describe('cells', () => {
     it('the second line names the kind, what ran and the plan step', () => {
         expect(runSubline(makeRun())).toBe('Training search · template');
-        expect(runSubline(makeRun({ kind: 'training_run', id: 't1', plan_id: 'p1', plan_step: 3 }))).toBe('Training run · plan step 4');
+        expect(runSubline(makeRun({ kind: 'training_run', id: 't1', plan_id: 'p1', plan_step: 3 }))).toBe('Training run · plan step 3');
         expect(runSubline(makeRun({ kind: 'notebook_run', id: 'w1', title: 'prep.py' }))).toBe('Notebook run · prep.py');
         // the gateway leaves step 0 out
-        expect(runSubline(makeRun({ plan_id: 'p1' }))).toBe('Training search · template · plan step 1');
+        expect(runSubline(makeRun({ plan_id: 'p1' }))).toBe('Training search · template · plan step');
     });
 
     it('the best value carries the words of the metric, or a dash', () => {
