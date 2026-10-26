@@ -279,6 +279,39 @@ export function computeStepLine(plan: Plan, step: PlanStep): string {
 /** The addition on a step the plan does not cover (L6, D2.8). */
 export const ASKS_AGAIN = 'Asks you again before it runs';
 
+/** Why a step asks again, by the gateway's code (#219). Unknown or missing code: the plain ASKS_AGAIN. */
+export function uncoveredText(step: PlanStep): string {
+    switch (step.uncovered_reason) {
+        case 'irreversible':
+            return `${ASKS_AGAIN}: it cannot be undone`;
+        case 'image_origin':
+            return `${ASKS_AGAIN}: it starts an image on a device that this plan does not build`;
+        case 'runs_code':
+            return `${ASKS_AGAIN}: it runs code the gateway cannot check`;
+        default:
+            return ASKS_AGAIN;
+    }
+}
+
+/** Where the image of a covered deployment start comes from (#219); '' without a traced origin. */
+export function imageOriginText(step: PlanStep): string {
+    const origin = step.image_origin;
+    if (!origin) return '';
+    if (origin.plan_id) {
+        return `Covered by this approval: the image was built in step ${origin.step} of the plan this one replaces`;
+    }
+    return `Covered by this approval: the image is built in step ${origin.step}`;
+}
+
+/** The line over the decision buttons: which steps ask again on their own; '' when none (#219). */
+export function uncoveredSummary(plan: Plan): string {
+    const idx = plan.steps.filter((s) => !s.covered && s.state !== 'done').map((s) => s.idx);
+    if (idx.length === 0) return '';
+    if (idx.length === 1) return `Step ${idx[0]} asks you again on its own`;
+    const list = `${idx.slice(0, -1).join(', ')} and ${idx[idx.length - 1]}`;
+    return `Steps ${list} ask you again on their own`;
+}
+
 /**
  * "Waiting for your approval · waiting 4 min": how long the step has waited, from the approval's own time.
  * Without a usable time only the first part.

@@ -130,8 +130,10 @@ import {
     CREATED_OVERLINE,
     AGENT_NOTE_LABEL,
     AGENT_TITLE_LABEL,
-    ASKS_AGAIN,
     cancelAllowed,
+    imageOriginText,
+    uncoveredSummary,
+    uncoveredText,
     stepRefText,
     waitingForApproval,
     WAITING_INFO,
@@ -890,16 +892,30 @@ function StepItem({
                             load={loadStepFiles}
                         />
                     )}
-                    {phase === 'open' && (extra || !step.covered) && (
+                    {((phase === 'open' && extra) ||
+                        (step.state === 'open' && (!step.covered || step.image_origin))) && (
                         <Box component="ul" sx={{ listStyle: 'none', m: 0, mt: 0.25, p: 0 }}>
-                            {extra && (
+                            {phase === 'open' && extra && (
                                 <Typography component="li" sx={{ fontSize: 12, color: 'text.secondary' }}>
                                     {`◦ ${extra}`}
                                 </Typography>
                             )}
-                            {!step.covered && (
-                                <Typography component="li" sx={{ fontSize: 12, color: 'text.secondary' }}>
-                                    {`◦ ${ASKS_AGAIN}`}
+                            {step.state === 'open' && !step.covered && (
+                                <Typography
+                                    component="li"
+                                    sx={{ fontSize: 12, color: 'text.secondary' }}
+                                    data-testid="agent-plan-step-asks-again"
+                                >
+                                    {`◦ ${uncoveredText(step)}`}
+                                </Typography>
+                            )}
+                            {step.state === 'open' && step.image_origin && (
+                                <Typography
+                                    component="li"
+                                    sx={{ fontSize: 12, color: 'text.secondary' }}
+                                    data-testid="agent-plan-step-image-origin"
+                                >
+                                    {`◦ ${imageOriginText(step)}`}
                                 </Typography>
                             )}
                         </Box>
@@ -1362,6 +1378,15 @@ export default function PlanCard({
                             <ProposedSummary summary={approval.summary_proposed} testId="agent-approval-proposed" />
                         )}
                     </>
+                )}
+                {plan.state === 'proposed' && uncoveredSummary(plan) !== '' && (
+                    <Box
+                        sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1.25 }}
+                        data-testid="agent-plan-uncovered-summary"
+                    >
+                        <HourglassEmptyIcon sx={{ fontSize: 17, color: agentColors.amber }} aria-hidden />
+                        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{uncoveredSummary(plan)}</Typography>
+                    </Box>
                 )}
                 {canDecide && approval && onDecide && (
                     <Decision
