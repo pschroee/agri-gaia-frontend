@@ -84,7 +84,8 @@ describe('ExperimentDetail', () => {
         load({ trials: [makeTrial(0, { id: 't9', idx: 0, seq: 1, search_id: undefined, path: 'notebook', state: 'done' })] });
         mount('t9');
         expect(screen.getByTestId('body-trial').textContent).toBe('trial t9 of no search');
-        expect(screen.getByText('Training run')).toBeTruthy();
+        // the title (no subject, #227) and the kind chip
+        expect(screen.getAllByText('Training run').length).toBe(2);
     });
 
     it('a single run opened by its address names what it trains and offers its plan (issue #227)', async () => {
