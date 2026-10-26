@@ -64,3 +64,11 @@ export function scrollToPlanCard(planId: string, root: ParentNode = document): b
     });
     return true;
 }
+
+/**
+ * Whether the plan's card is in the document: the header sits outside the chat view's registry, so the dialog asks the
+ * document (issue #221).
+ */
+export function planCardInDom(planId: string, root: ParentNode = document): boolean {
+    return !!root.querySelector(`[data-testid="agent-plan-card"][data-plan-id="${CSS.escape(planId)}"]`);
+}

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MIT
 
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 import Box from '@mui/material/Box';
@@ -17,16 +18,15 @@ import OpenInFullIcon from '@mui/icons-material/OpenInFull';
 import { useAgent } from '../AgentContext';
 import { expandToAgentPage } from '../expand';
 import { sectionOf } from '../format';
-import { activePlan, pendingIdsOf } from '../plan';
-import { scrollToPlanCard } from '../planRegistry';
+import { pendingIdsOf } from '../plan';
 import { chipOf } from '../searchChip';
 import { isRunning, runSince, runStateOf, runStateText } from '../runState';
 import ChatSelector from './ChatSelector';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
-import PlanButton from './PlanButton';
+import PlanChip from './PlanChip';
+import PlanPanelView from './plan/PlanPanelView';
 import TaskButton from './TaskButton';
-import PlanIndicator from './PlanIndicator';
 import SearchIndicator from './search/SearchIndicator';
 import RunStateChip from './RunStateChip';
 import AgentDropZone from './AgentDropZone';
@@ -64,10 +64,12 @@ export default function AgentContextPanel() {
     // live through updateChat of the open ChatView
     const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
     const selectedState = runStateOf(selected);
-    // the plan the header shows: an autonomous plan that runs, waits or ended a moment ago (D4.2)
+    // the plans of the open chat; the chip opens the plan view over the chat (issue #221)
     const plans = selected ? planLists[selected.id] ?? [] : [];
-    const shownPlan = activePlan(plans, Date.now());
     const pendingIds = pendingIdsOf(pendingApprovals);
+    const [planView, setPlanView] = useState<string | undefined>();
+    // another chat closes the view
+    useEffect(() => setPlanView(undefined), [selected?.id]);
 
     return (
         <Drawer
@@ -124,21 +126,17 @@ export default function AgentContextPanel() {
                         </Box>
                     )}
                     {selected && (
-                        <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                            {/* the plan the chat runs (A-E4): a compact display, the controls live in the card (D4.2) */}
-                            <PlanIndicator
-                                plan={shownPlan}
-                                variant="panel"
+                        <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                            <PlanChip
+                                plans={plans}
                                 pending={pendingIds}
-                                iconOnly={!!chipOf(searchLists[selected.id])}
-                                onShow={() => shownPlan && scrollToPlanCard(shownPlan.id)}
+                                compact={!!chipOf(searchLists[selected.id])}
+                                open={!!planView}
+                                onOpen={(p) => setPlanView(p.id)}
                             />
                             <SearchIndicator book={searchLists[selected.id]} variant="panel" chatId={selected.id} />
                             <TaskButton tasks={taskLists[selected.id]} />
-                            <PlanButton plans={planLists[selected.id]} />
-                            <Box sx={{ px: '6px', display: 'inline-flex' }}>
-                                <ContextMeter chat={selected} compacting={compacting[selected.id]} />
-                            </Box>
+                            <ContextMeter chat={selected} compacting={compacting[selected.id]} />
                             {/* the tokens stay on /ai-agent; here the chat moves to the full page */}
                             <Tooltip title="Open in agent page">
                                 <IconButton
@@ -189,7 +187,16 @@ export default function AgentContextPanel() {
                 {status !== 'ready' ? (
                     <SignInNotice />
                 ) : (
-                    <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                    <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+                        {selected && planView && (
+                            <PlanPanelView
+                                chatId={selected.id}
+                                plans={plans}
+                                planId={planView}
+                                pending={pendingIds}
+                                onBack={() => setPlanView(undefined)}
+                            />
+                        )}
                         {selectedChatId ? (
                             <ChatView key={selectedChatId} chatId={selectedChatId} dense header={<ChatSelector />} />
                         ) : (

@@ -3,16 +3,16 @@
 //
 // SPDX-License-Identifier: MIT
 
-// Header button and card show the same plan (issue #166): both render from one list, so one plan event moves both.
+// Header chip and card show the same plan (issue #166): both render from one list, so one plan event moves both.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { agentApi } from '../api';
 
 import { upsertPlan } from '../plan';
 import type { Plan, PlanStep } from '../plan';
-import PlanButton from './PlanButton';
+import PlanChip from './PlanChip';
 import PlanCard from './PlanCard';
 
 beforeEach(() => {
@@ -45,17 +45,17 @@ const base: Plan = {
 function Frame({ plans }: { plans: Plan[] }) {
     return (
         <>
-            <PlanButton plans={plans} />
+            <PlanChip plans={plans} pending={new Set()} onOpen={() => undefined} />
             <PlanCard plan={plans[0]} onControl={async () => undefined} />
         </>
     );
 }
 
-describe('one list feeds the button and the card', () => {
+describe('one list feeds the chip and the card', () => {
     it('shows the running step in both after one plan event', () => {
         const { rerender } = render(<Frame plans={[base]} />);
-        // jsdom has no width, so the button shows its compact label; the mark carries the state
-        expect(screen.getByTestId('agent-plan-button').getAttribute('data-plan-mark')).toBe('approval');
+        expect(screen.getByTestId('agent-plan-chip').getAttribute('data-tone')).toBe('attention');
+        expect(screen.getByTestId('agent-plan-chip').textContent).toContain('0/1');
         const event: Plan = {
             ...base,
             state: 'approved',
@@ -63,9 +63,7 @@ describe('one list feeds the button and the card', () => {
             steps: [step({ state: 'running' })],
         };
         rerender(<Frame plans={upsertPlan([base], event)} />);
-        expect(screen.getByTestId('agent-plan-button').getAttribute('data-plan-mark')).toBe('running');
+        expect(screen.getByTestId('agent-plan-chip').getAttribute('data-tone')).toBe('running');
         expect(screen.getByTestId('agent-plan-step-row').getAttribute('data-status')).toBe('running');
-        fireEvent.click(screen.getByTestId('agent-plan-button'));
-        expect(screen.getAllByText(/Approved · valid until/).length).toBeGreaterThan(0);
     });
 });

@@ -28,8 +28,7 @@ import type { Chat } from '../types';
 import { useChatSubagentGroups } from '../useChatSubagentGroups';
 import { useSubagentNav } from '../useSubagentNav';
 import { useRenameChat } from '../useRenameChat';
-import { activePlan, pendingIdsOf } from '../plan';
-import { scrollToPlanCard } from '../planRegistry';
+import { pendingIdsOf } from '../plan';
 import { useTrashActions } from '../useTrash';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
@@ -39,8 +38,8 @@ import { GroupNote } from './ChatSelector';
 import { ENTRY_MENU_CLASS, HistoryEntryMenu, RenameField } from './HistoryRename';
 import { TrashBanner, TrashDialogs, TrashEntryButton, TrashSnackbar, TrashView } from './TrashView';
 import { ChatTokens, ContextMeter } from './ContextMeter';
-import PlanButton from './PlanButton';
-import PlanIndicator from './PlanIndicator';
+import PlanChip from './PlanChip';
+import PlanDialog from './plan/PlanDialog';
 import SearchIndicator from './search/SearchIndicator';
 import TaskButton from './TaskButton';
 import InternetIndicator from './internet/InternetIndicator';
@@ -357,11 +356,12 @@ function History({ onMoveToTrash, onOpenTrash }: { onMoveToTrash: (chat: Chat) =
 function ChatHeader() {
     const { chats, selectedChatId, compacting, taskLists, planLists, searchLists, pendingApprovals } = useAgent();
     const sub = useSubagentNav();
+    const [planOpen, setPlanOpen] = useState(false);
     const chat = chats.find((c) => c.id === selectedChatId);
     if (!chat) return null;
     const state = runStateOf(chat);
-    // the plan the chat runs (A-E4): a compact display, the controls live in the card (D4.2)
-    const shownPlan = activePlan(planLists[chat.id] ?? [], Date.now());
+    // the plan chip opens the plan dialog; decisions and controls stay in the card (D4.2)
+    const pendingIds = pendingIdsOf(pendingApprovals);
     return (
         <Box
             data-testid="agent-chat-header"
@@ -409,7 +409,7 @@ function ChatHeader() {
                     display: 'flex',
                     alignItems: 'center',
                     flexWrap: 'wrap',
-                    columnGap: 2,
+                    columnGap: 1,
                     rowGap: 0.75,
                     minWidth: 0,
                 }}
@@ -417,18 +417,24 @@ function ChatHeader() {
                 {/* the same chip as in the panel header, only while something happens (issue #35) */}
                 <RunStateChip state={state} since={runSince(chat)} framed />
                 <InternetIndicator chat={chat} />
-                <PlanIndicator
-                    plan={shownPlan}
-                    variant="page"
-                    pending={pendingIdsOf(pendingApprovals)}
-                    onShow={() => shownPlan && scrollToPlanCard(shownPlan.id)}
+                <PlanChip
+                    plans={planLists[chat.id]}
+                    pending={pendingIds}
+                    open={planOpen}
+                    onOpen={() => setPlanOpen(true)}
                 />
                 <SearchIndicator book={searchLists[chat.id]} variant="page" chatId={chat.id} />
                 <TaskButton tasks={taskLists[chat.id]} />
-                <PlanButton plans={planLists[chat.id]} />
                 <ContextMeter chat={chat} compacting={compacting[chat.id]} label />
                 <ChatTokens chat={chat} />
             </Box>
+            <PlanDialog
+                open={planOpen}
+                onClose={() => setPlanOpen(false)}
+                chatId={chat.id}
+                plans={planLists[chat.id] ?? []}
+                pending={pendingIds}
+            />
         </Box>
     );
 }

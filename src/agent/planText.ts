@@ -18,7 +18,6 @@ import {
     doneSteps,
     durationText,
     isAutonomous,
-    planHeadline,
     Plan,
     PlanStep,
     StepRef,
@@ -399,22 +398,13 @@ export function indicatorWord(plan: Plan, pending: ReadonlySet<string>): string 
     }
 }
 
-/** The longest step title the page shows before it is cut (design). */
-export const STEP_TITLE_MAX = 260;
-
 /**
- * The label of the plan indicator (L15/L17): on the page with the title of the step it is on, in the 400 px panel
- * without it and on a phone as the bare numbers.
+ * The label of the plan chip (issue #221): the steps done of all ("Plan 3/10"), the bare numbers on a phone and where
+ * the chat has a training search. The same count as the ring and as "2/6 tasks".
  */
 export function indicatorLabel(plan: Plan, variant: 'panel' | 'page' | 'mobile'): string {
-    const base = `Plan ${currentStepIndex(plan)}/${plan.steps.length}`;
-    if (variant === 'mobile') return `${currentStepIndex(plan)}/${plan.steps.length}`;
-    if (variant === 'panel') return base;
-    const title = planHeadline(plan);
-    if (!title) return base;
-    const chars = Array.from(title);
-    const cut = chars.length > STEP_TITLE_MAX ? `${chars.slice(0, STEP_TITLE_MAX - 1).join('')}…` : title;
-    return `${base} · ${cut}`;
+    const n = `${doneSteps(plan)}/${plan.steps.length}`;
+    return variant === 'mobile' ? n : `Plan ${n}`;
 }
 
 /** The tooltip and aria-label of the plan indicator (L18), with the design's closing invitation. */
@@ -441,6 +431,10 @@ export function indicatorTooltip(plan: Plan, pending: ReadonlySet<string>): stri
             return `Plan completed · ${n} of ${n} steps${tail}`;
         case 'cancelled':
             return `Plan cancelled at step ${i} of ${n}${tail}`;
+        case 'proposed':
+            return plan.approving
+                ? `Plan with ${n} ${n === 1 ? 'step' : 'steps'} is being approved${tail}`
+                : `Plan with ${n} ${n === 1 ? 'step' : 'steps'} waits for your approval${tail}`;
         default:
             return `Plan · step ${i} of ${n}${tail}`;
     }

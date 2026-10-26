@@ -6,7 +6,6 @@ import { ReactNode, useState } from 'react';
 
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import ButtonBase from '@mui/material/ButtonBase';
 import CircularProgress from '@mui/material/CircularProgress';
 import Popover from '@mui/material/Popover';
 import Switch from '@mui/material/Switch';
@@ -26,6 +25,7 @@ import {
     formatTokensShort,
 } from '../usage';
 import type { Compacting, ContextLevel } from '../usage';
+import HeaderStatusButton from './HeaderStatusButton';
 import { agentColors } from './tokens';
 
 export const LEVEL_COLOR: Record<ContextLevel, string> = {
@@ -175,47 +175,38 @@ export function ContextMeter({
     return (
         <>
             <Tooltip title={open ? '' : `${title} · click for details and compaction`}>
-                <ButtonBase
-                    aria-label={
-                        running
-                            ? 'Compacting the context, details and compaction'
-                            : `Context usage ${d?.percent ?? 'unknown'}, details and compaction`
-                    }
-                    aria-haspopup="dialog"
-                    aria-expanded={open}
-                    data-testid="agent-context-meter"
-                    data-context-level={running ? 'compacting' : level}
-                    onClick={(e) => setAnchor(e.currentTarget)}
-                    sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.6,
-                        flex: 'none',
-                        whiteSpace: 'nowrap',
-                        fontSize: 12,
-                        fontFamily: 'inherit',
-                        fontVariantNumeric: 'tabular-nums',
-                        color: running ? agentColors.green : LEVEL_TEXT[level],
-                        fontWeight: level === 'normal' || running ? 400 : 500,
-                        borderRadius: 1,
-                        px: 0.25,
-                        '&:hover': { bgcolor: 'action.hover' },
-                        '&.Mui-focusVisible': { boxShadow: `0 0 0 2px ${agentColors.greenLine}` },
-                    }}
-                >
-                    <ContextRing
-                        ratio={d?.ratio ?? 0}
-                        thresholdRatio={autoCompact ? d?.thresholdRatio : undefined}
-                        level={level}
-                        compacting={running}
+                <span>
+                    <HeaderStatusButton
+                        ariaLabel={
+                            running
+                                ? 'Compacting the context, details and compaction'
+                                : `Context usage ${d?.percent ?? 'unknown'}, details and compaction`
+                        }
+                        open={open}
+                        testId="agent-context-meter"
+                        dataAttrs={{ 'data-context-level': running ? 'compacting' : level }}
+                        tone={running ? 'running' : level === 'danger' ? 'failed' : level === 'warn' ? 'attention' : 'default'}
+                        onClick={(e) => setAnchor(e.currentTarget)}
+                        icon={
+                            <ContextRing
+                                ratio={d?.ratio ?? 0}
+                                thresholdRatio={autoCompact ? d?.thresholdRatio : undefined}
+                                level={level}
+                                compacting={running}
+                            />
+                        }
+                        label={
+                            running ? (
+                                label ? 'Compacting …' : null
+                            ) : (
+                                <>
+                                    {d?.percent ?? '–'}
+                                    {label && ' context'}
+                                </>
+                            )
+                        }
                     />
-                    {running ? (label ? 'Compacting …' : null) : (d?.percent ?? '–')}
-                    {label && !running && (
-                        <Box component="span" sx={{ color: 'text.secondary', fontWeight: 400 }}>
-                            context
-                        </Box>
-                    )}
-                </ButtonBase>
+                </span>
             </Tooltip>
             <Popover
                 open={open}
