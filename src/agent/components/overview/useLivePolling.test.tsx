@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
+import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { reportPlatformChanged } from '../../platformChanges';
@@ -92,7 +92,8 @@ describe('useLivePolling', () => {
         });
         const { result } = renderHook(() => useLivePolling<Page>(load, { key: 'a', active: () => true }));
         await flush();
-        await waitFor(() => expect(result.current.data).toEqual({ running: 1 }));
+        await flush();
+        expect(result.current.data).toEqual({ running: 1 });
         expect(result.current.failed).toBe(false);
         fail = true;
         await act(async () => { await vi.advanceTimersByTimeAsync(5000); });

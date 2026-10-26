@@ -184,7 +184,8 @@ describe('the progress of a step (D2.4, D4.6)', () => {
             />,
         );
         expect(screen.getByText('48 %')).toBeTruthy();
-        expect(screen.getByText(/Epoch 5\/10 · loss 0.142/)).toBeTruthy();
+        // The step's subline and its live block both carry the platform's line (#221).
+        expect(screen.getAllByText(/Epoch 5\/10 · loss 0.142/).length).toBeGreaterThan(0);
         expect(screen.getByText(/Runtime 1 min · time left unknown/)).toBeTruthy();
     });
 
