@@ -546,7 +546,8 @@ export function indicatorTooltip(state: Pick<IndicatorState, 'mode' | 'aria' | '
     const base = off ? 'Internet is off for this chat' : state.aria.replace(/, \d+ blocked$/, '');
     const n = state.blocked;
     const click = ' · click for details';
-    if (n <= 0) return off ? `${base}. The agent asks when it needs access${click}` : `${base}${click}`;
+    // off without refusals the click asks to switch internet on, it shows no details (#228)
+    if (n <= 0) return off ? `${base}. The agent asks when it needs access · click to switch it on` : `${base}${click}`;
     const t = clock(blocked?.since);
     const count = `${n} ${n === 1 ? 'connection' : 'connections'} blocked${t ? ` since ${t}` : ''}`;
     return off
