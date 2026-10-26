@@ -510,7 +510,7 @@ describe('indicatorTooltip (#228)', () => {
     const t = clock(since);
 
     it('explains the internet being off', () => {
-        expect(tip([], 0)).toBe('Internet is off for this chat. The agent asks when it needs access · click for details');
+        expect(tip([], 0)).toBe('Internet is off for this chat. The agent asks when it needs access · click to switch it on');
         expect(tip([], 8)).toBe(
             `Internet is off for this chat. 8 connections blocked since ${t}: programs in the sandbox tried to go online. Nothing to do, the agent asks when it needs access · click for details`,
         );
