@@ -377,10 +377,20 @@ export function deploymentRows(fig: DeploymentFigures | undefined): KvRow[] {
         }
     }
     rows.push({ label: 'Requests', value: fig.requests > 0 ? fmtNum(fig.requests) : 'not sent' });
-    if (fig.max_abs_diff !== null && fig.max_abs_diff !== undefined)
-        rows.push({ label: 'Largest difference to the model file', value: fmtDiff(fig.max_abs_diff) });
-    if (fig.argmax_same !== null && fig.argmax_same !== undefined && fig.requests > 0)
-        rows.push({ label: 'Same top class', value: `${fmtNum(fig.argmax_same)} of ${fmtNum(fig.requests)}` });
+    if (fig.max_abs_diff !== null && fig.max_abs_diff !== undefined) {
+        let diff = fmtDiff(fig.max_abs_diff);
+        if (fig.max_rel_diff !== null && fig.max_rel_diff !== undefined && Number.isFinite(fig.max_rel_diff)) {
+            diff += ` · ${fig.max_rel_diff.toExponential(1)} of the largest output value`;
+            if (fig.tolerance) diff += ` (allowed ${fig.tolerance.scale.toExponential(1)})`;
+        }
+        rows.push({ label: 'Largest difference to the model file', value: diff });
+    }
+    if (fig.argmax_same !== null && fig.argmax_same !== undefined && fig.requests > 0) {
+        let same = `${fmtNum(fig.argmax_same)} of ${fmtNum(fig.requests)}`;
+        const ties = (fig.per_request ?? []).filter((r) => r.tie).length;
+        if (ties > 0) same += ` (${ties} ${ties === 1 ? 'tie' : 'ties'} within the tolerance)`;
+        rows.push({ label: 'Same top class', value: same });
+    }
     if (fig.roundtrip_ms)
         rows.push({
             label: 'Round trip (incl. docker exec)',

@@ -1244,11 +1244,31 @@ export type DeploymentFigures = {
     requests: number;
     /** The largest difference to the model file; null while nothing was compared. */
     max_abs_diff: number | null;
+    /** The largest difference as a share of the largest value of its output; null without a comparison (absent in old reports). */
+    max_rel_diff?: number | null;
+    /** The largest share of the tolerance a request used; at most 1 means the comparison held (absent in old reports). */
+    tolerance_used?: number | null;
+    /** The rule of the comparison: abs + scale * largest output value. */
+    tolerance?: { abs: number; scale: number };
+    /** One entry per compared request (absent in old reports). */
+    per_request?: RequestFigures[];
     /** In how many requests the device named the same top class; null without a classification output. */
     argmax_same: number | null;
     /** The round trips of the test requests, in milliseconds. */
     roundtrip_ms: { median: number; max: number };
     model_check: ModelCheck | null;
+};
+
+/** The comparison of one test request of a deployment check. */
+export type RequestFigures = {
+    input: string;
+    max_abs_diff: number;
+    scale: number;
+    rel_diff: number | null;
+    tolerance_used: number;
+    argmax_same: boolean | null;
+    /** The device named another top class, but the model file's two values lie inside the tolerance. */
+    tie?: boolean;
 };
 
 export type PiEvent = { type: string; [key: string]: unknown };
