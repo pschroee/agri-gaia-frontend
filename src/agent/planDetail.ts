@@ -134,6 +134,7 @@ export function resourceNoun(resource: string | undefined): string {
     if (res.startsWith('deployment') || res.startsWith('container_deployment') || res.startsWith('container-deployment'))
         return 'deployment';
     if (res.startsWith('image') || res.startsWith('container')) return 'image';
+    if (res === 'task') return 'platform task';
     return 'resource';
 }
 
@@ -330,14 +331,37 @@ export function stepSubline(
         return { text: msg || (phase === 'paused' ? 'Paused' : 'Running'), tone: 'muted' };
     }
     if (phase === 'done') {
-        if (step.created_id) return { text: `Created ${resourceNoun(step.created_resource)} ${step.created_id}`, tone: 'muted' };
-        return { text: 'Done', tone: 'muted' };
+        return { text: doneLine(step, plan), tone: 'muted' };
     }
     if (phase === 'open' || phase === 'queued' || phase === 'starting') {
         const n = waitsForStep(plan, step);
         return { text: n !== undefined ? `Waiting for step ${n}` : '', tone: 'muted' };
     }
     return { text: '', tone: 'muted' };
+}
+
+/**
+ * What a finished step produced, in words by kind (gateway issue #225): a training run, a started deployment, a check,
+ * a rename, else the object created. "Done" when nothing is known.
+ */
+export function doneLine(step: PlanStep, plan: Plan): string {
+    const path = step.path ?? '';
+    const id = step.created_id;
+    if (id && (step.created_resource ?? '').toLowerCase() === 'task') {
+        if (step.tool === 'start_training' || /\/train\/containers\/[^/]+\/run(?:\/|$)/.test(path))
+            return `Training run finished · task ${id}`;
+        if (step.tool === 'start_deployment' || /\/container-deployments\/[^/]+\/deploy(?:\/|$)/.test(path)) {
+            const dep = deploymentIdOf(step, plan);
+            return `${dep !== undefined ? `Deployment ${dep} started` : 'Deployment started'} · task ${id}`;
+        }
+        return `Platform task ${id} finished`;
+    }
+    if (id) return `Created ${resourceNoun(step.created_resource)} ${id}`;
+    if (step.tool === 'assess_model' || step.tool === 'assess_deployment' || path === '/_agw/assess/checks')
+        return 'Check finished';
+    if (step.method === 'PATCH' && isRecord(step.body) && typeof step.body.name === 'string' && step.body.name !== '')
+        return `Renamed to "${step.body.name}"`;
+    return 'Done';
 }
 
 /** The phase of a step (shared with the card); re-exported so a row needs one import. */

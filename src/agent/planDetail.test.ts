@@ -14,6 +14,8 @@ import {
     argRows,
     askLine,
     currentIdx,
+    doneLine,
+    resourceNoun,
     epochLine,
     metricPairs,
     planHeadLine,
@@ -291,5 +293,53 @@ describe('planHeadLine and activityQuery', () => {
     });
     it('the activity query asks for one step of one plan', () => {
         expect(activityQuery('p-1', 4)).toBe('?plan=p-1&step=4&limit=20');
+    });
+});
+
+describe('doneLine (issue #225)', () => {
+    const done = (over: Partial<PlanStep>) => step({ state: 'done', ...over });
+    const line = (s: PlanStep, others: PlanStep[] = []) => doneLine(s, plan([...others, s]));
+
+    it('names a training run', () => {
+        expect(line(done({ tool: 'start_training', created_resource: 'task', created_id: '145' }))).toBe(
+            'Training run finished · task 145',
+        );
+        expect(line(done({ path: '/train/containers/7/run', created_resource: 'task', created_id: '145' }))).toBe(
+            'Training run finished · task 145',
+        );
+    });
+
+    it('names a started deployment, with its id when known', () => {
+        const dep = done({ idx: 1, created_resource: 'deployment', created_id: '8' });
+        const start = done({
+            idx: 2,
+            tool: 'start_deployment',
+            path: '/container-deployments/{{step1.id}}/deploy',
+            created_resource: 'task',
+            created_id: '147',
+        });
+        expect(line(start, [dep])).toBe('Deployment 8 started · task 147');
+        expect(line(done({ tool: 'start_deployment', created_resource: 'task', created_id: '147' }))).toBe(
+            'Deployment started · task 147',
+        );
+    });
+
+    it('names any other task, a created object, a check, a rename and a plain step', () => {
+        expect(line(done({ path: '/other', created_resource: 'task', created_id: '9' }))).toBe('Platform task 9 finished');
+        expect(line(done({ created_resource: 'dataset', created_id: '5' }))).toBe('Created dataset 5');
+        expect(line(done({ tool: 'assess_model' }))).toBe('Check finished');
+        expect(line(done({ path: '/_agw/assess/checks' }))).toBe('Check finished');
+        expect(line(done({ method: 'PATCH', path: '/models/3', body: { name: 'm2' } }))).toBe('Renamed to "m2"');
+        expect(line(done({ method: 'DELETE', path: '/models/3' }))).toBe('Done');
+    });
+
+    it('feeds the subline and the references without the word "resource"', () => {
+        const t = done({ idx: 1, tool: 'start_training', created_resource: 'task', created_id: '145' });
+        const p = plan([t]);
+        expect(stepSubline(p, t, 'done', undefined).text).toBe('Training run finished · task 145');
+        expect(resourceNoun('task')).toBe('platform task');
+        const user = step({ idx: 2, method: 'GET', path: '/tasks/{{step1.id}}' });
+        const rows = argRows({ ...user, args: { id: '{{step1.id}}' } }, plan([t, user]));
+        expect(rows[0].ref?.text).toBe('→ platform task 145');
     });
 });

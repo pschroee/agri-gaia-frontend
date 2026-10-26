@@ -243,6 +243,18 @@ describe('gateway summaries (gateway issue #72)', () => {
         expect(JSON.stringify(stepMain(s))).not.toContain('evil');
     });
 
+    it('prefers the summary of the call as it was sent, else the proposed one (gateway issue #225)', () => {
+        const base = step({ summary: 'Start the deployment created by step 8' });
+        expect(stepMain(base).head).toBe('Start the deployment created by step 8');
+        const run = { ...base, summary_run: 'Start deployment "d" (id 8) on edge device "sim-edge-01" (id 3)\nImage: x' };
+        expect(stepMain(run)).toEqual({
+            head: 'Start deployment "d" (id 8) on edge device "sim-edge-01" (id 3)',
+            details: ['Image: x'],
+            fromGateway: true,
+        });
+        expect(stepMain({ ...base, summary_run: '' }).head).toBe('Start the deployment created by step 8');
+    });
+
     it('falls back to the call for steps without a summary (older plans), not to the note', () => {
         const old = step({ method: 'PATCH', path: '/models/3', query: { x: '1' }, description: 'Renames model 3' });
         expect(stepMain(old)).toEqual({ head: 'PATCH /models/3?x=1', details: [], fromGateway: false });
