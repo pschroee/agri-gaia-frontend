@@ -64,9 +64,6 @@ export type WatchOutput = { resource: string; id: string; label?: string; size?:
 /** The last epoch a training job reported (gateway issue #221): the epoch, the epochs planned and its figures. */
 export type EpochFigures = { epoch: number; epochs?: number; values: Record<string, number>; at?: string };
 
-/** Why a step asks for its own approval although the plan is approved (gateway issue #219). */
-export type UncoveredReason = 'irreversible' | 'image_origin' | 'runs_code';
-
 export type PlanStep = {
     idx: number;
     /**
@@ -103,8 +100,6 @@ export type PlanStep = {
     effect: 'write' | 'compute' | 'irreversible';
     /** Covered by the approval of the plan (false: the step asks for its own approval). */
     covered: boolean;
-    /** Why an uncovered step asks again (gateway issue #219); missing for covered steps and older gateways. */
-    uncovered_reason?: UncoveredReason | string;
     state: PlanStepState;
     result?: string;
     created_resource?: string;
