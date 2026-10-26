@@ -5,7 +5,7 @@
 // The plan the chat header shows (issue #138, L8): which plan the button takes, what its dot says and the short
 // words around it. Pure logic (unit-tested); the button is components/PlanButton.tsx, the list PlanList.tsx.
 
-import { agentTitle, planLabel, stepCount, stepMain } from './plan';
+import { agentTitle, doneSteps, isAutonomous, needsInput, planLabel, stepCount, stepMain } from './plan';
 import type { Plan } from './plan';
 
 /** What the dot at the button says: waits for attention, runs, is done, failed, or nothing special. */
@@ -96,3 +96,46 @@ export function planEntryTitle(plan: Plan): string {
 
 /** Second line of one entry: the state and the number of steps. */
 export const planEntrySub = (plan: Plan, now: number) => `${planLabel(plan, now)} · ${stepCount(plan.steps.length)}`;
+
+// --- the plan chip of the status row (issue #221) ------------------------------------------------------------------
+
+/** The tone of the plan chip: how the plan stands, in the words of the status row. */
+export type PlanTone = 'default' | 'running' | 'attention' | 'failed';
+
+export function planTone(plan: Plan, now: number, pending: ReadonlySet<string>): PlanTone {
+    switch (plan.state) {
+        case 'proposed':
+            return plan.approving ? 'running' : 'attention';
+        case 'approved':
+            // an autonomous plan runs until it ends; an interactive one only while its approval is valid
+            if (!isAutonomous(plan) && !approvedValid(plan, now)) return 'default';
+            return needsInput(plan, pending) ? 'attention' : 'running';
+        case 'paused':
+            return 'attention';
+        case 'failed':
+            return 'failed';
+        default:
+            return 'default';
+    }
+}
+
+/**
+ * The plan the status row shows while the chat has plans: one waiting for the user's approval first, then one that
+ * waits for a single approval, then a running one, a paused one, else the newest. Undefined without plans.
+ */
+export function headerPlan(plans: Plan[], now: number, pending: ReadonlySet<string>): Plan | undefined {
+    if (plans.length === 0) return undefined;
+    return (
+        plans.find((p) => p.state === 'proposed' && !p.approving) ??
+        plans.find((p) => needsInput(p, pending)) ??
+        plans.find((p) => planTone(p, now, pending) === 'running') ??
+        plans.find((p) => p.state === 'paused') ??
+        newestPlan(plans)
+    );
+}
+
+/** The count of the chip: "Plan 3/10" (done of all steps), "3/10" where there is no room for the word. */
+export const planChipText = (plan: Plan, short: boolean): string => {
+    const n = `${doneSteps(plan)}/${plan.steps.length}`;
+    return short ? n : `Plan ${n}`;
+};

@@ -274,7 +274,7 @@ describe('the status table (L21, L22)', () => {
 });
 
 describe('the plan indicator (L15, L17, L18)', () => {
-    it('counts the step the plan is on and cuts the title before its first quote', () => {
+    it('counts the steps done of all, as the ring and the task count do (#221)', () => {
         const p = plan({
             steps: [
                 step({ idx: 1, state: 'done' }),
@@ -282,9 +282,17 @@ describe('the plan indicator (L15, L17, L18)', () => {
                 step({ idx: 3, state: 'open' }),
             ],
         });
-        expect(indicatorLabel(p, 'page')).toBe('Plan 2/3 · Run training');
-        expect(indicatorLabel(p, 'panel')).toBe('Plan 2/3');
-        expect(indicatorLabel(p, 'mobile')).toBe('2/3');
+        expect(indicatorLabel(p, 'page')).toBe('Plan 1/3');
+        expect(indicatorLabel(p, 'panel')).toBe('Plan 1/3');
+        expect(indicatorLabel(p, 'mobile')).toBe('1/3');
+    });
+
+    it('the tooltip of a proposed plan says it waits for the approval', () => {
+        const p = plan({ state: 'proposed', steps: [step({ idx: 1 }), step({ idx: 2 })] });
+        expect(indicatorTooltip(p, NONE)).toBe('Plan with 2 steps waits for your approval · click to show the plan');
+        expect(indicatorTooltip({ ...p, approving: true }, NONE)).toBe(
+            'Plan with 2 steps is being approved · click to show the plan',
+        );
     });
 
     it('the tooltip names the state and the step', () => {

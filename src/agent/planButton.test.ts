@@ -6,6 +6,9 @@ import { describe, expect, it } from 'vitest';
 
 import {
     currentPlan,
+    headerPlan,
+    planChipText,
+    planTone,
     newestPlan,
     planAriaLabel,
     planButtonLabel,
@@ -147,5 +150,38 @@ describe('a plan whose approval is on its way (issue #166)', () => {
         expect(planMark(p, NOW)).toBe('running');
         expect(planStateWord(p, NOW)).toBe('Approving…');
         expect(planStateWord(plan({ state: 'proposed' }), NOW)).toBe('Waiting');
+    });
+});
+
+describe('planTone and headerPlan (#221)', () => {
+    const none: ReadonlySet<string> = new Set();
+    it('gives each state its tone', () => {
+        expect(planTone(plan({ state: 'proposed' }), NOW, none)).toBe('attention');
+        expect(planTone(plan({ state: 'proposed', approving: true }), NOW, none)).toBe('running');
+        expect(planTone(plan({ state: 'approved', expires_at: validUntil }), NOW, none)).toBe('running');
+        expect(planTone(plan({ state: 'approved' }), NOW, none)).toBe('default');
+        expect(planTone(plan({ state: 'approved', mode: 'autonomous' }), NOW, none)).toBe('running');
+        expect(planTone(plan({ state: 'paused' }), NOW, none)).toBe('attention');
+        expect(planTone(plan({ state: 'failed' }), NOW, none)).toBe('failed');
+        expect(planTone(plan({ state: 'completed' }), NOW, none)).toBe('default');
+    });
+    it('a pending single approval makes a running plan attention', () => {
+        const p = plan({ state: 'approved', mode: 'autonomous', steps: [step({ parked_approval: 'a1' })] });
+        expect(planTone(p, NOW, new Set(['a1']))).toBe('attention');
+        expect(planTone(p, NOW, none)).toBe('running');
+    });
+    it('picks the plan that needs the user, then a running one, else the newest; none without plans', () => {
+        const old = plan({ id: 'old', state: 'completed', created_at: '2026-10-12T09:00:00Z' });
+        const run = plan({ id: 'run', state: 'approved', mode: 'autonomous', created_at: '2026-10-12T09:30:00Z' });
+        const wait = plan({ id: 'wait', state: 'proposed', created_at: '2026-10-12T09:10:00Z' });
+        expect(headerPlan([old, run, wait], NOW, none)?.id).toBe('wait');
+        expect(headerPlan([old, run], NOW, none)?.id).toBe('run');
+        expect(headerPlan([old, plan({ id: 'newer', state: 'completed', created_at: '2026-10-12T09:50:00Z' })], NOW, none)?.id).toBe('newer');
+        expect(headerPlan([], NOW, none)).toBeUndefined();
+    });
+    it('counts the steps done of all', () => {
+        const p = plan({ steps: [step({ idx: 1, state: 'done' }), step({ idx: 2 })] });
+        expect(planChipText(p, false)).toBe('Plan 1/2');
+        expect(planChipText(p, true)).toBe('1/2');
     });
 });
