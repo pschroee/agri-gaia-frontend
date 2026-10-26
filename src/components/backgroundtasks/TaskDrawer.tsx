@@ -11,16 +11,17 @@
 // SPDX-License-Identifier: MIT
 
 import { useState } from 'react';
-import { SwipeableDrawer, Box, Button, Typography, createTheme } from '@mui/material';
+import { SwipeableDrawer, Box, Button, Tooltip, Typography, createTheme } from '@mui/material';
 import { ThemeProvider } from '@emotion/react';
 import { Autorenew } from '@mui/icons-material';
 import { IBackgroundTask } from '../../types/IBackgroundTask';
 import useApplicationTasks from '../../contexts/TasksContext';
 import { TaskStatus } from '../../types/TaskStatus';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ErrorIcon from '@mui/icons-material/Error';
 import TasksTabs from './TasksTabs';
 import TaskDetailsView from './TaskDetailsView';
 import { footerLabel } from './utils';
+import { footerTooltip, useFailedSeen } from './failedSeen';
 
 const taskHeight = 60;
 const minDrawerHeight = 500;
@@ -77,12 +78,15 @@ export default function () {
     const tasksList = tasks?.tasksList || [];
 
     const [open, setOpen] = useState(false);
+    // opening with unseen failures starts on "Completed" (#228); the key mounts the tabs anew
+    const [tabsStart, setTabsStart] = useState<number | undefined>(undefined);
+    const [tabsKey, setTabsKey] = useState(0);
     const [openedTask, setOpenedTask] = useState<IBackgroundTask | undefined>(undefined);
     const [lastOpenedTask, setLastOpenedTask] = useState<IBackgroundTask | undefined>(undefined);
     const numRunningTasks = tasksList.filter((task) => task.status === TaskStatus.inprogress).length;
     const numQueuedTasks = tasksList.filter((task) => task.status === TaskStatus.created).length;
     const hasActiveTasks = numRunningTasks > 0;
-    const failedTasks = tasksList.filter((task) => task.status === TaskStatus.failed);
+    const { unseen, markSeen } = useFailedSeen(tasksList, !!tasks?.loaded);
     const finishedTasks = tasksList.filter(
         (task) => task.status === TaskStatus.completed || task.status === TaskStatus.failed,
     );
@@ -95,18 +99,33 @@ export default function () {
         setOpenedTask(undefined);
     };
 
-    const getFooterButtonLabel = () => footerLabel(numRunningTasks, numQueuedTasks);
+    const onFooterClick = () => {
+        if (!open && unseen.length > 0) {
+            setTabsStart(1);
+            setTabsKey((k) => k + 1);
+            markSeen();
+        } else if (!open) {
+            setTabsStart(undefined);
+        }
+        setOpen(!open);
+    };
+
+    const getFooterButtonLabel = () => footerLabel(numRunningTasks, numQueuedTasks, unseen.length);
 
     return (
         <ThemeProvider theme={createDrawerTheme(Math.max(unfinishedTasks.length, finishedTasks.length))}>
-            <Button
-                variant="text"
-                onClick={() => setOpen(!open)}
-                startIcon={<Autorenew sx={{ animation: hasActiveTasks ? 'spin 4s linear infinite' : undefined }} />}
-                endIcon={failedTasks.length > 0 ? <ErrorOutlineIcon color="error" /> : undefined}
-            >
-                <Typography> {getFooterButtonLabel()}</Typography>
-            </Button>
+            <Tooltip title={footerTooltip(unseen)}>
+                <Button
+                    variant="text"
+                    onClick={onFooterClick}
+                    data-testid="footer-tasks-button"
+                    data-failed-unseen={unseen.length}
+                    startIcon={<Autorenew sx={{ animation: hasActiveTasks ? 'spin 4s linear infinite' : undefined }} />}
+                    endIcon={unseen.length > 0 ? <ErrorIcon sx={{ fontSize: 18, color: '#ff8a80' }} /> : undefined}
+                >
+                    <Typography> {getFooterButtonLabel()}</Typography>
+                </Button>
+            </Tooltip>
             <SwipeableDrawer
                 id="task-drawer"
                 anchor="bottom"
@@ -124,7 +143,8 @@ export default function () {
                         <TaskDetailsView task={openedTask} onClose={onTaskDetailsClose} />
                     ) : (
                         <TasksTabs
-                            firstOpenTab={getFirstOpenedTab(lastOpenedTask)}
+                            key={tabsKey}
+                            firstOpenTab={tabsStart ?? getFirstOpenedTab(lastOpenedTask)}
                             tasks={tasks}
                             taskHeight={taskHeight}
                             onTaskDetails={setOpenedTask}

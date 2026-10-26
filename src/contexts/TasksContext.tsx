@@ -34,6 +34,8 @@ export interface ApplicationTasks {
     ) => void;
     startTaskPolling: (keycloak: Keycloak.KeycloakInstance | undefined, tasks: ApplicationTasks) => void;
     pollingIntervalId?: number;
+    /** The first answer of the server list has arrived (#228). */
+    loaded?: boolean;
 }
 
 const taskPollingInterval = 3000;
@@ -192,6 +194,7 @@ export const TasksProvider = function ({ children }: { children: ReactNode }) {
         deleteTask: deleteTask,
         startTaskPolling: startTaskPolling,
         pollingIntervalId: undefined,
+        loaded: false,
     });
     const tasksRef = useRef<ApplicationTasks>(tasks);
 
@@ -213,6 +216,7 @@ export const TasksProvider = function ({ children }: { children: ReactNode }) {
                 // keep a task taken in while the list was loading
                 setTasks((tasks) => ({
                     ...tasks,
+                    loaded: true,
                     tasksList: [...initial, ...tasks.tasksList.filter((t) => !initial.some((i) => i.id === t.id))],
                 }));
                 tasks.startTaskPolling(keycloak, tasks);

@@ -34,7 +34,10 @@ export const TASK_STATUS_LABEL: Record<TaskStatusType, string> = {
     [TaskStatus.failed]: 'failed',
 };
 
-/** Label of the footer button: "1 Task running · 1 queued", the same count as the tab "In Progress". */
-export function footerLabel(running: number, queued: number): string {
-    return `${running} ${running === 1 ? 'Task' : 'Tasks'} running${queued > 0 ? ` · ${queued} queued` : ''}`;
+/**
+ * Label of the footer button: "1 Task running · 1 queued", the same count as the tab "In Progress"; "· 1 failed" for
+ * failures the user has not seen yet (#228).
+ */
+export function footerLabel(running: number, queued: number, failed = 0): string {
+    return `${running} ${running === 1 ? 'Task' : 'Tasks'} running${queued > 0 ? ` · ${queued} queued` : ''}${failed > 0 ? ` · ${failed} failed` : ''}`;
 }
