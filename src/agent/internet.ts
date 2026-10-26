@@ -214,7 +214,7 @@ export function normalizeBlocked(raw: unknown): InternetBlocked | undefined {
 // Stream events
 // ---------------------------------------------------------------------------------------------------------------
 
-export type InternetEvent = { kind: 'grant'; grant: InternetGrant } | { kind: 'blocked'; blocked: InternetBlocked };
+export type InternetEvent = { kind: 'grant'; grant: InternetGrant } | { kind: 'blocked'; blocked: InternetBlocked | null };
 
 /** Reads one SSE message of the chat's stream; undefined for everything but `internet_grant` and `internet_blocked`. */
 export function internetEvent(text: string): InternetEvent | undefined {
@@ -230,6 +230,8 @@ export function internetEvent(text: string): InternetEvent | undefined {
         return grant ? { kind: 'grant', grant } : undefined;
     }
     if (ev.kind === 'internet_blocked') {
+        // count 0: the counter was reset (a grant started or the window ran out); the display is cleared (#229).
+        if (isObj(ev.data) && ev.data.count === 0) return { kind: 'blocked', blocked: null };
         const blocked = normalizeBlocked(ev.data);
         return blocked ? { kind: 'blocked', blocked } : undefined;
     }
@@ -362,8 +364,8 @@ export type InternetState = {
     grants: InternetGrant[];
     /** The running ones. */
     active: InternetGrant[];
-    /** The refusal counter the stream sent last; the hook returns it merged with the caller's initial value. */
-    blocked?: InternetBlocked;
+    /** The refusal counter the stream sent last (null: it fell to 0); the hook returns it merged with the caller's initial value. */
+    blocked?: InternetBlocked | null;
     loaded: boolean;
     error?: string;
     /** The stream broke; the last values stay and the state is read again when it is back. */
@@ -372,7 +374,9 @@ export type InternetState = {
     lastEnded?: GrantEnd;
 };
 
-export type InternetHandle = InternetState & {
+export type InternetHandle = Omit<InternetState, 'blocked'> & {
+    /** The refusal counter; undefined when there is none (never null). */
+    blocked?: InternetBlocked;
     /** Ends one grant (the user's button); a grant that already ended is read again instead of failing. */
     endGrant: (grantId: number) => Promise<void>;
     /** Ends all grants (SWITCH ALL OFF). */
@@ -481,7 +485,7 @@ export function useInternet(
     const clearEnded = useCallback(() => setState((s) => (s.lastEnded ? { ...s, lastEnded: undefined } : s)), []);
 
     return useMemo(
-        () => ({ ...state, blocked: state.blocked ?? initialBlocked, endGrant, endAll, reload, clearEnded }),
+        () => ({ ...state, blocked: state.blocked === undefined ? initialBlocked : (state.blocked ?? undefined), endGrant, endAll, reload, clearEnded }),
         [state, initialBlocked, endGrant, endAll, reload, clearEnded],
     );
 }

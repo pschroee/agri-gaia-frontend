@@ -144,7 +144,14 @@ describe('internetEvent', () => {
         expect(internetEvent(JSON.stringify({ kind: 'search', data: { id: 'x' } }))).toBeUndefined();
         expect(internetEvent('not json')).toBeUndefined();
         expect(internetEvent(JSON.stringify({ kind: 'internet_grant', data: null }))).toBeUndefined();
-        expect(internetEvent(JSON.stringify({ kind: 'internet_blocked', data: { count: 0 } }))).toBeUndefined();
+        expect(internetEvent(JSON.stringify({ kind: 'internet_blocked', data: { count: -1 } }))).toBeUndefined();
+        expect(internetEvent(JSON.stringify({ kind: 'internet_blocked', data: { since: 'x' } }))).toBeUndefined();
+        expect(internetEvent(JSON.stringify({ kind: 'internet_blocked', data: null }))).toBeUndefined();
+    });
+
+    it('reads an internet_blocked event with count 0 as a cleared counter (#229)', () => {
+        const ev = internetEvent(JSON.stringify({ kind: 'internet_blocked', data: { count: 0, since: 'x', last: [] } }));
+        expect(ev).toEqual({ kind: 'blocked', blocked: null });
     });
 });
 
