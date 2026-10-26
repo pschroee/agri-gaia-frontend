@@ -3,27 +3,26 @@
 // SPDX-License-Identifier: MIT
 
 // The internet display of a chat (gateway issue #175, design `internet-access`, b1/b5): in the header of the agent
-// page a text button with the state, a badge for several grants and the "n blocked" chip; in the panel the globe next
-// to the chat selector with two badges. A click opens the popover; with the internet off it asks "Switch on full
+// page a calm status button with the state ("Internet off · 8 blocked", "+1" for several grants); in the panel the
+// globe next to the chat selector with a badge for several grants. #228: quiet blocked count, never red; the
+// tooltip explains it. A click opens the popover; with the internet off it asks "Switch on full
 // access?" first. Replaces `InternetToggle`.
 
 import { useMemo, useRef, useState } from 'react';
 import Badge from '@mui/material/Badge';
-import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
 import IconButton from '@mui/material/IconButton';
-import BlockIcon from '@mui/icons-material/Block';
+import Tooltip from '@mui/material/Tooltip';
 import PublicIcon from '@mui/icons-material/Public';
 import PublicOffIcon from '@mui/icons-material/PublicOff';
 
 import AlertSnackbar from '../../../components/common/AlertSnackbar';
 import { useInternetContext } from '../../InternetContext';
 import { activeGrants, normalizeGrants } from '../../internet';
-import { WARNING_TEXT_COLOR, indicatorState } from '../../internetView';
+import { WARNING_TEXT_COLOR, indicatorState, indicatorTooltip } from '../../internetView';
 import type { Chat } from '../../types';
 import { useChatSettings } from '../../useChatSettings';
 import { useNow } from '../../useNow';
+import HeaderStatusButton, { type StatusTone } from '../HeaderStatusButton';
 import { agentColors, rowIconButtonSx } from '../tokens';
 import InternetPopover from './InternetPopover';
 
@@ -57,24 +56,20 @@ export default function InternetIndicator({ chat, compact = false }: { chat: Cha
         onClick: () => setOpen(true),
     };
 
+    const tooltip = indicatorTooltip(state, blocked);
+    const tone: StatusTone = off ? 'default' : full ? 'attention' : 'running';
+
     const control = compact ? (
         <Badge
             overlap="rectangular"
-            color="error"
-            badgeContent={blockedCount}
-            invisible={blockedCount === 0}
-            anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+            color="primary"
+            badgeContent={state.count}
+            invisible={state.count < 2}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
             slotProps={{ badge: { 'aria-hidden': true } as object }}
             sx={{ flex: 'none' }}
         >
-            <Badge
-                overlap="rectangular"
-                color="primary"
-                badgeContent={state.count}
-                invisible={state.count < 2}
-                anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                slotProps={{ badge: { 'aria-hidden': true } as object }}
-            >
+            <Tooltip title={tooltip}>
                 <IconButton
                     {...common}
                     size="small"
@@ -86,41 +81,27 @@ export default function InternetIndicator({ chat, compact = false }: { chat: Cha
                 >
                     <Icon sx={{ fontSize: 22, color: full ? '#ed6c02' : undefined }} aria-hidden />
                 </IconButton>
-            </Badge>
+            </Tooltip>
         </Badge>
     ) : (
-        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, flex: 'none' }}>
-            <Button
-                {...common}
-                size="small"
-                color="inherit"
-                startIcon={
-                    <Badge
-                        color="primary"
-                        badgeContent={state.count}
-                        invisible={state.count < 2}
-                        slotProps={{ badge: { 'aria-hidden': true } as object }}
-                    >
-                        <Icon sx={{ fontSize: 18, color: full ? '#ed6c02' : color }} aria-hidden />
-                    </Badge>
-                }
-                sx={{ color, textTransform: 'none', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', minWidth: 0 }}
-            >
-                {state.text}
-            </Button>
-            {blockedCount > 0 && (
-                <Chip
-                    component="span"
-                    size="small"
-                    color="error"
-                    variant="outlined"
-                    icon={<BlockIcon />}
-                    label={state.blockedText}
-                    aria-hidden
-                    sx={{ height: 22, fontSize: 12 }}
-                />
-            )}
-        </Box>
+        <HeaderStatusButton
+            icon={<Icon sx={{ fontSize: 18 }} aria-hidden />}
+            label={
+                <>
+                    {state.text}
+                    {state.count > 1 && <span style={{ color: agentColors.muted }}> +{state.count - 1}</span>}
+                    {blockedCount > 0 && <span style={{ color: agentColors.muted }}> · {blockedCount} blocked</span>}
+                </>
+            }
+            tone={tone}
+            open={open}
+            onClick={() => setOpen(true)}
+            ariaLabel={state.aria}
+            tooltip={tooltip}
+            testId="agent-internet-indicator"
+            buttonRef={anchor}
+            dataAttrs={{ 'data-internet': state.mode, 'data-blocked': String(blockedCount) }}
+        />
     );
 
     const close = () => setOpen(false);

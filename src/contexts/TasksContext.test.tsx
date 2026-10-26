@@ -34,7 +34,7 @@ const started = (id: string) =>
 function List() {
     const tasks = useApplicationTasks();
     return (
-        <ul>
+        <ul data-loaded={String(!!tasks?.loaded)}>
             {tasks?.tasksList.map((t) => (
                 <li key={t.id} data-testid={`t${t.id}`}>
                     {t.id}:{t.status}:{t.startedByAgent ? 'agent' : 'user'}
@@ -63,6 +63,22 @@ beforeEach(() => {
     localStorage.clear();
 });
 afterEach(cleanup);
+
+describe('TasksContext loaded (#228)', () => {
+    it('is false before the server list has arrived and true after', async () => {
+        let release: (v: unknown) => void = () => undefined;
+        httpGet.mockImplementation(() => new Promise((r) => (release = r)));
+        const { container } = render(
+            <TasksProvider>
+                <List />
+            </TasksProvider>,
+        );
+        await waitFor(() => expect(httpGet).toHaveBeenCalled());
+        expect(container.querySelector('ul')?.getAttribute('data-loaded')).toBe('false');
+        await act(async () => release([task(1, { status: 'failed' })]));
+        await waitFor(() => expect(container.querySelector('ul')?.getAttribute('data-loaded')).toBe('true'));
+    });
+});
 
 describe('TasksContext and platform_changed', () => {
     it('fetches a started task and marks it', async () => {

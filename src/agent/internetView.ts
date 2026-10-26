@@ -499,6 +499,8 @@ export type IndicatorState = {
     count: number;
     /** "4 blocked" or empty. */
     blockedText: string;
+    /** Number of refused connections (0 when none). */
+    blocked: number;
 };
 
 /** The indicator of a chat from its active grants, the refusal counter and the time. */
@@ -513,13 +515,14 @@ export function indicatorState(active: InternetGrant[], blocked: InternetBlocked
             aria: n ? `Internet access: off, ${n} blocked` : 'Internet access: off',
             count: 0,
             blockedText,
+            blocked: n,
         };
     }
     const first = firstEnding(grants, now) ?? grants[0];
     const text = grantLabel(first, now);
     const parts = grants.length > 1 ? grants.map((g) => grantName(g)).join(', ') : ariaWhat(first, now);
     const aria = `Internet access: ${parts}${grants.length > 1 ? ` (${ariaWhen(first, now)})` : ''}${n ? `, ${n} blocked` : ''}`;
-    return { mode: grants.some((g) => g.kind === 'full') ? 'full' : 'limited', text, aria, count: grants.length, blockedText };
+    return { mode: grants.some((g) => g.kind === 'full') ? 'full' : 'limited', text, aria, count: grants.length, blockedText, blocked: n };
 }
 
 function ariaWhat(g: InternetGrant, now: number): string {
@@ -533,6 +536,27 @@ function ariaWhen(g: InternetGrant, now: number): string {
     if (r.kind === 'bytes') return `${formatData(r.bytes)} left`;
     return r.kind === 'installing' ? 'installing' : 'active';
 }
+
+/**
+ * Tooltip of the indicator (#228): the state in a sentence, what the refusals mean and that nothing needs doing.
+ * The base is the aria text without its blocked part.
+ */
+export function indicatorTooltip(state: Pick<IndicatorState, 'mode' | 'aria' | 'blocked'>, blocked: Pick<InternetBlocked, 'since'> | undefined): string {
+    const off = state.mode === 'off';
+    const base = off ? 'Internet is off for this chat' : state.aria.replace(/, \d+ blocked$/, '');
+    const n = state.blocked;
+    const click = ' · click for details';
+    if (n <= 0) return off ? `${base}. The agent asks when it needs access${click}` : `${base}${click}`;
+    const t = clock(blocked?.since);
+    const count = `${n} ${n === 1 ? 'connection' : 'connections'} blocked${t ? ` since ${t}` : ''}`;
+    return off
+        ? `${base}. ${count}: programs in the sandbox tried to go online. Nothing to do, the agent asks when it needs access${click}`
+        : `${base}. ${count}: not covered by the access. Nothing to do, the agent asks when it needs more${click}`;
+}
+
+/** The sentence under the heading of the blocked list in the popover (#228). */
+export const BLOCKED_EXPLAINER =
+    "Programs in the sandbox or the agent's web tools tried to connect and were stopped. Nothing to do: the agent asks when it needs access.";
 
 /** "4 blocked". */
 export const blockedCountText = (n: number): string => `${n} blocked`;

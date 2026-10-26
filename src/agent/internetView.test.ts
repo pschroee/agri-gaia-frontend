@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { Connection, InternetGrant, PackageEntry } from './internet';
 import {
     FULL_WARNING,
+    indicatorTooltip,
     accessList,
     accessSummaryText,
     allowAria,
@@ -16,6 +17,7 @@ import {
     blockedHeading,
     blockedLine,
     cardTexts,
+    clock,
     connectionData,
     connectionResult,
     connectionTarget,
@@ -480,5 +482,47 @@ describe('activity', () => {
         expect(grantChip({ kind: 'domains', domains: ['a.org'], packages: [] })).toBe('1 site');
         expect(grantChip({ kind: 'packages', domains: [], packages: ['pip:torch', 'pip:torchvision'] })).toBe('2 packages');
         expect(grantChip({ kind: 'full', domains: [], packages: [] })).toBe('Full access');
+    });
+});
+
+describe('indicatorTooltip (#228)', () => {
+    const now = Date.parse('2026-10-21T12:10:00Z');
+    const since = '2026-10-21T12:05:00Z';
+    const search = {
+        id: 1,
+        chat_id: 'c1',
+        kind: 'search' as const,
+        origin: 'agent' as const,
+        domains: [],
+        packages: [],
+        state: 'active' as const,
+        max_minutes: 30,
+        max_bytes: 500 * MB,
+        bytes: 0,
+        blocked: 0,
+        created_at: '2026-10-21T12:00:00Z',
+        expires_at: new Date(now + 24 * 60000).toISOString(),
+    };
+    const tip = (active: InternetGrant[], n: number, at: string | null = since) => {
+        const blocked = n ? { count: n, since: at ?? '', last: [] } : undefined;
+        return indicatorTooltip(indicatorState(active, blocked, now), blocked);
+    };
+    const t = clock(since);
+
+    it('explains the internet being off', () => {
+        expect(tip([], 0)).toBe('Internet is off for this chat. The agent asks when it needs access · click for details');
+        expect(tip([], 8)).toBe(
+            `Internet is off for this chat. 8 connections blocked since ${t}: programs in the sandbox tried to go online. Nothing to do, the agent asks when it needs access · click for details`,
+        );
+    });
+    it('explains a grant, with and without refusals', () => {
+        expect(tip([search], 0)).toBe('Internet access: search only, 24 minutes left · click for details');
+        expect(tip([search], 3)).toBe(
+            `Internet access: search only, 24 minutes left. 3 connections blocked since ${t}: not covered by the access. Nothing to do, the agent asks when it needs more · click for details`,
+        );
+    });
+    it('uses the singular and leaves out a missing time', () => {
+        expect(tip([], 1)).toContain('1 connection blocked since');
+        expect(tip([], 1, null)).toContain('Internet is off for this chat. 1 connection blocked: programs');
     });
 });
