@@ -123,7 +123,8 @@ export default function InternetIndicator({ chat, compact = false }: { chat: Cha
                 now={now}
                 onEndGrant={(id) => handle?.endGrant(id) ?? Promise.resolve()}
                 onEndAll={() => handle?.endAll() ?? Promise.resolve()}
-                confirmSwitchOn={off}
+                // with refused connections the click shows them (the tooltip says "click for details", #228)
+                confirmSwitchOn={off && blockedCount === 0}
                 busy={settings.busy === 'internet'}
                 onSwitchOn={() => {
                     close();
