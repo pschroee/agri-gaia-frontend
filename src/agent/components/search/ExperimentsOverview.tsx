@@ -205,7 +205,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
         {
             id: 'duration',
             label: 'Duration',
-            width: 80,
+            width: 110,
             align: 'right',
             sortable: true,
             defaultOrder: 'desc',

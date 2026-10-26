@@ -163,6 +163,13 @@ describe('ExperimentsOverview', () => {
         expect(screen.queryByText('Running first, then newest')).toBeNull();
     });
 
+    it('gives the sortable Duration header room for its label and arrow (render check, #227)', async () => {
+        mount('/ai-agent?tab=experiments');
+        await screen.findByTestId('overview-table');
+        const th = screen.getByText('Duration').closest('th') as HTMLElement;
+        expect(getComputedStyle(th).width).toBe('110px');
+    });
+
     it('says there are no experiments yet when nothing was ever started', async () => {
         h.fetchRuns.mockImplementation(async () => makePage([]));
         mount();
