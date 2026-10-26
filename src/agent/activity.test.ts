@@ -25,6 +25,7 @@ import {
     endedTitle,
     internetEvent,
     internetOf,
+    isGatewayStop,
     isSystemRead,
     kindOf,
     mergePages,
@@ -455,6 +456,14 @@ describe('viaLabel', () => {
         expect(viaLabel('mcp')).toBe('MCP');
         expect(viaLabel('api')).toBe('API');
         expect(viaLabel('')).toBe('');
+    });
+});
+
+describe('isGatewayStop', () => {
+    it("knows the gateway's stop after failed tool calls (issue #217)", () => {
+        expect(isGatewayStop(call(1, 'a', { op: 'failed_calls_limit', via: 'orchestrator' }))).toBe(true);
+        expect(isGatewayStop(call(2, 'a'))).toBe(false);
+        expect(isGatewayStop(call(3, 'a', { op: 'summary_read' }))).toBe(false);
     });
 });
 

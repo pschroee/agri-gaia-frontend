@@ -40,6 +40,7 @@ export const PAUSE_SHORT: Record<string, string> = {
     budget_turns: 'turn budget used up',
     budget_cost: 'cost limit reached',
     restart: 'gateway restarted',
+    failed_calls: 'stopped after failed tool calls in a row',
 };
 
 /** The plan's name in quotes for the snackbar, cut to one line; '' without a title. */
