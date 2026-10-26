@@ -102,8 +102,15 @@ export type PlanStep = {
     created_resource?: string;
     created_id?: string;
     done_at?: string;
-    /** The route asks for every single call (gateway G1.1): never covered by a plan. */
+    /** The route asks for every single call (gateway G1.1): covered by a plan only for a deployment start with a traced image. */
     confirm_each?: boolean;
+    /**
+     * The build step whose image a deployment start runs (gateway #219): a step of this plan (no plan_id) or a
+     * finished step of the plan this one replaces. Absent when the gateway could not trace the image.
+     */
+    image_origin?: { plan_id?: string; step: number };
+    /** Why the step asks on its own (gateway #219): irreversible, image_origin or runs_code; absent when covered. */
+    uncovered_reason?: string;
     /** How often an autonomous plan may repeat this step, and how often it was claimed (D1.6). */
     max_attempts?: number;
     attempts?: number;

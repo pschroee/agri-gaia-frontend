@@ -29,6 +29,9 @@ import {
     statusWaiting,
     stepRefText,
     stopJobAllowed,
+    imageOriginText,
+    uncoveredSummary,
+    uncoveredText,
 } from './planText';
 
 const step = (over: Partial<PlanStep> = {}): PlanStep => ({
@@ -335,5 +338,38 @@ describe('stepRefText (#177)', () => {
         expect(stepRefText({ step: 1, resource: 'dataset', id: '66', label: 'dataset 66' })).toBe('Step 1 created dataset 66');
         expect(stepRefText({ step: 3, resource: 'training', id: '4', label: 'Training container 4' })).toBe('Step 3 created training container 4');
         expect(stepRefText({ step: 1, resource: 'dataset', id: '66', label: 'dataset 66 copy' })).toBe('Step 1 created dataset 66 "dataset 66 copy"');
+    });
+});
+
+describe('why a step asks again (gateway #219)', () => {
+    it('names the reason by its code, a plain line for an unknown or missing code', () => {
+        const text = (code?: string) => uncoveredText(step({ covered: false, uncovered_reason: code }));
+        expect(text('irreversible')).toBe('Asks you again before it runs: it cannot be undone');
+        expect(text('image_origin')).toBe(
+            'Asks you again before it runs: it starts an image on a device that this plan does not build',
+        );
+        expect(text('runs_code')).toBe('Asks you again before it runs: it runs code the gateway cannot check');
+        expect(text('something_new')).toBe('Asks you again before it runs');
+        expect(text(undefined)).toBe('Asks you again before it runs');
+    });
+
+    it('says where the image of a covered start comes from', () => {
+        expect(imageOriginText(step({ image_origin: { step: 1 } }))).toBe(
+            'Covered by this approval: the image is built in step 1',
+        );
+        expect(imageOriginText(step({ image_origin: { plan_id: 'p0', step: 8 } }))).toBe(
+            'Covered by this approval: the image was built in step 8 of the plan this one replaces',
+        );
+        expect(imageOriginText(step())).toBe('');
+    });
+
+    it('sums up the steps that ask again, leaving finished ones out', () => {
+        const asks = (idx: number, state: PlanStep['state'] = 'open') => step({ idx, covered: false, state });
+        const of = (...steps: PlanStep[]) => uncoveredSummary(plan({ steps }));
+        expect(of(step({ idx: 1 }), step({ idx: 2 }))).toBe('');
+        expect(of(step({ idx: 1 }), asks(2))).toBe('Step 2 asks you again on its own');
+        expect(of(asks(4), asks(9))).toBe('Steps 4 and 9 ask you again on their own');
+        expect(of(asks(1), asks(4), asks(9))).toBe('Steps 1, 4 and 9 ask you again on their own');
+        expect(of(asks(1, 'done'), asks(2))).toBe('Step 2 asks you again on its own');
     });
 });

@@ -453,3 +453,46 @@ describe('plan step references (#177)', () => {
         expect(screen.queryByTestId('agent-plan-step-refs')).toBeNull();
     });
 });
+
+describe('why a step asks again, and where the image comes from (gateway #219)', () => {
+    const proposed = (steps: PlanStep[]) => plan({ state: 'proposed', mode: 'interactive', steps });
+
+    it('shows the reason on the step that asks again and a line over the buttons', () => {
+        const p = proposed([
+            step({ idx: 1, effect: 'compute', covered: true }),
+            step({ idx: 2, effect: 'compute', covered: false, uncovered_reason: 'image_origin' }),
+        ]);
+        render(<PlanCard plan={p} />);
+        expect(screen.getByTestId('agent-plan-step-asks-again').textContent).toContain(
+            'that this plan does not build',
+        );
+        expect(screen.getByTestId('agent-plan-uncovered-summary').textContent).toContain(
+            'Step 2 asks you again on its own',
+        );
+    });
+
+    it('shows where the image of a covered start comes from, and no summary line', () => {
+        const p = proposed([
+            step({ idx: 1, effect: 'compute', covered: true }),
+            step({ idx: 2, effect: 'compute', covered: true, confirm_each: true, image_origin: { step: 1 } }),
+        ]);
+        render(<PlanCard plan={p} />);
+        expect(screen.getByTestId('agent-plan-step-image-origin').textContent).toContain(
+            'the image is built in step 1',
+        );
+        expect(screen.queryByTestId('agent-plan-step-asks-again')).toBeNull();
+        expect(screen.queryByTestId('agent-plan-uncovered-summary')).toBeNull();
+    });
+
+    it('a finished step carries neither line', () => {
+        const p = plan({
+            steps: [
+                step({ idx: 1, state: 'done', covered: false, uncovered_reason: 'runs_code' }),
+                step({ idx: 2, state: 'done', image_origin: { step: 1 } }),
+            ],
+        });
+        render(<PlanCard plan={p} />);
+        expect(screen.queryByTestId('agent-plan-step-asks-again')).toBeNull();
+        expect(screen.queryByTestId('agent-plan-step-image-origin')).toBeNull();
+    });
+});
