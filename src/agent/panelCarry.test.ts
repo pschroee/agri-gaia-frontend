@@ -35,6 +35,7 @@ describe('routes', () => {
         expect(agentTabOf('activity')).toBe('activity');
         expect(agentTabOf('status')).toBe('status');
         expect(agentTabOf('experiments')).toBe('experiments');
+        expect(agentTabOf('plans')).toBe('plans');
         expect(agentTabOf('other')).toBe('chat');
         expect(onAgentChatTab('/ai-agent', '')).toBe(true);
         expect(onAgentChatTab('/ai-agent', '?tab=activity')).toBe(false);

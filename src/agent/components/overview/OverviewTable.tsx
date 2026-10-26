@@ -24,10 +24,13 @@ export type OverviewSort = { by: string; order: 'asc' | 'desc' } | undefined;
 
 export type OverviewColumn<R> = {
     id: string;
-    label: string;
+    /** A text, or a text with a hint (the column "Plan" of the plans tab). */
+    label: ReactNode;
     width?: number | string;
     minWidth?: number;
     align?: 'left' | 'right';
+    /** Hidden below this width (MUI breakpoint); always shown when not given. */
+    hideBelow?: 'md' | 'lg';
     sortable?: boolean;
     /** Order of the first click on the header; `asc` if not given. */
     defaultOrder?: 'asc' | 'desc';
@@ -66,6 +69,10 @@ export function nextSort<R>(current: OverviewSort, col: OverviewColumn<R>): Over
     if (current?.by === col.id) return { by: col.id, order: current.order === 'asc' ? 'desc' : 'asc' };
     return { by: col.id, order: col.defaultOrder ?? 'asc' };
 }
+
+/** The style that hides a column below its breakpoint. */
+const hideSx = (c: { hideBelow?: 'md' | 'lg' }) =>
+    c.hideBelow ? { display: { xs: 'none', [c.hideBelow]: 'table-cell' } } : {};
 
 const TONE_STYLE = {
     active: { borderLeft: `3px solid ${agentColors.green}` },
@@ -120,7 +127,13 @@ export default function OverviewTable<R>(p: OverviewTableProps<R>) {
                                     key={c.id}
                                     align={c.align ?? 'left'}
                                     sortDirection={p.sort?.by === c.id ? p.sort.order : false}
-                                    sx={{ width: c.width, minWidth: c.minWidth, fontWeight: 500, whiteSpace: 'nowrap' }}
+                                    sx={{
+                                        width: c.width,
+                                        minWidth: c.minWidth,
+                                        fontWeight: 500,
+                                        whiteSpace: 'nowrap',
+                                        ...hideSx(c),
+                                    }}
                                 >
                                     {c.sortable ? (
                                         <TableSortLabel
@@ -140,7 +153,9 @@ export default function OverviewTable<R>(p: OverviewTableProps<R>) {
                     <TableBody>
                         {p.rows.map((r) => {
                             const tone = p.rowTone?.(r);
-                            const data = Object.fromEntries(Object.entries(p.rowData?.(r) ?? {}).map(([k, v]) => [`data-${k}`, v]));
+                            const data = Object.fromEntries(
+                                Object.entries(p.rowData?.(r) ?? {}).map(([k, v]) => [`data-${k}`, v]),
+                            );
                             return (
                                 <TableRow
                                     key={p.rowKey(r)}
@@ -157,14 +172,22 @@ export default function OverviewTable<R>(p: OverviewTableProps<R>) {
                                         cursor: 'pointer',
                                         height: 56,
                                         bgcolor: tone === 'active' ? 'rgba(15,84,50,0.04)' : undefined,
-                                        '&:focus-visible': { outline: `2px solid ${agentColors.green}`, outlineOffset: -2 },
+                                        '&:focus-visible': {
+                                            outline: `2px solid ${agentColors.green}`,
+                                            outlineOffset: -2,
+                                        },
                                     }}
                                 >
                                     {p.columns.map((c, i) => (
                                         <TableCell
                                             key={c.id}
                                             align={c.align ?? 'left'}
-                                            sx={{ py: 0.75, overflow: 'hidden', ...(i === 0 && tone ? TONE_STYLE[tone] : {}) }}
+                                            sx={{
+                                                py: 0.75,
+                                                overflow: 'hidden',
+                                                ...hideSx(c),
+                                                ...(i === 0 && tone ? TONE_STYLE[tone] : {}),
+                                            }}
                                         >
                                             {c.render(r, p.now)}
                                         </TableCell>
@@ -181,7 +204,9 @@ export default function OverviewTable<R>(p: OverviewTableProps<R>) {
                 count={p.total}
                 page={p.page}
                 rowsPerPage={p.pageSize}
-                rowsPerPageOptions={PAGE_SIZES.includes(p.pageSize) ? PAGE_SIZES : [...PAGE_SIZES, p.pageSize].sort((a, b) => a - b)}
+                rowsPerPageOptions={
+                    PAGE_SIZES.includes(p.pageSize) ? PAGE_SIZES : [...PAGE_SIZES, p.pageSize].sort((a, b) => a - b)
+                }
                 labelRowsPerPage="Rows per page"
                 onPageChange={(_, page) => p.onPage(page, p.pageSize)}
                 onRowsPerPageChange={(e) => p.onPage(0, Number(e.target.value))}

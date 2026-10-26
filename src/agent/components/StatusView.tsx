@@ -382,9 +382,12 @@ const numSx = { textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpa
 export default function StatusView({
     refreshKey,
     onOpenChat,
+    onOpenPlans,
 }: {
     refreshKey: number;
     onOpenChat: (id: string) => void;
+    /** Opens the tab "Plans" (issue #223); without it the section shows no link. */
+    onOpenPlans?: () => void;
 }) {
     const { chats, models: ctxModels, me: ctxMe, pendingApprovals } = useAgent();
     const [snap, setSnap] = useState<Snapshot>();
@@ -468,13 +471,28 @@ export default function StatusView({
             <section data-testid="agent-status-plans">
                 <SectionTitle
                     aside={
-                        running.length > 0
-                            ? runningPlansLine(
-                                  running.length,
-                                  new Set(running.map((p) => p.chat_id)).size,
-                                  formatClock(new Date(snap.at).toISOString(), true),
-                              )
-                            : undefined
+                        running.length === 0 && !onOpenPlans ? undefined : (
+                            <>
+                                {running.length > 0 &&
+                                    `${runningPlansLine(
+                                        running.length,
+                                        new Set(running.map((p) => p.chat_id)).size,
+                                        formatClock(new Date(snap.at).toISOString(), true),
+                                    )}${onOpenPlans ? ' · ' : ''}`}
+                                {onOpenPlans && (
+                                    <Link
+                                        component="button"
+                                        type="button"
+                                        underline="hover"
+                                        data-testid="agent-status-all-plans"
+                                        onClick={onOpenPlans}
+                                        sx={{ fontSize: 'inherit', verticalAlign: 'baseline' }}
+                                    >
+                                        All plans
+                                    </Link>
+                                )}
+                            </>
+                        )
                     }
                 >
                     Running plans
