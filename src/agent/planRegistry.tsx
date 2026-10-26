@@ -70,5 +70,6 @@ export function scrollToPlanCard(planId: string, root: ParentNode = document): b
  * document (issue #221).
  */
 export function planCardInDom(planId: string, root: ParentNode = document): boolean {
-    return !!root.querySelector(`[data-testid="agent-plan-card"][data-plan-id="${CSS.escape(planId)}"]`);
+    // Compared by attribute, not by selector: no escaping needed (jsdom has no CSS.escape).
+    return Array.from(root.querySelectorAll('[data-testid="agent-plan-card"]')).some((el) => el.getAttribute('data-plan-id') === planId);
 }
