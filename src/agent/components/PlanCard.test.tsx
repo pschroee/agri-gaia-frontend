@@ -8,14 +8,25 @@
 // The wording itself is checked in planText.test.ts; here the card only has to put it together.
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { agentApi } from '../api';
 import type { WatchJob } from '../jobs';
 import type { Plan, PlanStep } from '../plan';
 import type { Approval } from '../types';
 import PlanCard from './PlanCard';
 
-afterEach(cleanup);
+beforeEach(() => {
+    vi.spyOn(agentApi, 'activity').mockResolvedValue({
+        calls: [],
+        chats: {},
+        summary: { total: 0, outcomes: {}, chats: 0, runs: 0 },
+    } as never);
+});
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 /** Puts a Notification interface of the given permission into the window for one test. */
 function withPermission(permission: 'granted' | 'denied' | 'default') {
@@ -85,7 +96,7 @@ const approval = (over: Partial<Approval> = {}): Approval =>
 describe('the state chip and the controls per state (L1)', () => {
     it('a running plan can be paused and cancelled, but not resumed', () => {
         render(<PlanCard plan={plan()} onControl={vi.fn()} />);
-        expect(screen.getByTestId('agent-plan-chip').textContent).toBe('Running');
+        expect(screen.getByTestId('agent-plan-state').textContent).toBe('Running');
         expect(screen.getByRole('button', { name: 'Pause' })).toBeTruthy();
         expect(screen.queryByRole('button', { name: 'Resume' })).toBeNull();
         expect(screen.getByRole('button', { name: 'Cancel plan' })).toBeTruthy();
@@ -125,7 +136,7 @@ describe('the state chip and the controls per state (L1)', () => {
     it('a step waiting for the user reads as "Needs input"', () => {
         const p = plan({ steps: [step({ idx: 1, parked_approval: 'a1' })] });
         render(<PlanCard plan={p} pending={new Set(['a1'])} onControl={vi.fn()} />);
-        expect(screen.getByTestId('agent-plan-chip').textContent).toBe('Needs input');
+        expect(screen.getByTestId('agent-plan-state').textContent).toBe('Needs input');
     });
 });
 
@@ -213,7 +224,6 @@ describe('the log tail', () => {
                 onControl={vi.fn()}
             />,
         );
-        fireEvent.click(screen.getByTestId('agent-plan-log-toggle'));
         const log = screen.getByTestId('agent-plan-log');
         expect(log.textContent).toContain('<b>bold</b>');
         expect(log.querySelector('b')).toBeNull();
@@ -426,7 +436,7 @@ describe('PlanCard step starting (#176)', () => {
     it('shows the first step of an approved plan as Starting while the agent works', () => {
         const p = plan({ steps: [step({ idx: 1 }), step({ idx: 2, path: '/datasets/1', method: 'PATCH' })] });
         render(<PlanCard plan={p} layout="panel" onControl={vi.fn()} working />);
-        const rows = screen.getAllByTestId('agent-plan-step');
+        const rows = screen.getAllByTestId('agent-plan-step-row');
         expect(rows[0].getAttribute('data-status')).toBe('starting');
         expect(within(rows[0]).getByText('Starting…')).toBeTruthy();
         expect(within(rows[0]).queryByText('Open')).toBeNull();
@@ -434,7 +444,7 @@ describe('PlanCard step starting (#176)', () => {
     });
 });
 
-describe('plan step references (#177)', () => {
+describe('plan step references (#177, #221)', () => {
     const refPlan = (first: Partial<PlanStep>) =>
         plan({
             steps: [
@@ -442,15 +452,45 @@ describe('plan step references (#177)', () => {
                 step({ idx: 2, path: '/datasets/{{step1.id}}/split', state: 'running' }),
             ],
         });
-    it('RendersStepRefAfterRun', () => {
+    it('RendersResolvedPathAfterRun', () => {
         render(<PlanCard plan={refPlan({ state: 'done' })} onControl={vi.fn()} />);
-        const refs = screen.getByTestId('agent-plan-step-refs');
-        expect(refs.textContent).toContain('Step 1 created dataset 66');
-        expect(within(refs).getByRole('link').getAttribute('href')).toBe('/data?dataset=66');
+        expect(screen.getByTestId('agent-plan-step-resolved').textContent).toContain('/datasets/66/split');
     });
-    it('NoStepRefBeforeRun', () => {
+    it('NoResolvedPathBeforeRun', () => {
         render(<PlanCard plan={refPlan({ state: 'open', created_id: undefined })} onControl={vi.fn()} />);
-        expect(screen.queryByTestId('agent-plan-step-refs')).toBeNull();
+        expect(screen.queryByTestId('agent-plan-step-resolved')).toBeNull();
+    });
+});
+
+describe('the step list of a running plan (#221)', () => {
+    it('marks the step the plan is on and opens only that one', () => {
+        render(<PlanCard plan={plan()} onControl={vi.fn()} />);
+        const rows = screen.getAllByTestId('agent-plan-step-row');
+        expect(rows).toHaveLength(2);
+        expect(rows[0].getAttribute('data-current')).toBe('false');
+        expect(rows[1].getAttribute('data-current')).toBe('true');
+        expect(within(rows[0]).getByTestId('agent-plan-step-head').getAttribute('aria-expanded')).toBe('false');
+        expect(within(rows[1]).getByTestId('agent-plan-step-head').getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('keeps the embedded approval and the stop button inside the opened step', () => {
+        const p = plan({
+            steps: [
+                step({ idx: 1, state: 'done' }),
+                step({ idx: 2, state: 'waiting', watch_job: 'j1' }),
+            ],
+        });
+        render(<PlanCard plan={p} jobs={[job({ id: 'j1', state: 'running' })]} onControl={vi.fn()} />);
+        const rows = screen.getAllByTestId('agent-plan-step-row');
+        expect(within(rows[1]).getByTestId('agent-plan-stop-job')).toBeTruthy();
+        expect(within(rows[0]).queryByTestId('agent-plan-stop-job')).toBeNull();
+    });
+
+    it('leaves a proposed plan with the full view of every step', () => {
+        const proposed = plan({ state: 'proposed', mode: 'interactive', steps: [step({ idx: 1 })] });
+        render(<PlanCard plan={proposed} onControl={vi.fn()} />);
+        expect(screen.getByTestId('agent-plan-step')).toBeTruthy();
+        expect(screen.queryByTestId('agent-plan-step-row')).toBeNull();
     });
 });
 

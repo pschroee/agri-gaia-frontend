@@ -6,14 +6,22 @@
 // Header button and card show the same plan (issue #166): both render from one list, so one plan event moves both.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import { agentApi } from '../api';
 
 import { upsertPlan } from '../plan';
 import type { Plan, PlanStep } from '../plan';
 import PlanButton from './PlanButton';
 import PlanCard from './PlanCard';
 
-afterEach(cleanup);
+beforeEach(() => {
+    vi.spyOn(agentApi, 'activity').mockResolvedValue({ calls: [], chats: {}, summary: { total: 0, outcomes: {}, chats: 0, runs: 0 } } as never);
+});
+afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+});
 
 const step = (over: Partial<PlanStep> = {}): PlanStep => ({
     idx: 1,
@@ -56,7 +64,7 @@ describe('one list feeds the button and the card', () => {
         };
         rerender(<Frame plans={upsertPlan([base], event)} />);
         expect(screen.getByTestId('agent-plan-button').getAttribute('data-plan-mark')).toBe('running');
-        expect(screen.getByTestId('agent-plan-step').getAttribute('data-status')).toBe('running');
+        expect(screen.getByTestId('agent-plan-step-row').getAttribute('data-status')).toBe('running');
         fireEvent.click(screen.getByTestId('agent-plan-button'));
         expect(screen.getAllByText(/Approved · valid until/).length).toBeGreaterThan(0);
     });
