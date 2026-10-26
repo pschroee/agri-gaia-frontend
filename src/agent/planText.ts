@@ -487,6 +487,8 @@ export function stepRefText(r: StepRef): string {
           ? 'model'
           : res.startsWith('training')
             ? 'training container'
+            : res.startsWith('deployment') || res.startsWith('container_deployment')
+            ? 'deployment'
             : res.startsWith('image') || res.startsWith('container')
               ? 'image'
               : 'resource';

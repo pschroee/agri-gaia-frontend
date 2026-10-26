@@ -59,7 +59,10 @@ export type PlanGrant = { rules?: GrantRule[]; expires_at?: string };
  * An object a platform job produced (gateway A-E2), as the observer read it. `size` is in bytes where the kind knows
  * it (the result files of a notebook run, own code C-E4) and missing where it does not.
  */
-export type WatchOutput = { resource: string; id: string; label?: string; size?: number };
+export type WatchOutput = { resource: string; id: string; label?: string; size?: number; device_id?: string };
+
+/** The last epoch a training job reported (gateway issue #221): the epoch, the epochs planned and its figures. */
+export type EpochFigures = { epoch: number; epochs?: number; values: Record<string, number>; at?: string };
 
 export type PlanStep = {
     idx: number;
@@ -127,7 +130,12 @@ export type PlanStep = {
     eta?: string;
     log_tail?: string;
     outputs?: WatchOutput[];
+    /** The start of the platform job the step observes (not of the step itself, see `step_started_at`). */
     started_at?: string;
+    /** When the gateway last started the step itself (gateway issue #221). */
+    step_started_at?: string;
+    /** The last epoch of a training job the step observes (gateway issue #221). */
+    last_epoch?: EpochFigures;
 };
 
 export type Plan = {
@@ -650,12 +658,14 @@ export function budgetLine(plan: Plan, now: number): string {
 }
 
 /** What kind of object a step's output is, as the CREATED block names it (design: Dataset, Model, Image). */
-export type OutputKind = 'dataset' | 'model' | 'image';
+export type OutputKind = 'dataset' | 'model' | 'image' | 'deployment';
 
 export function outputKind(output: WatchOutput): OutputKind | undefined {
     const res = output.resource.toLowerCase();
     if (res.startsWith('dataset')) return 'dataset';
     if (res.startsWith('model')) return 'model';
+    if (res.startsWith('deployment') || res.startsWith('container_deployment') || res.startsWith('container-deployment'))
+        return 'deployment';
     if (res.startsWith('image') || res.startsWith('container')) return 'image';
     return undefined;
 }
@@ -675,6 +685,10 @@ export function outputLink(output: WatchOutput): string | undefined {
             return `/models/${encodeURIComponent(id)}`;
         case 'image':
             return '/container-images';
+        case 'deployment': {
+            const device = (output.device_id ?? '').trim();
+            return device ? `/edge/${encodeURIComponent(device)}` : '/edge';
+        }
         default:
             return undefined;
     }
@@ -696,14 +710,16 @@ export function planOutputs(plan: Plan): WatchOutput[] {
 }
 
 /** The object an earlier step created that a later step's path or body names with `{{stepN.id}}`. */
-export type StepRef = { step: number; resource: string; id: string; label?: string };
+export type StepRef = { step: number; resource: string; id: string; label?: string; device_id?: string };
 
 /**
  * The placeholders of a step that point at a finished step with a known object: path and body are searched, each
  * number counts once, ascending. A step that is not done, or created nothing, leaves its placeholder out.
  */
 export function stepRefs(plan: Plan, step: PlanStep): StepRef[] {
-    const text = `${step.path ?? ''} ${JSON.stringify(step.body ?? '')}`;
+    const text = `${step.path ?? ''} ${JSON.stringify(step.body ?? '')} ${JSON.stringify(step.args ?? '')} ${JSON.stringify(
+        step.query ?? '',
+    )} ${JSON.stringify(step.form ?? '')}`;
     const numbers = new Set<number>();
     for (const m of text.matchAll(/\{\{step([1-9][0-9]?)\.id\}\}/g)) numbers.add(Number(m[1]));
     const refs: StepRef[] = [];
@@ -711,21 +727,30 @@ export function stepRefs(plan: Plan, step: PlanStep): StepRef[] {
         const ref = plan.steps.find((s) => s.idx === n);
         if (!ref || ref.state !== 'done' || !ref.created_id) continue;
         const label = ref.outputs?.find((o) => o.id === ref.created_id)?.label;
-        refs.push({ step: n, resource: ref.created_resource ?? '', id: ref.created_id, ...(label ? { label } : {}) });
+        const device = ref.args?.device_id;
+        refs.push({
+            step: n,
+            resource: ref.created_resource ?? '',
+            id: ref.created_id,
+            ...(label ? { label } : {}),
+            ...(typeof device === 'string' || typeof device === 'number' ? { device_id: String(device) } : {}),
+        });
     }
     return refs;
 }
 
 /** The platform page of a referenced object; a training container or a task has none. */
 export function stepRefLink(r: StepRef): string | undefined {
-    return outputLink({ resource: r.resource, id: r.id });
+    return outputLink({ resource: r.resource, id: r.id, ...(r.device_id ? { device_id: r.device_id } : {}) });
 }
 
 /** The kinds of object a plan has produced, as the sentences name them: "Dataset and model"; '' without any. */
 export function createdSubject(plan: Plan): string {
     const kinds = [...new Set(planOutputs(plan).map(outputKind))].filter((k): k is OutputKind => !!k);
     if (kinds.length === 0) return '';
-    const names = kinds.map((k) => (k === 'dataset' ? 'Dataset' : k === 'model' ? 'model' : 'image'));
+    const names = kinds.map((k) =>
+        k === 'dataset' ? 'Dataset' : k === 'model' ? 'model' : k === 'deployment' ? 'deployment' : 'image',
+    );
     const last = names[names.length - 1];
     const head = names.slice(0, -1).join(', ');
     return head ? `${head} and ${last}` : last;

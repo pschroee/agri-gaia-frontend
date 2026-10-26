@@ -141,10 +141,11 @@ import {
 import { scrollToPlanCard, useRegisterPlanCard } from '../planRegistry';
 import type { Approval } from '../types';
 import EffectChip from './EffectChip';
+import PlanStepList from './plan/PlanStepList';
 import { agentColors, MONO } from './tokens';
 
 /** The step's state mark, one per phase (design, MUI mapping). */
-const PHASE_ICON: Record<StepPhase, ReactElement> = {
+export const PHASE_ICON: Record<StepPhase, ReactElement> = {
     done: <CheckCircleIcon sx={{ fontSize: 17, color: agentColors.ok }} aria-hidden />,
     approval: <HourglassEmptyIcon sx={{ fontSize: 17, color: agentColors.amber }} aria-hidden />,
     open: <RadioButtonUncheckedIcon sx={{ fontSize: 17, color: 'text.disabled' }} aria-hidden />,
@@ -418,7 +419,7 @@ function Decision({
 }
 
 /** The state chip of the card's header (design, MUI mapping). */
-function StateChip({ plan, layout, pending }: { plan: Plan; layout: 'panel' | 'page'; pending: ReadonlySet<string> }) {
+export function StateChip({ plan, layout, pending }: { plan: Plan; layout: 'panel' | 'page'; pending: ReadonlySet<string> }) {
     const color =
         plan.state === 'failed'
             ? 'error'
@@ -438,7 +439,7 @@ function StateChip({ plan, layout, pending }: { plan: Plan; layout: 'panel' | 'p
             size="small"
             variant="outlined"
             color={color}
-            data-testid="agent-plan-chip"
+            data-testid="agent-plan-state"
             data-plan-state={plan.state}
             icon={
                 plan.state === 'completed' ? (
@@ -600,7 +601,7 @@ function CancelDialog({
 }
 
 /** The banner of the plan's state (design, MUI mapping): one Alert per state and pause reason. */
-function PlanBanner({ plan }: { plan: Plan }) {
+export function PlanBanner({ plan }: { plan: Plan }) {
     if (plan.state === 'proposed') return null;
     if (plan.state === 'paused') {
         const reason = plan.pause_reason ?? '';
@@ -970,6 +971,77 @@ function StepItem({
     );
 }
 
+/** The states in which the card shows the shared step list; the others keep the full view of every step (issue #221). */
+const RUNNING_LIST_STATES: Plan['state'][] = ['approved', 'paused', 'completed', 'failed', 'cancelled'];
+
+/**
+ * What the card adds to an opened step of the shared list (issue #221): the approval of a step the plan does not
+ * cover (D2.8) and the stop button of its job. The decisions stay here, in the card.
+ */
+function StepExtra({
+    plan,
+    step,
+    jobs,
+    approvals,
+    onDecide,
+    onControl,
+    working,
+}: {
+    plan: Plan;
+    step: PlanStep;
+    jobs: WatchJob[];
+    approvals: Approval[];
+    onDecide?: (a: Approval, approve: boolean) => Promise<void>;
+    onControl: (action: 'stop', step: number) => Promise<void>;
+    working?: boolean;
+}) {
+    const [busy, setBusy] = useState(false);
+    const phase = stepPhase(plan, step, working);
+    const job = jobOfStep(jobs, step);
+    const parked = step.parked_approval ? approvals.find((a) => a.id === step.parked_approval) : undefined;
+    const embedded = phase === 'approval' && parked?.state === 'pending' && onDecide ? parked : undefined;
+    const stoppable = !!job && job.state === 'running' && (phase === 'running' || phase === 'paused');
+    if (!embedded && !stoppable) return null;
+    return (
+        <Box sx={{ minWidth: 0 }}>
+            {embedded && onDecide && (
+                <StepApproval
+                    plan={plan}
+                    step={step}
+                    approval={embedded}
+                    onDecide={async (approve) => {
+                        setBusy(true);
+                        try {
+                            await onDecide(embedded, approve);
+                        } finally {
+                            setBusy(false);
+                        }
+                    }}
+                    busy={busy}
+                />
+            )}
+            {stoppable && (
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 0.5 }}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<StopIcon />}
+                        disabled={busy}
+                        onClick={() => {
+                            setBusy(true);
+                            onControl('stop', step.idx).finally(() => setBusy(false));
+                        }}
+                        data-testid="agent-plan-stop-job"
+                    >
+                        Stop job
+                    </Button>
+                </Box>
+            )}
+        </Box>
+    );
+}
+
 /** The approval of a step the plan does not cover, decided inside the card (design, D2.8). */
 export function StepApproval({
     plan,
@@ -1161,7 +1233,13 @@ function CreatedLinks({ plan }: { plan: Plan }) {
                         <Box key={`${kind}:${o.id}`} sx={{ display: 'contents' }}>
                             <OutputIcon kind={kind} />
                             <Typography sx={{ fontSize: 12.5, color: 'text.secondary' }}>
-                                {kind === 'dataset' ? 'Dataset' : kind === 'model' ? 'Model' : 'Image'}
+                                {kind === 'dataset'
+                                    ? 'Dataset'
+                                    : kind === 'model'
+                                    ? 'Model'
+                                    : kind === 'deployment'
+                                    ? 'Deployment'
+                                    : 'Image'}
                             </Typography>
                             {href ? (
                                 <Link
@@ -1333,33 +1411,58 @@ export default function PlanCard({
                     <NotifyCheckbox optedIn={notifyOptIn?.(plan.id)} onOptIn={onNotify} />
                 )}
 
-                <Box
-                    component="ol"
-                    sx={{
-                        listStyle: 'none',
-                        m: 0,
-                        p: 0,
-                        mt: 1.25,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 1.25,
-                    }}
-                >
-                    {plan.steps.map((step) => (
-                        <StepItem
-                            key={step.idx}
+                {RUNNING_LIST_STATES.includes(plan.state) ? (
+                    <Box sx={{ mt: 1.25 }}>
+                        <PlanStepList
                             plan={plan}
-                            step={step}
-                            layout={frame}
-                            now={now}
                             jobs={jobs}
-                            approvals={allApprovals}
-                            onDecide={onDecide}
-                            onControl={runControl}
+                            pending={pendingIds}
+                            variant={frame === 'panel' ? 'compact' : 'detail'}
+                            chatId={plan.chat_id}
                             working={working}
+                            renderStepExtra={(step) => (
+                                <StepExtra
+                                    key={step.idx}
+                                    plan={plan}
+                                    step={step}
+                                    jobs={jobs}
+                                    approvals={allApprovals}
+                                    onDecide={onDecide}
+                                    onControl={runControl}
+                                    working={working}
+                                />
+                            )}
                         />
-                    ))}
-                </Box>
+                    </Box>
+                ) : (
+                    <Box
+                        component="ol"
+                        sx={{
+                            listStyle: 'none',
+                            m: 0,
+                            p: 0,
+                            mt: 1.25,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: 1.25,
+                        }}
+                    >
+                        {plan.steps.map((step) => (
+                            <StepItem
+                                key={step.idx}
+                                plan={plan}
+                                step={step}
+                                layout={frame}
+                                now={now}
+                                jobs={jobs}
+                                approvals={allApprovals}
+                                onDecide={onDecide}
+                                onControl={runControl}
+                                working={working}
+                            />
+                        ))}
+                    </Box>
+                )}
 
                 <CreatedLinks plan={plan} />
                 {plan.state === 'cancelled' && createdStay(plan) !== '' && (
