@@ -3,57 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 // What the tab "Experiments" shows, derived from the data of `experiments.ts` in pure functions (gateway issue #168,
-// Welle 2 W2-b): the choice of the search, the table (columns strictly from the search space, G9), the comparison
+// Welle 2 W2-b): the table (columns strictly from the search space, G9), the comparison
 // chart (direction from the objective, G7), the curves of one trial and their captions, and the menu of a row (G8).
 // The words of the states and the numbers come from `searchView.ts`.
 
 import type { EpochRow, GpuPoint, Search, SearchPath, Trial } from './experiments';
 import { compactNumber, isOpen, metricWords, paramValue, scoreText, trialsOf } from './searchView';
-
-// ---------------------------------------------------------------------------------------------------------------
-// The choice of what to show
-// ---------------------------------------------------------------------------------------------------------------
-
-export const ALL_RUNS = 'all';
-
-export type ShowOption = { value: string; label: string };
-
-const stateWord = (s: Search): string => (s.state === 'running' ? 'running' : 'ended');
-
-/** Searches the choice lists: the running one first, then the ended ones, newest first (G9: proposed, refused and
- *  expired searches are no experiments yet; they show as a chip only). */
-export function listedSearches(searches: Search[]): Search[] {
-    const shown = searches.filter((s) => s.state === 'running' || s.state === 'ended');
-    return shown.sort((a, b) => {
-        if (a.state !== b.state) return a.state === 'running' ? -1 : 1;
-        return Date.parse(b.created_at) - Date.parse(a.created_at);
-    });
-}
-
-/** Searches that wait for the user's approval, shown as a chip next to the choice (never as a row). */
-export const proposedCount = (searches: Search[]): number => searches.filter((s) => s.state === 'proposed').length;
-
-/** The entries of "Show": one per listed search, then "All runs of this chat" when the chat has any trial. */
-export function showOptions(searches: Search[], trials: Trial[]): ShowOption[] {
-    const out: ShowOption[] = listedSearches(searches).map((s) => ({
-        value: s.id,
-        label: `Training search · ${s.title} (${stateWord(s)})`,
-    }));
-    if (trials.length > 0 || out.length > 0) out.push({ value: ALL_RUNS, label: 'All runs of this chat' });
-    return out;
-}
-
-/** What to show when the user chose nothing: the running search, else the newest ended one, else all runs. */
-export function defaultShow(searches: Search[]): string {
-    return listedSearches(searches)[0]?.id ?? ALL_RUNS;
-}
-
-/** The choice if it still exists, else the default (a search that disappeared must not leave the tab empty). */
-export function resolveShow(want: string | undefined, searches: Search[]): string {
-    if (want === ALL_RUNS) return ALL_RUNS;
-    if (want && listedSearches(searches).some((s) => s.id === want)) return want;
-    return defaultShow(searches);
-}
 
 // ---------------------------------------------------------------------------------------------------------------
 // The table
@@ -101,24 +56,6 @@ export function rowsOf(search: Search, trials: Trial[], best?: Trial): TrialRow[
         best: !!best && best.id === t.id,
         winner: typeof search.winner_idx === 'number' && search.winner_idx === t.idx,
     }));
-}
-
-/** "All runs": one group per search (running first), then the single runs; empty groups are left out (G8). */
-export function groupRows(searches: Search[], trials: Trial[], bestOf: (s: Search, list: Trial[]) => Trial | undefined): RowGroup[] {
-    const groups: RowGroup[] = [];
-    for (const s of listedSearches(searches)) {
-        const list = trialsOf(trials, s.id);
-        if (list.length === 0) continue;
-        groups.push({ key: s.id, title: `Training search · ${s.title}`, search: s, rows: rowsOf(s, trials, bestOf(s, list)) });
-    }
-    const singles = trials.filter((t) => !t.search_id).sort((a, b) => a.seq - b.seq);
-    if (singles.length > 0)
-        groups.push({
-            key: 'single',
-            title: 'Single runs',
-            rows: singles.map((t) => ({ trial: t, label: trialLabelOf(t), best: false, winner: false })),
-        });
-    return groups;
 }
 
 /** The title of a trial: "Trial 4", with the architecture only when the trial has one (G9). */

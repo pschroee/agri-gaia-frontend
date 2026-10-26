@@ -5,21 +5,15 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-    ALL_RUNS,
     compareCaption,
     compareData,
     curveCaption,
     curveData,
-    defaultShow,
     fixedSettings,
     gpuCaption,
     gpuData,
-    groupRows,
-    proposedCount,
-    resolveShow,
     rowMenu,
     rowsOf,
-    showOptions,
     sourceText,
     spaceColumns,
     trialLink,
@@ -27,33 +21,6 @@ import {
 } from './experimentsTab';
 import { epochRows, lossSearch, lossTrials, makeSearch, makeTrial, trials } from './experimentsFixtures';
 import { bestTrialOf } from './searchView';
-
-describe('show choice', () => {
-    const running = makeSearch();
-    const ended = makeSearch({ id: 's0', title: 'old', state: 'ended', created_at: '2026-10-19T08:00:00Z' });
-    const proposed = makeSearch({ id: 's9', state: 'proposed' });
-    const refused = makeSearch({ id: 's8', state: 'rejected' });
-
-    it('lists running and ended searches, the running one first, plus all runs; proposed and refused are not listed (G9)', () => {
-        const opts = showOptions([ended, proposed, running, refused], trials());
-        expect(opts.map((o) => o.value)).toEqual(['s1', 's0', ALL_RUNS]);
-        expect(opts[0].label).toBe('Training search · tf-flowers (running)');
-        expect(opts[1].label).toBe('Training search · old (ended)');
-    });
-
-    it('counts the searches that wait for approval as a chip, not a row', () => {
-        expect(proposedCount([running, proposed, proposed])).toBe(2);
-    });
-
-    it('defaults to the running search, else the newest ended one, else all runs; a vanished choice falls back', () => {
-        expect(defaultShow([ended, running])).toBe('s1');
-        expect(defaultShow([ended])).toBe('s0');
-        expect(defaultShow([])).toBe(ALL_RUNS);
-        expect(resolveShow('gone', [running])).toBe('s1');
-        expect(resolveShow(ALL_RUNS, [running])).toBe(ALL_RUNS);
-        expect(resolveShow('s0', [ended, running])).toBe('s0');
-    });
-});
 
 describe('table', () => {
     it('takes the columns strictly from the space, in its order, with real names (G9, G12)', () => {
@@ -67,7 +34,7 @@ describe('table', () => {
         expect(fixedSettings(makeSearch({ base: undefined, path: 'notebook' }))).toBe('');
     });
 
-    it('marks the best and the winner and labels single runs S<seq> in all runs', () => {
+    it('marks the best and the winner of a search', () => {
         const s = makeSearch({ state: 'ended', winner_idx: 2 });
         const all = [...trials(), makeTrial(1, { id: 'x1', search_id: undefined, idx: 0, seq: 7 })];
         const rows = rowsOf(s, all, bestTrialOf(s, trials()));
@@ -77,13 +44,6 @@ describe('table', () => {
             ['3', false, false],
             ['4', false, false],
         ]);
-        const groups = groupRows([s], all, bestTrialOf);
-        expect(groups.map((g) => g.key)).toEqual(['s1', 'single']);
-        expect(groups[1].rows[0].label).toBe('S7');
-    });
-
-    it('leaves a search without trials out of all runs', () => {
-        expect(groupRows([makeSearch()], [], bestTrialOf)).toEqual([]);
     });
 
     it('titles a trial with the architecture only when it has one (G9)', () => {
