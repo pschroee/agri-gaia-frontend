@@ -171,6 +171,11 @@ describe('naming the reason a turn was stopped (issue #120, F9)', () => {
             ['time_limit', 'stopped (time limit)', 'Stopped (time limit)'],
             ['turn_limit', 'stopped (limit of turns without you)', 'Stopped (limit of turns without you)'],
             ['subagent_limit', 'stopped (subagent limit)', 'Stopped (subagent limit)'],
+            [
+                'failed_calls',
+                'stopped (too many failed tool calls in a row)',
+                'Stopped (too many failed tool calls in a row)',
+            ],
         ] as const) {
             const items = abortedTurn(reason);
             expect(items[1], reason).toMatchObject({
@@ -181,6 +186,24 @@ describe('naming the reason a turn was stopped (issue #120, F9)', () => {
             expect(abortLabel(reason), reason).toBe(step);
             expect(abortLineText(reason), reason).toBe(line);
         }
+    });
+
+    it('carries the detail of the stop to the answer (gateway issue #217)', () => {
+        const detail = '5 failed calls of get_dataset in a row (limit 5). Last error: HTTP 404';
+        const items = buildTranscript(
+            [
+                stored(1, { role: 'user', content: 'Wait' }, { abort_reason: 'failed_calls', abort_detail: detail }),
+                stored(
+                    4,
+                    { role: 'assistant', content: [call], stopReason: 'aborted' },
+                    { abort_reason: 'failed_calls', abort_detail: detail },
+                ),
+            ],
+            ctx,
+        );
+        expect(items[1]).toMatchObject({ stopped: true, abortReason: 'failed_calls', abortDetail: detail });
+        // a stop without a detail has none on the item
+        expect((abortedTurn('user')[1] as { abortDetail?: string }).abortDetail).toBeUndefined();
     });
 
     it('claims nothing without a reason: "stopped", never "stopped by you"', () => {

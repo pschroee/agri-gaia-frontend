@@ -209,6 +209,9 @@ describe('held state and texts', () => {
         );
         expect(queueStatusText(idleHeld)).toBe('goes along with your next message');
         expect(holdReasonText('auto_turns')).toBe('limit of turns without you reached');
+        expect(holdReasonText('failed_calls')).toBe(
+            'held: the agent was stopped after failed tool calls; your next message lets it go on',
+        );
         expect(holdReasonText(undefined)).toBeUndefined();
     });
 

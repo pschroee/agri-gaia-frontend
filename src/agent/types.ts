@@ -149,7 +149,7 @@ export type Chat = {
     background_running?: number;
 };
 
-export type HoldReason = 'abort' | 'wake_limit' | 'auto_turns';
+export type HoldReason = 'abort' | 'wake_limit' | 'auto_turns' | 'failed_calls';
 
 /**
  * Whether the user can write to a subagent run now (gateway issue #82): ok (yes), starting (a run that has not
@@ -246,7 +246,9 @@ export type StoredMessage = {
      * Why the turn this message belongs to was aborted (gateway issue #120), on every message of that turn. Missing
      * on rows from before this change and for turns that were not aborted (see AbortReason in transcript.ts).
      */
-    abort_reason?: 'user' | 'trash' | 'time_limit' | 'turn_limit' | 'subagent_limit';
+    abort_reason?: 'user' | 'trash' | 'time_limit' | 'turn_limit' | 'subagent_limit' | 'failed_calls';
+    /** What exactly stopped the turn, in a sentence (gateway issue #217, abort_reason failed_calls); missing otherwise. */
+    abort_detail?: string;
 };
 
 /** Part of a user message: a note of the gateway (type background, sandbox, language) or user text. */
@@ -663,12 +665,25 @@ export type CreateChatRequest = {
     async?: boolean;
 };
 
+/** SSE failed_calls_limit (gateway issue #217): the gateway stopped the chat after too many failed tool calls in a row. */
+export type FailedCallsStop = {
+    scope: 'tool' | 'total';
+    tool: string;
+    count: number;
+    limit: number;
+    last_error: string;
+    detail: string;
+};
+
 /** Defaults and limits of the gateway (GET /config), the subset the platform UI uses. */
 export type Config = {
     internet_default?: boolean;
     auto_compact_default?: boolean;
     /** Subagents at the same time per chat, fixed in the gateway (since the fix for issue #24). */
     max_subagents?: number;
+    /** Failed tool calls in a row after which the gateway stops the chat: all tools, and one tool; 0 = off (#217). */
+    max_failed_tool_calls?: number;
+    max_failed_same_tool?: number;
     /** Older gateways: default and upper bound of the former per-chat setting; newer ones send max_subagents. */
     max_subagents_default?: number;
     max_subagents_limit?: number;
@@ -1255,5 +1270,6 @@ export type ServerEvent =
     | { kind: 'llm_call'; data: LLMCall }
     | { kind: 'resume'; data: ResumeStep }
     | { kind: 'auto_held'; data: { reason: 'wake_limit' | 'auto_turns'; limit: number; count: number } }
+    | { kind: 'failed_calls_limit'; data: FailedCallsStop }
     | { kind: 'error'; data: { message: string } }
     | { kind: string; data: unknown };

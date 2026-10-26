@@ -48,7 +48,7 @@ export function isAbortedAnswer(msg: Pick<PiMessage, 'stopReason' | 'errorMessag
  * Why a turn was aborted, as the gateway records it (`chat_turns.abort_reason`, issue #120). The keys are the
  * gateway's; the texts are the ones the interface shows.
  */
-export type AbortReason = 'user' | 'trash' | 'time_limit' | 'turn_limit' | 'subagent_limit';
+export type AbortReason = 'user' | 'trash' | 'time_limit' | 'turn_limit' | 'subagent_limit' | 'failed_calls';
 
 /**
  * Label of a stopped step or run (issue #120, F9, DL3.7): the reason decides, so "stopped by you" stands only when
@@ -67,6 +67,8 @@ export function abortLabel(reason?: string): string {
             return 'stopped (limit of turns without you)';
         case 'subagent_limit':
             return 'stopped (subagent limit)';
+        case 'failed_calls':
+            return 'stopped (too many failed tool calls in a row)';
         default:
             return 'stopped';
     }
@@ -170,6 +172,8 @@ export type TranscriptItem =
           /** Reason of the aborted turn ("user", "trash", "time_limit", "turn_limit", "subagent_limit"); missing on
            *  rows from before issue #120, and for a subagent's run ended by the limit (see SubagentRun.stoppedBy). */
           abortReason?: string;
+          /** What exactly stopped the turn (gateway issue #217: the failed calls, with the last error); missing for most reasons. */
+          abortDetail?: string;
           usage?: AnswerUsage;
       }
     | {
@@ -489,6 +493,7 @@ export function buildTranscript(messages: StoredMessage[], ctx: Context): Transc
         if (aborted) {
             agent.stopped = true;
             agent.abortReason = m.abort_reason;
+            agent.abortDetail = m.abort_detail;
         } else if (msg.stopReason === 'error' && msg.errorMessage) agent.error = msg.errorMessage;
     }
     for (const [item, rows] of answerRows) item.usage = answerUsage(rows);

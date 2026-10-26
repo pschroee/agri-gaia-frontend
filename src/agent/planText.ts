@@ -25,7 +25,7 @@ import {
 } from './plan';
 
 /** Why the gateway paused a plan: the user's own pause, an abort, a lost login, a budget or a restart. */
-export type PauseReason = 'user' | 'abort' | 'login' | 'budget_turns' | 'budget_cost' | 'restart' | '';
+export type PauseReason = 'user' | 'abort' | 'login' | 'budget_turns' | 'budget_cost' | 'restart' | 'failed_calls' | '';
 
 /** Local time hh:mm. */
 const clock = (iso: string | undefined): string => {
@@ -89,6 +89,8 @@ export function pauseTitle(reason: string): string {
             return 'Paused – model cost limit reached';
         case 'restart':
             return 'Paused – agent gateway restarted';
+        case 'failed_calls':
+            return 'Paused – stopped after failed tool calls in a row';
         default:
             return 'Paused by you';
     }
@@ -107,6 +109,8 @@ export function pauseText(plan: Plan): string {
             return 'The budget cannot be raised. Cancel the plan, or ask the agent for a new plan with a larger budget.';
         case 'restart':
             return 'The gateway restarted and restored this plan. The training job was not affected.';
+        case 'failed_calls':
+            return `The gateway stopped the agent after too many failed tool calls in a row. Step ${step} starts when you resume.`;
         default:
             return `The training job keeps running on the platform. Step ${step} starts when you resume.`;
     }

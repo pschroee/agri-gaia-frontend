@@ -72,7 +72,7 @@ describe('visible agent UI texts', () => {
 
     it('stopping a subagent and its reasons (issue #120)', () => {
         // the labels of a stopped step, the closing line and every state of a run
-        for (const reason of ['user', 'trash', 'time_limit', 'turn_limit', 'subagent_limit', undefined, 'other']) {
+        for (const reason of ['user', 'trash', 'time_limit', 'turn_limit', 'subagent_limit', 'failed_calls', undefined, 'other']) {
             expect(abortLabel(reason), String(reason)).not.toMatch(INFRA);
             expect(abortLineText(reason), String(reason)).not.toMatch(INFRA);
         }

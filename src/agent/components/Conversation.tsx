@@ -417,6 +417,12 @@ export function AgentBlock({
                     {abortLineText(item.abortReason)}
                 </Typography>
             )}
+            {item.stopped && item.abortDetail && (
+                // what exactly stopped it (gateway issue #217: the failed calls with the last error)
+                <Typography data-testid="agent-answer-stopped-detail" sx={{ fontSize: 12.5, color: 'text.secondary' }}>
+                    {item.abortDetail}
+                </Typography>
+            )}
             {subagentCard(runs.filter((r) => !cardShown.has(r.runId)))}
             {placed.rest.length > 0 && <AgentFileMessage chatId={fileChatId} artifacts={placed.rest} />}
             {/* a plan whose call is not among the parts of this answer stays under the whole answer (as before #138) */}

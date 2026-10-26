@@ -226,6 +226,13 @@ export function viaLabel(via: string): string {
  */
 export const isSystemRead = (c: ActivityCall): boolean => c.op === 'summary_read';
 
+/**
+ * The gateway's stop after too many failed tool calls in a row (gateway issue #217): op `failed_calls_limit`, via
+ * `orchestrator`. Like a system read it is an entry of the system, listed with the platform kind and never counted in
+ * the figures; its detail names the tool, the count and the last error.
+ */
+export const isGatewayStop = (c: ActivityCall): boolean => c.op === 'failed_calls_limit';
+
 /** One platform call of the agent with its chat and the other calls of the same tool call, or one internet entry. */
 export type ActivityRow = { call: ActivityCall; chat: ActivityChat; log: ActivityCall[] };
 
@@ -526,13 +533,15 @@ export function shownText(rows: ActivityRow[], total: number | undefined, kind: 
     // The gateway's own summary reads (issue L2/#119) are rows of the platform kind but no calls of the agent: they
     // stay out of the count that matches the figures and are named separately.
     const system = rows.filter((r) => isSystemRead(r.call)).length;
-    const platform = rows.filter((r) => kindOf(r.call) === 'platform' && !isSystemRead(r.call)).length;
-    const internet = rows.length - platform - system;
+    const stops = rows.filter((r) => isGatewayStop(r.call)).length;
+    const platform = rows.filter((r) => kindOf(r.call) === 'platform' && !isSystemRead(r.call) && !isGatewayStop(r.call)).length;
+    const internet = rows.length - platform - system - stops;
     const switches = `${internet} internet ${internet === 1 ? 'entry' : 'entries'}`;
     const reads = `${system} read${system === 1 ? '' : 's'} by the system`;
     if (kind === 'internet') return `Shows ${switches}.`;
     if (outcome) return `Shows ${platform} ${platform === 1 ? 'call' : 'calls'} with this result.`;
     const calls = `Shows ${platform} of ${total ?? platform} platform ${(total ?? platform) === 1 ? 'call' : 'calls'}`;
-    const rest = [internet > 0 ? switches : '', system > 0 ? reads : ''].filter(Boolean);
+    const stopped = `${stops} ${stops === 1 ? 'stop' : 'stops'} by the gateway`;
+    const rest = [internet > 0 ? switches : '', system > 0 ? reads : '', stops > 0 ? stopped : ''].filter(Boolean);
     return rest.length > 0 ? `${calls} and ${rest.join(' and ')}.` : `${calls}.`;
 }

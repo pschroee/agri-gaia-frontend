@@ -20,12 +20,14 @@ import CloseIcon from '@mui/icons-material/Close';
 import BlockIcon from '@mui/icons-material/Block';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import SearchIcon from '@mui/icons-material/Search';
+import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 
 import {
     ActivityRow,
     activityChatName,
     formatDuration,
     internetEvent,
+    isGatewayStop,
     isSystemRead,
     kindOf,
     viaLabel,
@@ -77,6 +79,31 @@ function SystemReadCell({ call }: { call: ActivityRow['call'] }) {
             <SearchIcon sx={{ fontSize: 18, color: 'text.secondary', mt: '1px', flex: 'none' }} />
             <Box sx={{ minWidth: 0 }}>
                 <Typography sx={{ fontSize: 14 }}>Read for an approval summary</Typography>
+                <Typography
+                    sx={{
+                        fontFamily: MONO,
+                        fontSize: '12.5px !important',
+                        color: 'text.secondary',
+                        overflowWrap: 'anywhere',
+                    }}
+                >
+                    {call.detail}
+                </Typography>
+            </Box>
+        </Box>
+    );
+}
+
+/**
+ * The gateway's stop after too many failed tool calls in a row (gateway issue #217): the system stopped the agent.
+ * The delivered detail names the tool, the count and the last error.
+ */
+function GatewayStopCell({ call }: { call: ActivityRow['call'] }) {
+    return (
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }} data-testid="activity-gateway-stop">
+            <ReportProblemOutlinedIcon sx={{ fontSize: 18, color: 'text.secondary', mt: '1px', flex: 'none' }} />
+            <Box sx={{ minWidth: 0 }}>
+                <Typography sx={{ fontSize: 14 }}>Stopped by the gateway</Typography>
                 <Typography
                     sx={{
                         fontFamily: MONO,
@@ -286,7 +313,8 @@ export default function ActivityTable({
                         const { call, chat } = row;
                         const internet = kindOf(call) === 'internet' ? internetEvent(call) : undefined;
                         const systemRead = isSystemRead(call);
-                        const effect = internet || systemRead ? undefined : callEffect(call);
+                        const gatewayStop = isGatewayStop(call);
+                        const effect = internet || systemRead || gatewayStop ? undefined : callEffect(call);
                         const expanded = openId === call.id;
                         return (
                             <Fragment key={call.id}>
@@ -337,6 +365,10 @@ export default function ActivityTable({
                                     ) : systemRead ? (
                                         <TableCell sx={{ minWidth: 160 }}>
                                             <SystemReadCell call={call} />
+                                        </TableCell>
+                                    ) : gatewayStop ? (
+                                        <TableCell sx={{ minWidth: 160 }}>
+                                            <GatewayStopCell call={call} />
                                         </TableCell>
                                     ) : (
                                         <TableCell

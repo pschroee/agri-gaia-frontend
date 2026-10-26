@@ -189,3 +189,33 @@ describe('AgentBlock places the subagent card at its call (#197)', () => {
         expect(container.querySelectorAll('[data-testid="agent-step-subagent"]')).toHaveLength(2);
     });
 });
+
+// Gateway issue #217: the answer that was stopped after failed tool calls says what happened under the stop line.
+describe('the detail under the stop line', () => {
+    const render1 = (over: object) =>
+        render(
+            <MemoryRouter>
+                <AgentBlock
+                    item={{ kind: 'agent', parts: [], stopped: true, abortReason: 'failed_calls', ...over } as never}
+                    dense
+                    thinking={{ open: {}, onOpenChange: () => undefined }}
+                    approvals={[]}
+                    planEnv={planEnvOf({ approvals: [], jobs: [], pending: new Set<string>(), layout: 'panel' })}
+                />
+            </MemoryRouter>,
+        );
+
+    it('shows the detail of the stop', () => {
+        const detail = '5 failed calls of get_dataset in a row (limit 5). Last error: HTTP 404';
+        render1({ abortDetail: detail });
+        expect(screen.getByTestId('agent-answer-stopped').textContent).toBe(
+            'Stopped (too many failed tool calls in a row)',
+        );
+        expect(screen.getByTestId('agent-answer-stopped-detail').textContent).toBe(detail);
+    });
+
+    it('shows no second line without a detail', () => {
+        render1({});
+        expect(screen.queryByTestId('agent-answer-stopped-detail')).toBeNull();
+    });
+});
