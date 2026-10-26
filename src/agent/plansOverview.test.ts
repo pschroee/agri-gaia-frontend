@@ -203,7 +203,7 @@ describe('current step', () => {
                 step(2, { covered: false, effect: 'irreversible', uncovered_reason: 'irreversible' }),
             ],
         });
-        expect(currentStepCell(p, NONE).sub).toBe('Asks you again: it cannot be undone');
+        expect(currentStepCell(p, NONE).sub).toBe('Asks you again before it runs: it cannot be undone');
     });
 });
 
