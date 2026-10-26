@@ -17,6 +17,8 @@ import Skeleton from '@mui/material/Skeleton';
 
 import { activityLinkOf } from '../../activity';
 import { useAgent } from '../../AgentContext';
+import { agentApi } from '../../api';
+import type { Plan } from '../../plan';
 import type { RunRow, RunState } from '../../experimentRuns';
 import { fetchExperimentRuns, jobRunState, KIND_LABEL, liveDuration, runKindOf, searchRunState, trialRunState } from '../../experimentRuns';
 import { useExperiments } from '../../experiments';
@@ -26,6 +28,7 @@ import { useJobs } from '../../jobs';
 import { durationText } from '../../searchView';
 import { useNow } from '../../useNow';
 import DetailHeader from '../overview/DetailHeader';
+import PlanDialog from '../plan/PlanDialog';
 import NotebookRunDetail from './NotebookRunDetail';
 import RunStateCell from './RunStateCell';
 import SearchDetail from './SearchDetail';
@@ -126,7 +129,18 @@ export default function ExperimentDetail({ chatId, runId, trialId, row, onBack, 
     const seconds = runState ? liveDuration({ state: runState, duration_s: durationS, started_at: started }, undefined, now) : undefined;
 
     const chat = known?.chat_title ?? chats.find((c) => c.id === chatId)?.title;
+    // A run a plan started: "Plan step 4 · Show plan" opens the plan dialog of #221 with the plans of the chat.
+    const planId = known?.plan_id || job?.plan_id;
+    const planStep = known?.plan_step || job?.step_idx;
+    const [planList, setPlanList] = useState<Plan[]>();
+    const openPlan = () => {
+        agentApi
+            .plans(chatId)
+            .then((l) => setPlanList(l))
+            .catch(() => setPlanList([]));
+    };
     const links = [
+        ...(planId ? [{ label: `${planStep ? `Plan step ${planStep}` : 'Plan'} · Show plan`, onClick: openPlan }] : []),
         { label: 'All runs of this chat', onClick: () => onAllRuns(chatId) },
         ...(callId ? [{ label: 'Platform calls in Activity', onClick: () => navigate(activityLinkOf(chatId, callId)) }] : []),
         ...(link ? [{ label: 'Open in JupyterHub', href: link }] : []),
@@ -177,6 +191,17 @@ export default function ExperimentDetail({ chatId, runId, trialId, row, onBack, 
                 </Box>
             )}
             {body}
+            {planId && planList && (
+                <PlanDialog
+                    open
+                    onClose={() => setPlanList(undefined)}
+                    chatId={chatId}
+                    plans={planList}
+                    planId={planId}
+                    chatTitle={chat}
+                    onOpenChat={() => onOpenChat(chatId)}
+                />
+            )}
         </Box>
     );
 }

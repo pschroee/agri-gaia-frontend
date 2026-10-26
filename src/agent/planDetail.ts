@@ -11,6 +11,7 @@ import { isSecretKey, REDACTED } from './stepDetail';
 import { currentStepIndex, doneSteps, outputLink, planLabel, stepPhase } from './plan';
 import type { EpochFigures, Plan, PlanStep, StepPhase } from './plan';
 import type { WatchJob } from './jobs';
+import { uncoveredText } from './planText';
 import type { AssessCheck, DeploymentFigures } from './types';
 
 /** Placeholder of a later step for the object an earlier one created: `{{step5.id}}`. */
@@ -298,18 +299,8 @@ export function waitingFor(
     return working ? 'The agent to make the call' : "The agent's next turn";
 }
 
-/** The reasons a step asks again, as the line under its title reads them (gateway issue #219 names the codes). */
-const UNCOVERED_WORDS: Record<string, string> = {
-    irreversible: 'it cannot be undone',
-    image_origin: 'it starts an image on a device that this plan does not build',
-    runs_code: 'it runs code the gateway cannot check',
-};
-
-/** The line of a step that asks you again: with the reason where the gateway names one. */
-export function askLine(step: PlanStep): string {
-    const reason = UNCOVERED_WORDS[step.uncovered_reason ?? ''];
-    return reason ? `Asks you again: ${reason}` : 'Asks you again before it runs';
-}
+/** The line of a step that asks you again, with the reason where the gateway names one: the wording of #219. */
+export const askLine = (step: PlanStep): string => uncoveredText(step);
 
 /** The words for the first line of a result (a failed step's message). */
 const firstLine = (text: string | undefined): string => (text ?? '').split('\n').find((l) => l.trim() !== '')?.trim() ?? '';

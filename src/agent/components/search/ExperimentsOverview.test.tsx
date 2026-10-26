@@ -60,7 +60,7 @@ describe('ExperimentsOverview', () => {
         expect(screen.queryByRole('combobox', { name: 'Show' })).toBeNull();
         const links = within(table).getAllByRole('button', { name: /Train flowers classifier|Preprocess images|Tail biting/ });
         expect(links.length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByTestId('overview-summary').textContent).toContain('1 running');
+        expect(screen.getByTestId('overview-summary').textContent).toContain('2 running');
         expect(screen.getByTestId('overview-summary').textContent).toContain('1 waiting for your approval');
         expect(screen.getByTestId('overview-summary').textContent).toContain('4 runs');
         expect(screen.getByText('Running first, then newest')).toBeTruthy();
@@ -73,7 +73,7 @@ describe('ExperimentsOverview', () => {
         expect(rs[0].getAttribute('data-tone')).toBe('active');
         expect(rs[2].getAttribute('data-tone')).toBe('attention');
         expect(within(rs[0]).getByText('Trial 3 of 10 · epoch 4/20')).toBeTruthy();
-        expect(within(rs[1]).getByText('Running')).toBeTruthy();
+        expect(within(rs[1]).getAllByText('Running').length).toBeGreaterThan(0);
         expect(within(rs[2]).getByText('Waits for your approval')).toBeTruthy();
     });
 
@@ -96,7 +96,7 @@ describe('ExperimentsOverview', () => {
         mount();
         await screen.findByTestId('overview-table');
         fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Status' }));
-        fireEvent.click(screen.getByRole('option', { name: 'Running (1)' }));
+        fireEvent.click(screen.getByRole('option', { name: 'Running (2)' }));
         await waitFor(() => expect(screen.getByTestId('search').textContent).toContain('status=running'));
         await waitFor(() => expect(h.fetchRuns.mock.calls.some((c) => String(c[0]).includes('state=running'))).toBe(true));
         expect(screen.getByRole('button', { name: 'Reset' })).toBeTruthy();

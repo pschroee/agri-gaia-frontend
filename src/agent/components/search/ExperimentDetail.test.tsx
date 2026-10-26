@@ -16,7 +16,7 @@ import { makeRun, makeSearch, makeTrial, trials } from '../../experimentsFixture
 import type { WatchJob } from '../../jobs';
 import ExperimentDetail from './ExperimentDetail';
 
-const h = vi.hoisted(() => ({ state: undefined as unknown, jobs: [] as unknown[], fetchRuns: vi.fn() }));
+const h = vi.hoisted(() => ({ state: undefined as unknown, jobs: [] as unknown[], fetchRuns: vi.fn(), plans: vi.fn() }));
 
 vi.mock('../../AgentContext', () => ({ useAgent: () => ({ chats: [{ id: 'c1', title: 'Train flowers classifier' }], selectedChatId: 'c1' }) }));
 vi.mock('../../assess', () => ({ useChecks: () => [] }));
@@ -28,6 +28,13 @@ vi.mock('../../jobs', async (orig) => ({ ...(await orig<typeof import('../../job
 vi.mock('../../experimentRuns', async (orig) => ({ ...(await orig<typeof import('../../experimentRuns')>()), fetchExperimentRuns: h.fetchRuns }));
 vi.mock('./SearchDetail', () => ({ default: (p: { search: { id: string }; trialId?: string }) => <div data-testid="body-search">search {p.search.id} trial {p.trialId ?? 'none'}</div> }));
 vi.mock('./TrialDetail', () => ({ default: (p: { trial: { id: string }; search?: { id: string } }) => <div data-testid="body-trial">trial {p.trial.id} of {p.search?.id ?? 'no search'}</div> }));
+vi.mock('../../api', async (orig) => {
+    const real = await orig<typeof import('../../api')>();
+    return { ...real, agentApi: { ...real.agentApi, plans: h.plans } };
+});
+vi.mock('../plan/PlanDialog', () => ({
+    default: (p: { planId?: string; plans: unknown[] }) => <div data-testid="plan-dialog-probe">{`${p.planId} of ${p.plans.length}`}</div>,
+}));
 vi.mock('./NotebookRunDetail', () => ({ default: (p: { job?: { id: string } }) => <div data-testid="body-notebook">job {p.job?.id ?? 'none'}</div> }));
 
 const load = (over: Partial<ExperimentsState>) => {
@@ -127,10 +134,17 @@ describe('ExperimentDetail', () => {
         expect(screen.queryByRole('link', { name: 'Open in JupyterHub' })).toBeNull();
     });
 
-    it('does not offer "Show plan" (the plan dialog of issue #221 is not part of this detail yet)', () => {
+    it('offers "Plan step n · Show plan" only for a run a plan started and opens the plan dialog', async () => {
         load({ searches: [makeSearch()], trials: trials() });
-        mount('s1', { row: makeRun({ plan_id: 'p1', plan_step: 3 }) });
+        mount('s1');
         expect(screen.queryByText(/Show plan/)).toBeNull();
+        cleanup();
+        h.plans.mockResolvedValue([{ id: 'p1', chat_id: 'c1', title: 'Demo', state: 'approved', mode: 'interactive', created_at: '2026-10-26T10:00:00Z', steps: [] }]);
+        mount('s1', { row: makeRun({ plan_id: 'p1', plan_step: 3 }) });
+        fireEvent.click(screen.getByText('Plan step 3 · Show plan'));
+        expect(h.plans).toHaveBeenCalledWith('c1');
+        expect(await screen.findByTestId('plan-dialog-probe')).toBeTruthy();
+        expect(screen.getByTestId('plan-dialog-probe').textContent).toBe('p1 of 1');
     });
 
     it('says the run was not found for an unknown id or a chat in the trash', () => {

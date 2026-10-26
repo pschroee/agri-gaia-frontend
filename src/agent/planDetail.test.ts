@@ -150,7 +150,7 @@ describe('stepSubline', () => {
     });
     it('a step that asks again says why, in amber', () => {
         const s = step({ covered: false, uncovered_reason: 'irreversible' });
-        expect(line(plan([s]), s)).toEqual({ text: 'Asks you again: it cannot be undone', tone: 'amber' });
+        expect(line(plan([s]), s)).toEqual({ text: 'Asks you again before it runs: it cannot be undone', tone: 'amber' });
         expect(askLine(step({ covered: false }))).toBe('Asks you again before it runs');
     });
     it('an open step names the step it waits for', () => {
