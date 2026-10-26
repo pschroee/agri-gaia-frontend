@@ -300,7 +300,8 @@ export const TASK_FAILED = 'The start failed.';
 export const HINT_CREATED = 'Nothing runs until the deployment is started.';
 export const HINT_DEPLOYED = 'The platform does not check whether the container still runs.';
 export const HINT_DEVICE_LATE = 'The device has not checked in for more than 5 minutes.';
-export const emptyHint = (name: string) => `A container named ${name} may be left on the device and needs manual removal.`;
+/** Fallback for a failed start without the gateway's hint: since #231 the platform removes the container of a failed start. */
+export const emptyHint = (name: string) => `Nothing of ${name} is left on the device; start it again once the cause is fixed.`;
 
 /** The task line of a state: its message and the status word on the right (empty in `created`). */
 export function taskLine(view: DeploymentView, data: DeploymentCardData): { text: string; status: string } {

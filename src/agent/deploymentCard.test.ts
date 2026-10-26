@@ -274,7 +274,7 @@ describe('deploymentHint', () => {
         expect(deploymentHint('deployed', withHint)?.text).toContain('deployed means it was started');
         const failed = data({ name: 'agw-mnist-v1', task: { status: 'failed' } });
         expect(deploymentHint('failed', failed)).toEqual({
-            text: 'A container named agw-mnist-v1 may be left on the device and needs manual removal.',
+            text: 'Nothing of agw-mnist-v1 is left on the device; start it again once the cause is fixed.',
             warn: true,
         });
     });
@@ -288,7 +288,7 @@ describe('deploymentHint', () => {
         expect(deploymentHint('starting', offline)?.warn).toBe(true);
         expect(deploymentHint('offline', offline)?.warn).toBe(true);
         expect(deploymentHint('undeployed', data({ status: 'undeployed', device: { online: false } }))).toBeUndefined();
-        expect(deploymentHint('failed', data({ device: { online: false } }))?.text).toContain('may be left');
+        expect(deploymentHint('failed', data({ device: { online: false } }))?.text).toContain('start it again');
     });
 });
 
