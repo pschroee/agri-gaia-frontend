@@ -17,10 +17,8 @@ import Skeleton from '@mui/material/Skeleton';
 
 import { activityLinkOf } from '../../activity';
 import { useAgent } from '../../AgentContext';
-import { agentApi } from '../../api';
-import type { Plan } from '../../plan';
 import type { RunRow, RunState } from '../../experimentRuns';
-import { fetchExperimentRuns, jobRunState, KIND_LABEL, liveDuration, runKindOf, searchRunState, trialRunState } from '../../experimentRuns';
+import { fetchExperimentRuns, jobRunState, KIND_LABEL, liveDuration, runKindOf, searchRunState, singleRunTitle, trialRunState } from '../../experimentRuns';
 import { useExperiments } from '../../experiments';
 import { trialTitle, trialLink } from '../../experimentsTab';
 import { chatTitle, formatClock } from '../../format';
@@ -28,9 +26,9 @@ import { useJobs } from '../../jobs';
 import { durationText } from '../../searchView';
 import { useNow } from '../../useNow';
 import DetailHeader from '../overview/DetailHeader';
-import PlanDialog from '../plan/PlanDialog';
 import NotebookRunDetail from './NotebookRunDetail';
 import RunStateCell from './RunStateCell';
+import { usePlanDialog } from './usePlanDialog';
 import SearchDetail from './SearchDetail';
 import { ReconnectingHint } from './TrialChartEmpty';
 import TrialDetail from './TrialDetail';
@@ -111,7 +109,7 @@ export default function ExperimentDetail({ chatId, runId, trialId, row, onBack, 
         callId = search.tool_call_id ?? callId;
     } else if (trial) {
         runState = trialRunState(trial);
-        title = known?.title ?? trialTitle(trial);
+        title = known?.title ?? (trial.idx === 0 ? singleRunTitle(trial) : trialTitle(trial));
         started = trial.started_at ?? trial.declared_at;
         ended = trial.ended_at;
         durationS = trial.duration_s;
@@ -130,17 +128,11 @@ export default function ExperimentDetail({ chatId, runId, trialId, row, onBack, 
 
     const chat = known?.chat_title ?? chats.find((c) => c.id === chatId)?.title;
     // A run a plan started: "Plan step 4 · Show plan" opens the plan dialog of #221 with the plans of the chat.
-    const planId = known?.plan_id || job?.plan_id;
-    const planStep = known?.plan_step || job?.step_idx;
-    const [planList, setPlanList] = useState<Plan[]>();
-    const openPlan = () => {
-        agentApi
-            .plans(chatId)
-            .then((l) => setPlanList(l))
-            .catch(() => setPlanList([]));
-    };
+    const planId = known?.plan_id || trial?.plan_id || job?.plan_id;
+    const planStep = known?.plan_step || trial?.plan_step || job?.step_idx;
+    const { openPlan, dialog: planDialog } = usePlanDialog(onOpenChat);
     const links = [
-        ...(planId ? [{ label: `${planStep ? `Plan step ${planStep}` : 'Plan'} · Show plan`, onClick: openPlan }] : []),
+        ...(planId ? [{ label: `${planStep ? `Plan step ${planStep}` : 'Plan'} · Show plan`, onClick: () => openPlan(chatId, planId, chat) }] : []),
         { label: 'All runs of this chat', onClick: () => onAllRuns(chatId) },
         ...(callId ? [{ label: 'Platform calls in Activity', onClick: () => navigate(activityLinkOf(chatId, callId)) }] : []),
         ...(link ? [{ label: 'Open in JupyterHub', href: link }] : []),
@@ -191,17 +183,7 @@ export default function ExperimentDetail({ chatId, runId, trialId, row, onBack, 
                 </Box>
             )}
             {body}
-            {planId && planList && (
-                <PlanDialog
-                    open
-                    onClose={() => setPlanList(undefined)}
-                    chatId={chatId}
-                    plans={planList}
-                    planId={planId}
-                    chatTitle={chat}
-                    onOpenChat={() => onOpenChat(chatId)}
-                />
-            )}
+            {planDialog}
         </Box>
     );
 }

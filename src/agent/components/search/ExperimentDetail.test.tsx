@@ -87,6 +87,29 @@ describe('ExperimentDetail', () => {
         expect(screen.getByText('Training run')).toBeTruthy();
     });
 
+    it('a single run opened by its address names what it trains and offers its plan (issue #227)', async () => {
+        load({
+            trials: [
+                makeTrial(0, {
+                    id: 't-render-2',
+                    idx: 0,
+                    seq: 2,
+                    search_id: undefined,
+                    state: 'running',
+                    subject: { container_id: 145, architecture: 'efficientnet_v2_s', dataset: { id: 177, name: 'Pig tail biting' } },
+                    plan_id: 'p1',
+                    plan_step: 3,
+                }),
+            ],
+        });
+        h.plans.mockResolvedValue([{ id: 'p1', chat_id: 'c1', title: 'Demo', state: 'approved', mode: 'interactive', created_at: '2026-10-26T10:00:00Z', steps: [] }]);
+        mount('t-render-2');
+        expect(screen.getByRole('heading', { name: 'efficientnet_v2_s on Pig tail biting' })).toBeTruthy();
+        fireEvent.click(screen.getByText('Plan step 3 · Show plan'));
+        expect(h.plans).toHaveBeenCalledWith('c1');
+        expect((await screen.findByTestId('plan-dialog-probe')).textContent).toBe('p1 of 1');
+    });
+
     it('shows the notebook body for a notebook run from the jobs of the chat', () => {
         h.jobs = [job()];
         load({});

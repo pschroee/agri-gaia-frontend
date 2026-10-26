@@ -8,7 +8,7 @@
 import type { ProgressCellProps } from './components/overview/ProgressCell';
 import type { OverviewState } from './components/overview/overviewUrl';
 import { periodSince } from './activity';
-import type { Search, SearchObjective, Trial } from './experiments';
+import type { Search, SearchBase, SearchObjective, Trial } from './experiments';
 import { formatClock, isToday } from './format';
 import { AGENT_BASE } from './login';
 import type { WatchJob } from './jobs';
@@ -199,20 +199,58 @@ export function runStateView(state: RunState): RunStateView {
 
 const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
-/** "plan step 4" for a run an agent plan started (`plan_step` counts from 1 like the plan's `idx`). */
-export const planStepText = (r: Pick<RunRow, 'plan_id' | 'plan_step'>): string | undefined =>
-    r.plan_id ? (r.plan_step ? `plan step ${r.plan_step}` : 'plan step') : undefined;
+/** "Plan step 4" for the link of a run an agent plan started (`plan_step` counts from 1 like the plan's `idx`). */
+export const planLinkText = (r: Pick<RunRow, 'plan_id' | 'plan_step'>): string | undefined =>
+    r.plan_id ? (r.plan_step ? `Plan step ${r.plan_step}` : 'Plan') : undefined;
 
-/** Second line of the "Run" cell: "Training search · template", "Training run · <what ran>", "Notebook run · prep.py". */
+const datasetWord = (b: SearchBase): string | undefined => {
+    const d = b.dataset;
+    if (!d) return undefined;
+    return d.name || (d.id ? `dataset ${d.id}` : undefined);
+};
+
+/** True when the base names what is trained (an architecture or a dataset). */
+const hasSubject = (b: SearchBase | undefined): b is SearchBase => !!b && !!(b.architecture || datasetWord(b));
+
+/**
+ * What a template run trains, in words (the gateway's `subjectText`): "<architecture> on <dataset>", else
+ * "<architecture>", "Training on <dataset>", "Training container <id>" or "Training run".
+ */
+export function subjectText(b?: SearchBase): string {
+    if (!b) return 'Training run';
+    const arch = b.architecture;
+    const data = datasetWord(b);
+    if (arch && data) return `${arch} on ${data}`;
+    if (arch) return arch;
+    if (data) return `Training on ${data}`;
+    return b.container_id ? `Training container ${b.container_id}` : 'Training run';
+}
+
+/**
+ * The name of a single run without a row (the detail opened by its address): what it trains, else the entry file of a
+ * notebook run, else the training container.
+ */
+export function singleRunTitle(t: Pick<Trial, 'subject' | 'name' | 'ref' | 'path'>): string {
+    if (hasSubject(t.subject)) return subjectText(t.subject);
+    if (t.name) return t.name;
+    if (t.path === 'template' && t.ref) return `Training container ${t.ref}`;
+    return 'Training run';
+}
+
+/**
+ * Second line of the "Run" cell, without the plan step (that is a link of its own): "Training search · <arch> on
+ * <dataset>", "Training run · container 145", "Training run · notebook", "Notebook run".
+ */
 export function runSubline(r: RunRow): string {
     const parts: string[] = [KIND_LABEL[r.kind]];
-    if (r.kind === 'training_search') parts.push(r.path === 'notebook' ? 'notebook' : 'template');
-    else if (r.kind === 'training_run') {
-        const what = r.trial?.name;
-        if (what) parts.push(what);
-    } else if (r.title) parts.push(r.title);
-    const step = planStepText(r);
-    if (step) parts.push(step);
+    if (r.kind === 'training_search') {
+        const base = r.search?.base;
+        if (r.path !== 'notebook' && hasSubject(base)) parts.push(subjectText(base));
+        else parts.push(r.path === 'notebook' ? 'notebook' : 'template');
+    } else if (r.kind === 'training_run') {
+        if (r.trial?.path === 'notebook' || r.path === 'notebook') parts.push('notebook');
+        else if (r.trial?.ref) parts.push(`container ${r.trial.ref}`);
+    }
     return parts.join(' · ');
 }
 
@@ -235,7 +273,7 @@ export function runProgress(r: RunRow, now = Date.now()): ProgressCellProps {
     };
     if (r.state === 'waiting') return { label: 'Waits for your approval', tone: 'attention' };
     if (r.state === 'failed') {
-        const msg = firstLine(r.error);
+        const msg = failedText(firstLine(r.error));
         return { label: msg || 'Failed', tone: 'failed', title: msg || undefined };
     }
     if (r.state === 'stopped') return { label: stoppedText(r) };
@@ -269,12 +307,21 @@ export function runProgress(r: RunRow, now = Date.now()): ProgressCellProps {
     return { label: firstLine(p.message) || 'Running', indeterminate: true };
 }
 
-/** "val. acc. 0.91" (the words of the metric, the figure with its usual decimals); "–" without a value. */
-export function scoreCell(r: Pick<RunRow, 'score'>): string {
+/** The old rows of a failed training carry the bare Docker status; say what it means. */
+export function failedText(msg: string): string {
+    return /^(exited|dead)$/i.test(msg.trim()) ? 'Exited without a score' : msg;
+}
+
+export type BestValue = { value: string; metric: string; title?: string };
+
+/** The "Best value" cell in two lines: the figure in full ("0.97") and the short name of the metric under it. */
+export function bestValue(r: Pick<RunRow, 'score'>): BestValue | undefined {
     const s = r.score;
-    if (!s || !num(s.value)) return '–';
+    if (!s || !num(s.value)) return undefined;
     const o: SearchObjective = { metric: s.metric, mode: s.mode };
-    return `${metricWords(o).short} ${scoreText(s.value, o)}`;
+    const words = metricWords(o);
+    const of = num(s.trial) && s.trial > 0 ? ` (trial ${s.trial})` : '';
+    return { value: scoreText(s.value, o), metric: words.short, title: `Best ${words.label.toLowerCase()}${of}` };
 }
 
 const dateFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });

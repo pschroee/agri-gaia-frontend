@@ -151,5 +151,7 @@ describe('trial link and name (issue #194)', () => {
         expect(rowMenu({ trial: t, label: 'S2', best: false, winner: false } as never, undefined).open).toBe(true);
         expect(rowMenu({ trial: { ...t, link: undefined }, label: 'S2', best: false, winner: false } as never, undefined).open).toBe(false);
         expect(trialTitle(t)).toBe('Single run 2 · train.ipynb');
+        // the gateway names a template run by what it trains (issue #227)
+        expect(trialTitle({ ...t, name: 'efficientnet_v2_s on Pig tail biting' })).toBe('Single run 2 · efficientnet_v2_s on Pig tail biting');
     });
 });
