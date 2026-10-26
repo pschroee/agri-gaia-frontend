@@ -69,6 +69,13 @@ describe('InternetPopover', () => {
         fireEvent.click(screen.getByText('Switch all off'));
         expect(p.onEndAll).toHaveBeenCalled();
     });
+    it('explains the blocked list and keeps it grey (#228)', () => {
+        show();
+        expect(screen.getByTestId('agent-internet-blocked-explainer').textContent).toMatch(/Nothing to do/);
+        const blockedWord = screen.getByText('· blocked');
+        expect(getComputedStyle(blockedWord).color).not.toBe('rgb(211, 47, 47)');
+        expect(screen.getByTestId('agent-internet-blocked').querySelector('[data-testid="BlockIcon"]')).toBeTruthy();
+    });
     it('shows the empty state without a demo reset and without a switch-all button', () => {
         show({ active: [], blocked: undefined });
         expect(screen.getByText(/No internet access in this chat/)).toBeTruthy();

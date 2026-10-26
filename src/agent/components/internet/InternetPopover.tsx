@@ -36,6 +36,7 @@ import {
     showInActivityText,
 } from '../../internetIndicator';
 import {
+    BLOCKED_EXPLAINER,
     FULL_POPOVER_LINE,
     KIND_CHIP,
     NOTHING_BLOCKED,
@@ -252,6 +253,9 @@ function BlockedBlock({ blocked }: { blocked?: InternetBlocked }) {
             >
                 {blockedHeading(blocked)}
             </Typography>
+            <Typography data-testid="agent-internet-blocked-explainer" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                {BLOCKED_EXPLAINER}
+            </Typography>
             {rows.map((e, i) => (
                 <Box
                     key={`${e.at}:${i}`}
@@ -263,7 +267,7 @@ function BlockedBlock({ blocked }: { blocked?: InternetBlocked }) {
                         lineHeight: '16px',
                     }}
                 >
-                    <BlockIcon sx={{ fontSize: 14, color: 'error.main' }} aria-hidden />
+                    <BlockIcon sx={{ fontSize: 14, color: 'text.secondary' }} aria-hidden />
                     <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.75, minWidth: 0 }}>
                         <Box
                             component="span"
@@ -277,7 +281,7 @@ function BlockedBlock({ blocked }: { blocked?: InternetBlocked }) {
                         >
                             {blockedTarget(e)}
                         </Box>
-                        <Box component="span" sx={{ color: 'error.main', whiteSpace: 'nowrap' }}>
+                        <Box component="span" sx={{ color: 'text.secondary', whiteSpace: 'nowrap' }}>
                             · blocked
                         </Box>
                     </Box>
