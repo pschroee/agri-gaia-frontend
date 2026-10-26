@@ -14,7 +14,7 @@ import { useEffect, useState } from 'react';
 
 import { AGENT_BASE } from './login';
 import { eventsUrl } from './api';
-import type { PlanStep, WatchOutput } from './plan';
+import type { EpochFigures, PlanStep, WatchOutput } from './plan';
 
 /** One observed platform job, as the gateway stores and sends it (gateway `store.WatchJob`). */
 export type WatchJob = {
@@ -41,6 +41,8 @@ export type WatchJob = {
     /** The tail of the job's log. */
     log_tail?: string;
     outputs?: WatchOutput[];
+    /** The last epoch a training job reported (gateway issue #221). */
+    last_epoch?: EpochFigures;
     /** Reading calls that failed in a row (D2.3). */
     fail_reads?: number;
     started_at?: string;
