@@ -5,6 +5,7 @@
 // Data for the tests of the tab "Experiments": searches and trials as the gateway sends them. The search space is
 // valid for the platform template (G12): learning_rate, batch_size, epochs, img_size; nothing outside the schema.
 
+import type { RunPage, RunRow } from './experimentRuns';
 import type { EpochRow, Search, SearchSpace, Trial } from './experiments';
 
 export const space: SearchSpace = {
@@ -78,3 +79,35 @@ export const epochRows = (n: number): EpochRow[] =>
         train_acc: 0.4 + i * 0.03,
         val_acc: 0.38 + i * 0.025,
     }));
+
+/** A row of the overview of all runs (gateway `RunRow`): a running training search of chat c1. */
+export function makeRun(over: Partial<RunRow> = {}): RunRow {
+    return {
+        kind: 'training_search',
+        id: 's1',
+        chat_id: 'c1',
+        chat_title: 'Train flowers classifier',
+        title: 'tf-flowers',
+        state: 'running',
+        path: 'template',
+        started_at: '2026-10-20T08:46:00Z',
+        ended_at: null,
+        duration_s: 720,
+        progress: { trial: 3, trials: 10, trials_done: 2, epoch: 4, epochs: 20, eta: null },
+        score: { metric: 'val_acc', mode: 'max', value: 0.912, trial: 2 },
+        ...over,
+    };
+}
+
+/** A page of the overview with counts and the chat facet worked out from the rows. */
+export function makePage(runs: RunRow[], over: Partial<RunPage> = {}): RunPage {
+    const counts: RunPage['counts'] = {};
+    const chats = new Map<string, { id: string; title: string; runs: number }>();
+    for (const r of runs) {
+        counts[r.state] = (counts[r.state] ?? 0) + 1;
+        const c = chats.get(r.chat_id) ?? { id: r.chat_id, title: r.chat_title, runs: 0 };
+        c.runs += 1;
+        chats.set(r.chat_id, c);
+    }
+    return { runs, total: runs.length, offset: 0, limit: 25, counts, chats: [...chats.values()], truncated: false, ...over };
+}

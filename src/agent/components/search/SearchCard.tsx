@@ -98,7 +98,7 @@ export function OpenInExperiments({ chatId, searchId }: { chatId?: string; searc
         </>
     );
     if (!inRouter) return <Button size="small">{label}</Button>;
-    const to = `/ai-agent?tab=experiments${searchId ? `&search=${encodeURIComponent(searchId)}` : ''}`;
+    const to = `/ai-agent?tab=experiments${chatId && searchId ? `&chat=${encodeURIComponent(chatId)}&run=${encodeURIComponent(searchId)}` : ''}`;
     return (
         <Button
             size="small"

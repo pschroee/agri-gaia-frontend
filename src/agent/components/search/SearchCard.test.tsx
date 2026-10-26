@@ -13,7 +13,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExperimentsActions, ExperimentsState, Search, Trial } from '../../experiments';
 import { emptyExperiments } from '../../experiments';
 import { mockLossSearch, mockSearch, mockTrial, mockTrials } from '../../searchMock';
-import SearchCard from './SearchCard';
+import { MemoryRouter } from 'react-router-dom';
+
+import SearchCard, { OpenInExperiments } from './SearchCard';
 import type { SearchEnv } from './SearchCard';
 
 vi.mock('../../experiments', async (orig) => ({
@@ -239,5 +241,25 @@ describe('the live region of the running trial (#209)', () => {
         const el = live();
         expect(getComputedStyle(el.parentElement as HTMLElement).position).toBe('relative');
         expect(el.parentElement?.firstElementChild).toBe(el);
+    });
+});
+
+describe('Open in Experiments', () => {
+    it('links to the detail of the run with its chat (issue #222)', () => {
+        render(
+            <MemoryRouter>
+                <OpenInExperiments chatId="c1" searchId="s1" />
+            </MemoryRouter>,
+        );
+        expect(screen.getByRole('link', { name: /Open in Experiments/ }).getAttribute('href')).toBe('/ai-agent?tab=experiments&chat=c1&run=s1');
+    });
+
+    it('links to the overview without a search', () => {
+        render(
+            <MemoryRouter>
+                <OpenInExperiments chatId="c1" />
+            </MemoryRouter>,
+        );
+        expect(screen.getByRole('link', { name: /Open in Experiments/ }).getAttribute('href')).toBe('/ai-agent?tab=experiments');
     });
 });
