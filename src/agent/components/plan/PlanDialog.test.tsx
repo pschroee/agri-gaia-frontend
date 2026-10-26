@@ -104,6 +104,10 @@ describe('PlanDialog', () => {
         );
         const select = await screen.findByTestId('agent-plan-dialog-select');
         expect(select).toBeTruthy();
+        // a long plan title in the selector must not squeeze the dialog title (render check, #225)
+        const box = select.closest('.MuiInputBase-root') as HTMLElement;
+        expect(getComputedStyle(box).width).toBe('280px');
+        expect(getComputedStyle(box).flexShrink).toBe('0');
     });
 
     it('shows "Show in chat" only when the card of the plan is in the chat', async () => {

@@ -172,7 +172,8 @@ function PlanDialogBody({
                         onChange={(e) => onChoose(e.target.value)}
                         inputProps={{ 'aria-label': 'Choose plan', 'data-testid': 'agent-plan-dialog-select' }}
                         SelectDisplayProps={{ 'aria-label': 'Choose plan' }}
-                        sx={{ minWidth: 260, fontSize: 13 }}
+                        // a long plan title must not squeeze the dialog title (#225, Phase B)
+                        sx={{ width: 280, flexShrink: 0, fontSize: 13 }}
                     >
                         {plans.map((p) => (
                             <MenuItem key={p.id} value={p.id} sx={{ fontSize: 13 }}>
