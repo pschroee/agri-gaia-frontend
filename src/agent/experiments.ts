@@ -160,6 +160,11 @@ export type Trial = {
     name?: string;
     /** The address of the run, from the gateway; never built here. */
     link?: string;
+    /** What a single template run trains: architecture and dataset, read when the run is declared (gateway #227). */
+    subject?: SearchBase;
+    /** The plan and its step (from 1) that started the run; the detail opened by its address has no row to tell. */
+    plan_id?: string;
+    plan_step?: number;
 };
 
 /** The figures of one epoch by name (`train_loss`, `val_acc` …), plus `epoch` and `at`. */

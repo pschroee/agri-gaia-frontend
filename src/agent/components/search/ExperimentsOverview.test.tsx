@@ -15,11 +15,19 @@ import type { RunPage } from '../../experimentRuns';
 import { makePage, makeRun } from '../../experimentsFixtures';
 import ExperimentsOverview from './ExperimentsOverview';
 
-const h = vi.hoisted(() => ({ fetchRuns: vi.fn() }));
+const h = vi.hoisted(() => ({ fetchRuns: vi.fn(), plans: vi.fn() }));
 
 vi.mock('../../experimentRuns', async (orig) => ({
     ...(await orig<typeof import('../../experimentRuns')>()),
     fetchExperimentRuns: h.fetchRuns,
+}));
+
+vi.mock('../../api', async (orig) => {
+    const real = await orig<typeof import('../../api')>();
+    return { ...real, agentApi: { ...real.agentApi, plans: h.plans } };
+});
+vi.mock('../plan/PlanDialog', () => ({
+    default: (p: { planId?: string; plans: unknown[] }) => <div data-testid="plan-dialog-probe">{`${p.planId} of ${p.plans.length}`}</div>,
 }));
 
 function Probe() {
@@ -46,6 +54,7 @@ const rows = () => [
 
 beforeEach(() => {
     h.fetchRuns.mockReset();
+    h.plans.mockReset();
     h.fetchRuns.mockImplementation(async () => makePage(rows()));
     onOpenRun.mockClear();
     onOpenChat.mockClear();
@@ -53,6 +62,36 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('ExperimentsOverview', () => {
+    it('links the plan of a run a plan started, opens the dialog and not the row (issue #227)', async () => {
+        h.fetchRuns.mockImplementation(async () =>
+            makePage([
+                makeRun({ kind: 'training_run', id: 't1', title: 'efficientnet_v2_s on Pig tail biting', plan_id: 'p-render-train', plan_step: 3 }),
+                makeRun({ id: 's9', title: 'no-plan' }),
+            ]),
+        );
+        h.plans.mockResolvedValue([{ id: 'p-render-train', chat_id: 'c1', title: 'Demo', state: 'approved', mode: 'interactive', created_at: '2026-10-26T10:00:00Z', steps: [] }]);
+        mount();
+        const rs = await screen.findAllByTestId('overview-row');
+        expect(within(rs[1]).queryByTestId('run-plan-link')).toBeNull();
+        const link = within(rs[0]).getByTestId('run-plan-link');
+        expect(link.textContent).toBe('Plan step 3');
+        expect(link.getAttribute('aria-label')).toBe('Show plan of efficientnet_v2_s on Pig tail biting');
+        fireEvent.click(link);
+        expect(h.plans).toHaveBeenCalledWith('c1');
+        expect((await screen.findByTestId('plan-dialog-probe')).textContent).toBe('p-render-train of 1');
+        expect(onOpenRun).not.toHaveBeenCalled();
+    });
+
+    it('shows the best value in two lines: the figure, the short metric under it (issue #227)', async () => {
+        mount();
+        const rs = await screen.findAllByTestId('overview-row');
+        const best = within(rs[0]).getByTestId('run-best');
+        expect(best.children).toHaveLength(2);
+        expect(best.children[0].textContent).toBe('0.91');
+        expect(best.children[1].textContent).toBe('val. accuracy');
+        expect(within(rs[1]).queryByTestId('run-best')).toBeNull();
+    });
+
     it('lists the runs of several chats at once, without a chat choice', async () => {
         mount();
         const table = await screen.findByTestId('overview-table');

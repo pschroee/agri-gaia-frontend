@@ -11,6 +11,7 @@ import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Link from '@mui/material/Link';
 import Paper from '@mui/material/Paper';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -22,13 +23,14 @@ import {
     RUN_KINDS,
     RUN_STATES,
     STATE_LABEL,
+    bestValue,
     durationCell,
     fetchExperimentRuns,
     liveDuration,
+    planLinkText,
     runProgress,
     runSubline,
     runsQuery,
-    scoreCell,
     startedText,
 } from '../../experimentRuns';
 import { chatTitle } from '../../format';
@@ -43,6 +45,7 @@ import type { OverviewState } from '../overview/overviewUrl';
 import { useLivePolling } from '../overview/useLivePolling';
 import { agentColors, MONO } from '../tokens';
 import RunStateCell from './RunStateCell';
+import { usePlanDialog } from './usePlanDialog';
 
 type Props = {
     onOpenRun: (row: RunRow) => void;
@@ -91,6 +94,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
     const page = poll.data;
     const anyRunning = (page?.counts.running ?? 0) > 0;
     const now = useNow(anyRunning, 1000);
+    const { openPlan, dialog: planDialog } = usePlanDialog(onOpenChat);
 
     const update = (patch: Partial<OverviewState>, resetPage = true) => {
         const next: OverviewState = { ...state, ...patch, page: resetPage ? 0 : patch.page ?? state.page };
@@ -139,40 +143,69 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
     ];
 
     const columns: OverviewColumn<RunRow>[] = [
-        { id: 'state', label: 'Status', width: 140, sortable: true, render: (r) => <RunStateCell state={r.state} /> },
+        { id: 'state', label: 'Status', width: 130, sortable: true, render: (r) => <RunStateCell state={r.state} /> },
         {
             id: 'title',
             label: 'Run',
-            minWidth: 280,
+            minWidth: 300,
             sortable: true,
             render: (r) => (
                 <Box sx={{ minWidth: 0 }}>
                     <Typography noWrap title={r.title} sx={{ fontSize: 14, fontWeight: 500 }}>
                         {r.title}
                     </Typography>
-                    <Typography noWrap sx={{ fontSize: 12, color: 'text.secondary' }}>
-                        {runSubline(r)}
-                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'baseline', minWidth: 0 }}>
+                        <Typography noWrap title={runSubline(r)} sx={{ fontSize: 12, color: 'text.secondary', flex: '1 1 auto', minWidth: 0 }}>
+                            {runSubline(r)}
+                        </Typography>
+                        {r.plan_id && (
+                            <Link
+                                component="button"
+                                type="button"
+                                underline="hover"
+                                data-testid="run-plan-link"
+                                aria-label={`Show plan of ${r.title}`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    openPlan(r.chat_id, r.plan_id as string, r.chat_title);
+                                }}
+                                sx={{ fontSize: 12, color: agentColors.green, flex: 'none', whiteSpace: 'nowrap' }}
+                            >
+                                {planLinkText(r)}
+                            </Link>
+                        )}
+                    </Box>
                 </Box>
             ),
         },
-        { id: 'progress', label: 'Progress', width: 210, render: (r, n) => <ProgressCell {...runProgress(r, n)} /> },
+        { id: 'progress', label: 'Progress', width: 190, render: (r, n) => <ProgressCell {...runProgress(r, n)} /> },
         {
             id: 'best',
             label: 'Best value',
-            width: 150,
+            width: 110,
             align: 'right',
-            render: (r) => (
-                <Typography noWrap sx={{ fontFamily: MONO, fontSize: 12 }}>
-                    {scoreCell(r)}
-                </Typography>
-            ),
+            render: (r) => {
+                const best = bestValue(r);
+                if (!best) return <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>–</Typography>;
+                return (
+                    <Tooltip title={best.title ?? ''} placement="top">
+                        <Box data-testid="run-best" sx={{ textAlign: 'right', minWidth: 0 }}>
+                            <Typography noWrap sx={{ fontFamily: MONO, fontSize: 13, fontWeight: 500 }}>
+                                {best.value}
+                            </Typography>
+                            <Typography noWrap sx={{ fontSize: 11, color: 'text.secondary' }}>
+                                {best.metric}
+                            </Typography>
+                        </Box>
+                    </Tooltip>
+                );
+            },
         },
-        { id: 'started', label: 'Started', width: 115, sortable: true, defaultOrder: 'desc', render: (r, n) => <Typography noWrap sx={{ fontSize: 14 }}>{startedText(r.started_at, n)}</Typography> },
+        { id: 'started', label: 'Started', width: 110, sortable: true, defaultOrder: 'desc', render: (r, n) => <Typography noWrap sx={{ fontSize: 14 }}>{startedText(r.started_at, n)}</Typography> },
         {
             id: 'duration',
             label: 'Duration',
-            width: 90,
+            width: 80,
             align: 'right',
             sortable: true,
             defaultOrder: 'desc',
@@ -181,7 +214,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
         {
             id: 'chat',
             label: 'Chat',
-            width: 180,
+            width: 160,
             sortable: true,
             render: (r) => (
                 <Link
@@ -222,6 +255,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
 
     return (
         <Box data-testid="experiments-overview" sx={{ display: 'grid', gap: 2 }}>
+            {planDialog}
             <OverviewFilterBar
                 period={state.period}
                 onPeriod={(period) => update({ period })}

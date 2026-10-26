@@ -5,10 +5,13 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    bestValue,
     closeRunParams,
     detailOf,
+    failedText,
     jobRunState,
     liveDuration,
+    planLinkText,
     OVERVIEW_DEFAULTS,
     openRunParams,
     runKindOf,
@@ -16,12 +19,13 @@ import {
     runsQuery,
     runStateView,
     runSubline,
-    scoreCell,
+    singleRunTitle,
+    subjectText,
     searchRunState,
     startedText,
     trialRunState,
 } from './experimentRuns';
-import { makeRun } from './experimentsFixtures';
+import { makeRun, makeSearch, makeTrial } from './experimentsFixtures';
 
 const NOW = Date.parse('2026-10-26T15:51:20');
 
@@ -91,18 +95,40 @@ describe('progress texts', () => {
 });
 
 describe('cells', () => {
-    it('the second line names the kind, what ran and the plan step', () => {
+    it('the second line names the kind and what ran, never the title again and never the plan step', () => {
         expect(runSubline(makeRun())).toBe('Training search · template');
-        expect(runSubline(makeRun({ kind: 'training_run', id: 't1', plan_id: 'p1', plan_step: 3 }))).toBe('Training run · plan step 3');
-        expect(runSubline(makeRun({ kind: 'notebook_run', id: 'w1', title: 'prep.py' }))).toBe('Notebook run · prep.py');
-        // the gateway leaves step 0 out
-        expect(runSubline(makeRun({ plan_id: 'p1' }))).toBe('Training search · template · plan step');
+        expect(runSubline(makeRun({ path: 'notebook' }))).toBe('Training search · notebook');
+        const base = { container_id: 145, architecture: 'efficientnet_v2_s', dataset: { id: 177, name: 'Pig tail biting' } };
+        expect(runSubline(makeRun({ search: makeSearch({ base }) }))).toBe('Training search · efficientnet_v2_s on Pig tail biting');
+        // a base without architecture and dataset says nothing, so the way is named
+        expect(runSubline(makeRun({ search: makeSearch({ base: { container_id: 145 } }) }))).toBe('Training search · template');
+        expect(runSubline(makeRun({ kind: 'training_run', id: 't1', plan_id: 'p1', plan_step: 3, trial: makeTrial(0, { ref: '145' }) }))).toBe('Training run · container 145');
+        expect(runSubline(makeRun({ kind: 'training_run', id: 't1', trial: makeTrial(0, { path: 'notebook' }) }))).toBe('Training run · notebook');
+        expect(runSubline(makeRun({ kind: 'training_run', id: 't1' }))).toBe('Training run');
+        expect(runSubline(makeRun({ kind: 'notebook_run', id: 'w1', title: 'prep.py' }))).toBe('Notebook run');
+        expect(runSubline(makeRun({ plan_id: 'p1' }))).toBe('Training search · template');
     });
 
-    it('the best value carries the words of the metric, or a dash', () => {
-        expect(scoreCell(makeRun())).toMatch(/0\.91$/);
-        expect(scoreCell(makeRun({ score: { metric: 'val_loss', mode: 'min', value: 0.4106 } }))).toMatch(/0\.411$/);
-        expect(scoreCell(makeRun({ score: null }))).toBe('–');
+    it('the plan link says the step when the gateway knows it', () => {
+        expect(planLinkText(makeRun({ plan_id: 'p1', plan_step: 4 }))).toBe('Plan step 4');
+        expect(planLinkText(makeRun({ plan_id: 'p1' }))).toBe('Plan');
+        expect(planLinkText(makeRun())).toBeUndefined();
+    });
+
+    it('the best value is the figure in full with the short metric under it, or nothing', () => {
+        expect(bestValue(makeRun())).toEqual({ value: '0.91', metric: 'val. accuracy', title: 'Best validation accuracy (trial 2)' });
+        expect(bestValue(makeRun({ score: { metric: 'val_loss', mode: 'min', value: 0.4106 } }))).toEqual({ value: '0.411', metric: 'val. loss', title: 'Best validation loss' });
+        expect(bestValue(makeRun({ score: { metric: 'val_acc', mode: 'max', value: 0.9734, trial: 5 } }))?.value).toBe('0.97');
+        expect(bestValue(makeRun({ score: null }))).toBeUndefined();
+        expect(bestValue(makeRun({ score: { metric: 'val_acc', mode: 'max', value: null } }))).toBeUndefined();
+    });
+
+    it('the old bare Docker status of a failed training reads as "Exited without a score"', () => {
+        expect(failedText('exited')).toBe('Exited without a score');
+        expect(failedText('Dead')).toBe('Exited without a score');
+        expect(failedText('RuntimeError: CUDA out of memory')).toBe('RuntimeError: CUDA out of memory');
+        expect(failedText('')).toBe('');
+        expect(runProgress(makeRun({ state: 'failed', error: 'exited' }), NOW)).toMatchObject({ label: 'Exited without a score', tone: 'failed' });
     });
 
     it('the start is a clock time today and a date with the clock before', () => {
@@ -175,5 +201,27 @@ describe('request and address', () => {
         expect(open.has('search')).toBe(false);
         const back = closeRunParams(open);
         expect(back.toString()).toBe('tab=experiments&status=running&page=1');
+    });
+});
+
+describe('names of single runs (issue #227)', () => {
+    const arch = 'efficientnet_v2_s';
+    it('subjectText: architecture on dataset, else the parts, else the container', () => {
+        expect(subjectText({ container_id: 145, architecture: arch, dataset: { id: 177, name: 'Pig tail biting' } })).toBe('efficientnet_v2_s on Pig tail biting');
+        expect(subjectText({ container_id: 145, architecture: arch })).toBe(arch);
+        expect(subjectText({ container_id: 145, dataset: { id: 177, name: 'Pig tail biting' } })).toBe('Training on Pig tail biting');
+        expect(subjectText({ container_id: 145, architecture: arch, dataset: { id: 177 } })).toBe('efficientnet_v2_s on dataset 177');
+        expect(subjectText({ container_id: 145 })).toBe('Training container 145');
+        expect(subjectText({ container_id: 0 })).toBe('Training run');
+        expect(subjectText(undefined)).toBe('Training run');
+    });
+
+    it('singleRunTitle: the subject, else the entry file, else the container, else "Training run"', () => {
+        const t = (o: object) => makeTrial(0, { idx: 0, search_id: undefined, ...o });
+        expect(singleRunTitle(t({ subject: { container_id: 145, architecture: arch, dataset: { id: 1, name: 'Pigs' } } }))).toBe('efficientnet_v2_s on Pigs');
+        expect(singleRunTitle(t({ path: 'notebook', name: 'train.py' }))).toBe('train.py');
+        expect(singleRunTitle(t({ ref: '66' }))).toBe('Training container 66');
+        expect(singleRunTitle(t({ path: 'notebook' }))).toBe('Training run');
+        expect(singleRunTitle(t({ subject: { container_id: 66 }, ref: '66' }))).toBe('Training container 66');
     });
 });
