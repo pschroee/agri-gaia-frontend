@@ -316,6 +316,33 @@ describe('the figures of a check', () => {
         expect(value('Model check')).toBe('usable (24 held-out images, accuracy 0.92)');
     });
 
+    it('shows the share of the scale and the ties of a deployment check', () => {
+        const base = {
+            deployment: { id: 7, name: 'd' },
+            device: { name: 'sim-edge-01', simulated: true },
+            model: { id: 3, name: 'm' },
+            ready: true,
+            io: { same: true, triton: { inputs: [], outputs: [] }, platform: { inputs: [], outputs: [] }, file: { inputs: [], outputs: [] } },
+            requests: 6,
+            max_abs_diff: 0.0826,
+            argmax_same: 5,
+            roundtrip_ms: { median: 1, max: 2 },
+            model_check: null,
+        } as DeploymentFigures;
+        const value = (fig: DeploymentFigures, label: string) => deploymentRows(fig).find((r) => r.label === label)?.value;
+        const fig: DeploymentFigures = {
+            ...base,
+            max_rel_diff: 2.8e-4,
+            tolerance: { abs: 1e-4, scale: 1e-2 },
+            per_request: [{ input: 'drawn 1', max_abs_diff: 0.002, scale: 0.5, rel_diff: 0.004, tolerance_used: 0.4, argmax_same: false, tie: true }],
+        };
+        expect(value(fig, 'Largest difference to the model file')).toBe('0.08 · 2.8e-4 of the largest output value (allowed 1.0e-2)');
+        expect(value(fig, 'Same top class')).toBe('5 of 6 (1 tie within the tolerance)');
+        // an old report has neither field
+        expect(value(base, 'Largest difference to the model file')).toBe('0.08');
+        expect(value(base, 'Same top class')).toBe('5 of 6');
+    });
+
     it('leaves a deployment row away instead of inventing it', () => {
         const rows = deploymentRows({
             deployment: { id: 7, name: 'd' },
