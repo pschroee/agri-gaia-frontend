@@ -88,5 +88,11 @@ describe('InternetIndicator', () => {
         show([], 2);
         fireEvent.click(screen.getByTestId('agent-internet-indicator'));
         expect(screen.getByTestId('agent-internet-blocked')).toBeTruthy();
+        expect(screen.queryByTestId('agent-internet-confirm')).toBeNull();
+    });
+    it('asks to switch on when nothing was blocked', () => {
+        show([], 0);
+        fireEvent.click(screen.getByTestId('agent-internet-indicator'));
+        expect(screen.getByTestId('agent-internet-confirm')).toBeTruthy();
     });
 });
