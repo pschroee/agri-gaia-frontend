@@ -184,3 +184,34 @@ describe('the opened step', () => {
         expect(within(rowOf(1)).getByTestId('agent-plan-step-error-text').textContent).toContain('name taken');
     });
 });
+
+describe('a finished step with the call as it was sent (issue #225)', () => {
+    it('shows the sent summary as the title, the approved text on demand and no "Created resource"', () => {
+        const s = step({
+            idx: 1,
+            state: 'done',
+            tool: 'start_training',
+            summary: 'Start training of the container created by step 0\nOld detail',
+            summary_run: 'Start training "flowers-mini" (id 7)',
+            created_resource: 'task',
+            created_id: '145',
+        });
+        render(list(plan([s], { state: 'completed' })));
+        fireEvent.click(headOf(1));
+        expect(headOf(1).textContent).toContain('Start training "flowers-mini" (id 7)');
+        expect(headOf(1).textContent).not.toContain('created by step 0');
+        const approved = within(rowOf(1)).getByTestId('agent-plan-step-approved');
+        expect(approved.textContent).toContain('As approved');
+        expect(approved.textContent).toContain('Start training of the container created by step 0');
+        const result = within(rowOf(1)).getByTestId('agent-plan-step-result');
+        expect(result.textContent).toContain('Training run finished · task 145');
+        expect(result.textContent).not.toContain('Created resource');
+    });
+
+    it('shows no approved text when the call went out unchanged', () => {
+        const s = step({ idx: 1, state: 'done', summary: 'Create dataset "a"' });
+        render(list(plan([s], { state: 'completed' })));
+        fireEvent.click(headOf(1));
+        expect(within(rowOf(1)).queryByTestId('agent-plan-step-approved')).toBeNull();
+    });
+});

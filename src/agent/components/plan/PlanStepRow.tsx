@@ -30,6 +30,7 @@ import {
     argRows,
     askLine,
     clockSeconds,
+    doneLine,
     hms,
     requestLine,
     resolvedRequest,
@@ -142,6 +143,11 @@ export default function PlanStepRow({
     const createdHref = step.created_id
         ? outputLink({ resource: step.created_resource ?? '', id: step.created_id })
         : undefined;
+    // The step's result line names the id once; the id is the link, the words around it come from doneLine.
+    const doneText = doneLine(step, plan);
+    const doneAt = step.created_id ? doneText.lastIndexOf(step.created_id) : -1;
+    const doneBefore = doneAt >= 0 ? doneText.slice(0, doneAt) : `${doneText} `;
+    const doneAfter = doneAt >= 0 && step.created_id ? doneText.slice(doneAt + step.created_id.length) : '';
     const loadStepFiles = (id: string) => agentApi.planStepUploads(id, plan.id, step.idx).then((r) => r.entries);
     const cols = compact ? '20px 20px minmax(0,1fr) auto 24px' : '24px 20px minmax(0,1fr) auto auto 28px';
     const labelCol = compact ? '96px' : '120px';
@@ -246,6 +252,9 @@ export default function PlanStepRow({
                     sx={{ px: 2, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}
                 >
                     {main.details.length > 0 && <SummaryDetails details={main.details} />}
+                    {step.summary_run && step.summary && (
+                        <ProposedSummary summary={step.summary} label="As approved" testId="agent-plan-step-approved" />
+                    )}
                     {step.uploads && step.uploads.files > LISTED_FILES && (
                         <UploadFiles
                             data={step.uploads}
@@ -330,7 +339,7 @@ export default function PlanStepRow({
                             )}
                             {step.created_id && (
                                 <Typography sx={{ fontSize: 12 }}>
-                                    {`Created ${resourceNoun(step.created_resource)} `}
+                                    {doneBefore}
                                     {createdHref ? (
                                         <Link href={createdHref} underline="always" sx={{ fontSize: 12 }}>
                                             {step.created_id}
@@ -338,6 +347,7 @@ export default function PlanStepRow({
                                     ) : (
                                         step.created_id
                                     )}
+                                    {doneAfter}
                                 </Typography>
                             )}
                             {outputs

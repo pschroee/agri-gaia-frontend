@@ -354,13 +354,21 @@ export function ChangedAlert() {
 }
 
 /** The summary as it was proposed (gateway issue L2/#119), collapsed like the technical details. */
-export function ProposedSummary({ summary, testId }: { summary: string; testId?: string }) {
+export function ProposedSummary({
+    summary,
+    testId,
+    label = 'As proposed',
+}: {
+    summary: string;
+    testId?: string;
+    label?: string;
+}) {
     const parts = summaryParts(summary);
     if (!parts) return null;
     return (
         <Box component="details" data-testid={testId} sx={{ mt: 0.5 }}>
             <Box component="summary" sx={{ fontSize: 12, cursor: 'pointer', color: agentColors.muted }}>
-                As proposed
+                {label}
             </Box>
             <Box sx={{ mt: 0.5, pl: 1, borderLeft: `2px solid ${agentColors.outline}`, minWidth: 0 }}>
                 <Typography sx={{ fontSize: 12.5, fontWeight: 500, overflowWrap: 'anywhere' }}>{parts.head}</Typography>

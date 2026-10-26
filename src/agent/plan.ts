@@ -76,6 +76,11 @@ export type PlanStep = {
      * found another platform state. The step shows it as "As proposed".
      */
     summary_proposed?: string;
+    /**
+     * The summary of the call as it was sent (gateway issue #225): set when the call differs from the stored one
+     * (placeholders resolved, values the tool filled in). Missing when the call went out unchanged or could not be read.
+     */
+    summary_run?: string;
     /** The agent's note on the step: not verified by the gateway (gateway issue #72). */
     agent_note?: string;
     /** The same note from a gateway before #72. */
@@ -221,7 +226,7 @@ export function summaryParts(summary: string | undefined): SummaryParts | undefi
  * itself ("PATCH /datasets/16"). Never the agent's note. `fromGateway` tells which one it is.
  */
 export function stepMain(step: PlanStep): SummaryParts & { fromGateway: boolean } {
-    const parts = summaryParts(step.summary);
+    const parts = summaryParts(step.summary_run) ?? summaryParts(step.summary);
     if (parts) return { ...parts, fromGateway: true };
     return { head: `${step.method} ${step.path}${queryText(step.query)}`, details: [], fromGateway: false };
 }
