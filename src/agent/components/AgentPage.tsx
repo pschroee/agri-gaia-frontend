@@ -586,7 +586,7 @@ function AgentPageContent() {
                 </Box>
             ) : (
                 <Box sx={{ mt: 3, pb: 4 }}>
-                    <StatusView refreshKey={refreshKey} onOpenChat={openChat} />
+                    <StatusView refreshKey={refreshKey} onOpenChat={openChat} onOpenPlans={() => setParams({ tab: 'plans' })} />
                 </Box>
             )}
             <TrashDialogs dialog={actions.dialog} onCancel={actions.closeDialog} onConfirm={actions.confirm} />
