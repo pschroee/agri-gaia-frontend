@@ -32,6 +32,7 @@ import { pendingIdsOf } from '../plan';
 import { useTrashActions } from '../useTrash';
 import ActivityView from './ActivityView';
 import StatusView from './StatusView';
+import PlansTab from './plans/PlansTab';
 import ExperimentsTab from './search/ExperimentsTab';
 import ChatView from './ChatView';
 import { GroupNote } from './ChatSelector';
@@ -507,6 +508,7 @@ function AgentPageContent() {
                 <Tab value="activity" label="Activity" />
                 <Tab value="status" label="Status" />
                 <Tab value="experiments" label="Experiments" />
+                <Tab value="plans" label="Plans" />
             </Tabs>
             {status !== 'ready' ? (
                 <SignInNotice />
@@ -577,6 +579,10 @@ function AgentPageContent() {
             ) : tab === 'experiments' ? (
                 <Box sx={{ mt: 3, pb: 4 }}>
                     <ExperimentsTab onOpenChat={openChat} />
+                </Box>
+            ) : tab === 'plans' ? (
+                <Box sx={{ mt: 3, pb: 4 }}>
+                    <PlansTab onOpenChat={openChat} />
                 </Box>
             ) : (
                 <Box sx={{ mt: 3, pb: 4 }}>
