@@ -71,7 +71,7 @@ export function BudgetMeter({ meter }: { meter: Meter }) {
                     {meter.label}
                 </Typography>
                 {meter.reached && (
-                    <Typography variant="caption" sx={{ color: agentColors.amberText, fontWeight: 500 }}>
+                    <Typography variant="caption" sx={{ color: meter.key === 'target' ? 'success.dark' : agentColors.amberText, fontWeight: 500 }}>
                         reached
                     </Typography>
                 )}
@@ -84,7 +84,7 @@ export function BudgetMeter({ meter }: { meter: Meter }) {
                 value={meter.pct ?? 0}
                 aria-label={meter.label}
                 aria-valuetext={meter.valueText}
-                color={meter.reached ? 'warning' : 'primary'}
+                color={meter.reached ? (meter.key === 'target' ? 'success' : 'warning') : 'primary'}
                 sx={{ height: 3, mt: 0.5, borderRadius: 1, bgcolor: 'action.hover', opacity: meter.set ? 1 : 0.5 }}
             />
         </Box>

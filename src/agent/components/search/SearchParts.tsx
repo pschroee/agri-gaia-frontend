@@ -73,13 +73,13 @@ export function Meters({ meters }: { meters: Meter[] }) {
                 <Box key={m.key} sx={{ display: 'flex', flexDirection: 'column', gap: '3px', minWidth: 0 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, fontSize: 12, color: 'text.secondary' }}>
                         <span>{m.label}</span>
-                        {m.reached && <Box component="span" sx={{ color: 'warning.dark', fontWeight: 500 }}>reached</Box>}
+                        {m.reached && <Box component="span" sx={{ color: m.key === 'target' ? 'success.dark' : 'warning.dark', fontWeight: 500 }}>reached</Box>}
                     </Box>
                     <Typography sx={{ fontSize: 13, color: m.set ? 'text.primary' : 'text.disabled', overflowWrap: 'anywhere' }}>{m.value}</Typography>
                     <LinearProgress
                         variant="determinate"
                         value={m.pct ?? 0}
-                        color={m.reached ? 'warning' : 'primary'}
+                        color={m.reached ? (m.key === 'target' ? 'success' : 'warning') : 'primary'}
                         aria-label={m.label}
                         aria-valuetext={m.valueText}
                         sx={{ height: 4, borderRadius: 2, bgcolor: m.pct === null ? 'action.hover' : undefined }}

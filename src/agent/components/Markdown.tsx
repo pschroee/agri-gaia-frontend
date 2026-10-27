@@ -225,7 +225,11 @@ export default function Markdown({
                         sx={{
                             borderCollapse: 'collapse',
                             fontSize: '0.92em',
+                            // no break inside a word: columns size to their longest word and the box scrolls (#256)
+                            overflowWrap: 'normal',
+                            wordBreak: 'normal',
                             '& th, & td': {
+                                overflowWrap: 'break-word',
                                 borderBottom: 1,
                                 borderColor: 'divider',
                                 px: 1,
