@@ -131,6 +131,16 @@ beforeEach(() => setOverview());
 afterEach(cleanup);
 
 describe('PlansTab', () => {
+    it('keeps every column in the markup', () => {
+        mount();
+        // jsdom does not evaluate @container; that the columns give way is shown by the render check (#241).
+        const heads = within(screen.getByTestId('plans-table')).getAllByRole('columnheader');
+        expect(heads).toHaveLength(8);
+        for (const name of ['Started', 'Duration', 'Budget', 'Chat']) {
+            expect(heads.some((h) => h.textContent?.includes(name))).toBe(true);
+        }
+    });
+
     it('shows the cells of a running training row', () => {
         mount();
         const row = screen.getAllByTestId('overview-row')[0];
