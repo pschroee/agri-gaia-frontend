@@ -30,7 +30,10 @@ describe('table style', () => {
         const { container } = render(<Markdown text={'| Testanfragen | unverändert |\n|---|---|\n| a | b |'} />);
         const table = container.querySelector('table');
         expect(table).toBeTruthy();
-        const rules = Array.from(document.querySelectorAll('style')).map((s) => s.textContent ?? '').join('\n');
+        const all = Array.from(document.querySelectorAll('style')).map((s) => s.textContent ?? '').join('\n');
+        // Only the rules of the table itself count; the Markdown wrapper around it may wrap anywhere.
+        const own = Array.from(table!.classList).map((c) => new RegExp(`\\.${c}[^{]*\\{[^}]*\\}`, 'g'));
+        const rules = own.flatMap((re) => all.match(re) ?? []).join('\n');
         expect(rules).not.toMatch(/overflow-wrap:\s*anywhere/);
         expect(rules).toMatch(/overflow-wrap:\s*normal/);
         expect(rules).toMatch(/word-break:\s*normal/);
