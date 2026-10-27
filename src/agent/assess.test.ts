@@ -308,7 +308,7 @@ describe('the figures of a check', () => {
         const value = (label: string) => rows.find((r) => r.label === label)?.value;
         expect(value('Ready')).toBe('yes');
         expect(value('Model served')).toBe('mnist_demo – as expected');
-        expect(value('Inputs and outputs')).toBe('same in Triton, platform and model file');
+        expect(value('Inputs and outputs')).toBe('same on the device, in the platform and in the model file');
         expect(value('Requests')).toBe('6');
         expect(value('Largest difference to the model file')).toBe('3.1e-6');
         expect(value('Same top class')).toBe('6 of 6');
