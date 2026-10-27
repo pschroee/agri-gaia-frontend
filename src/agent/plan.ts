@@ -141,6 +141,11 @@ export type PlanStep = {
     step_started_at?: string;
     /** The last epoch of a training job the step observes (gateway issue #221). */
     last_epoch?: EpochFigures;
+    /**
+     * The search a search step started (gateway issue K1, E8): set after the start, so the step can show the trials
+     * and the best figure of that search. Absent before the start and on a gateway without searches in plans.
+     */
+    search_id?: string;
 };
 
 export type Plan = {
@@ -603,14 +608,38 @@ export function stepTimeLine(step: PlanStep, now: number): string {
     const runtime = stepRuntime(step, now);
     if (!runtime) return '';
     const eta = step.eta ? Date.parse(step.eta) : NaN;
-    return Number.isNaN(eta) ? `Runtime ${runtime} · time left unknown` : `Runtime ${runtime} · ${leftText(eta - now)}`;
+    // without an estimate the line says nothing about the rest: "unknown" is no information (issue #245)
+    return Number.isNaN(eta) ? `Runtime ${runtime}` : `Runtime ${runtime} · ${leftText(eta - now)}`;
 }
 
-/** The one line above the runtime: what the platform reported, else the design's waiting line. */
-export function stepMessage(step: PlanStep): string {
+/** Does the step build an image on the platform (a training container is created by a build)? */
+export function isBuildStep(step: PlanStep): boolean {
+    const tool = step.tool ?? '';
+    if (/build|create_training/.test(tool)) return true;
+    return step.method === 'POST' && /^\/train\/containers\/?$/.test(step.path ?? '');
+}
+
+/**
+ * What a waiting step says in plain words when the platform reports nothing (issue #245): who is doing what, by the
+ * kind of the observed job. A build is told apart by the step, since the gateway watches it as a platform task.
+ */
+export function waitingText(step: PlanStep, kind?: string): string {
+    if (kind === 'image_build') return 'The platform is building the inference image';
+    if (kind === 'training_run') return 'The platform is starting the training';
+    if (kind === 'edge_deployment') return 'The edge device is pulling and starting the container';
+    if (kind === 'platform_task' && isBuildStep(step)) return 'The platform is building the training image';
+    if (kind) return `Waiting for the platform job (${kind})`;
+    return 'Waiting for the platform';
+}
+
+/**
+ * The one line above the runtime: what the platform reported, else the waiting sentence of the job's kind. `kind` is
+ * the observed job's kind (`WatchJob.kind`); the step alone does not carry it.
+ */
+export function stepMessage(step: PlanStep, kind?: string): string {
     const msg = (step.progress_msg ?? '').trim();
     if (msg) return msg;
-    return step.state === 'waiting' ? 'Waiting for the platform · no progress reported' : '';
+    return step.state === 'waiting' ? waitingText(step, kind) : '';
 }
 
 /** The end of an autonomous plan, as a time; NaN while it has none or the time is unusable. */

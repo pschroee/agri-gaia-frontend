@@ -41,7 +41,7 @@ export default function StepLive({
     const phase = stepPhase(plan, live, working);
     const paused = phase === 'paused';
     const percent = typeof live.progress === 'number' ? live.progress : undefined;
-    const message = stepMessage(live);
+    const message = stepMessage(live, job?.kind);
     const timeLine = stepTimeLine(live, now);
     const runtime = stepRuntime(live, now);
     const detail =

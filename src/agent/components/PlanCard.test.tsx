@@ -186,7 +186,7 @@ describe('the progress of a step (D2.4, D4.6)', () => {
         expect(screen.getByText('48 %')).toBeTruthy();
         // The step's subline and its live block both carry the platform's line (#221).
         expect(screen.getAllByText(/Epoch 5\/10 · loss 0.142/).length).toBeGreaterThan(0);
-        expect(screen.getByText(/Runtime 1 min · time left unknown/)).toBeTruthy();
+        expect(screen.getByText(/Runtime 1 min/)).toBeTruthy();
     });
 
     it('stops the job only while it runs, and only for a step that observes one (D2.9)', () => {
