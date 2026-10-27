@@ -88,7 +88,11 @@ export function scoreTitle(t: Pick<Trial, 'score' | 'score_epoch'>): string | un
 export function tableFooter(search: Search | undefined, rows: TrialRow[], singles: number): string {
     if (!search) return `${rows.length + singles} runs · ★ marks the best validation value of a search`;
     const words = metricWords(search.objective);
-    return `${rows.length} trial${rows.length === 1 ? '' : 's'} · ★ best ${words.short} so far · the winner is chosen by ${words.short} only`;
+    const n = `${rows.length} trial${rows.length === 1 ? '' : 's'}`;
+    // after the end the star marks the winner alone (#249)
+    if (search.state === 'ended' && typeof search.winner_idx === 'number')
+        return `${n} · ★ winner · chosen by ${words.short} only`;
+    return `${n} · ★ best ${words.short} so far · the winner is chosen by ${words.short} only`;
 }
 
 // The row menu (G8): Adopt only for a finished trial of the running search, Stop only for the open trial of a

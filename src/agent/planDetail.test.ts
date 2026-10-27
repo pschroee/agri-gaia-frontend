@@ -94,6 +94,9 @@ describe('waitingFor', () => {
         expect(word('notebook_run')).toBe('The notebook run to finish');
         expect(word('annotation_run')).toBe('The platform job to finish');
         expect(word(undefined)).toBe('The platform job to finish');
+        // a search step of a plan (issue #244/#245) waits for the search, not for one job
+        const search = step({ idx: 3, state: 'waiting', tool: 'propose_search', search_id: 's1' });
+        expect(waitingFor(plan([search]), search, none, undefined)).toBe('The training search to end');
     });
     it('a paused plan waits for the user, by reason', () => {
         const s = step({ idx: 2 });

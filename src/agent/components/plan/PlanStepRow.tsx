@@ -272,7 +272,7 @@ export default function PlanStepRow({
                     )}
                     {live && <StepLive plan={plan} step={step} job={job} now={now} working={working} compact={compact} />}
                     <StepHistory job={job} step={step} now={now} />
-                    {searchStep && <StepSearch step={step} chatId={plan.chat_id || chatId} />}
+                    {searchStep && <StepSearch step={step} chatId={plan.chat_id || chatId} labelWidth={compact ? 108 : 132} />}
                     <Box sx={{ display: 'grid', gridTemplateColumns: `${labelCol} minmax(0,1fr)`, columnGap: 1.5, rowGap: 0.5 }}>
                         {wait && <Field label="Waiting for">{wait}</Field>}
                         <Field label="Tool" mono>

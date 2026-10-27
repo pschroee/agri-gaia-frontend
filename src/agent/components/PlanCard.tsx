@@ -136,6 +136,7 @@ import {
     uncoveredText,
     stepRefText,
     waitingForApproval,
+    SEARCH_WAITING_INFO,
     WAITING_INFO,
 } from '../planText';
 import { scrollToPlanCard, useRegisterPlanCard } from '../planRegistry';
@@ -653,9 +654,10 @@ export function PlanBanner({ plan }: { plan: Plan }) {
     }
     // waiting for the platform: the agent is idle, nobody spends turns or model cost (design)
     if (awaitingPlatform(plan)) {
+        const search = plan.steps.some((s) => s.state === 'waiting' && s.tool === 'propose_search');
         return (
             <Alert severity="info" sx={{ mt: 1, fontSize: 12.5 }} data-testid="agent-plan-banner">
-                {WAITING_INFO}
+                {search ? SEARCH_WAITING_INFO : WAITING_INFO}
             </Alert>
         );
     }

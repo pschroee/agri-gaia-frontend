@@ -92,7 +92,8 @@ describe('SearchDetail', () => {
         h.checks = [{ check_id: 'k1', state: 'done', report: { verdict: 'usable', measured_images: 92, figures: { overall: { accuracy: 0.88 } } } }];
         mount(s, { trials: trials().slice(0, 3) });
         const final = screen.getByTestId('search-final');
-        expect(within(final).getByText('Winner')).toBeTruthy();
+        expect(within(final).getByText('Winner · Trial 2')).toBeTruthy();
+        expect(within(final).queryByText('Winner', { selector: '.MuiChip-label' })).toBeNull();
         expect(within(final).getByText('0.86')).toBeTruthy();
         expect(screen.getAllByTestId('search-test-result')).toHaveLength(1);
         expect(screen.getByTestId('search-test-result').textContent).toContain('0.88');
