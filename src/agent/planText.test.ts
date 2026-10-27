@@ -159,6 +159,10 @@ describe('the end states', () => {
         expect(completedText(done)).toBe('All 2 steps done in 41 min, without further input.');
         const cancelled = plan({ state: 'cancelled', ended_at: '2026-10-16T12:41:30.000Z' });
         expect(cancelledText(cancelled)).toBe('Cancelled by you at 12:41. Running platform jobs were not stopped.');
+        // B24: stopped before the approval – nothing ran, the decision time is the stop.
+        const stopped = plan({ state: 'cancelled', steps: [step({ idx: 1 }), step({ idx: 2 })] });
+        expect(cancelledText(stopped)).toBe('Stopped by you at 12:00 before the approval. Nothing ran.');
+        expect(indicatorTooltip(stopped, NONE)).toBe('Plan stopped before the approval · click to show the plan');
     });
 
     it('failed names the step and its attempts, and what did not run', () => {

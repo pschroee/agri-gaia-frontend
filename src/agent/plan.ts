@@ -850,3 +850,10 @@ export function createdStay(plan: Plan): string {
     if (!subject) return '';
     return `${subject} ${createdSingular(plan) ? 'stays' : 'stay'}.`;
 }
+
+/**
+ * A plan the user stopped while its approval card was open (gateway B24): the gateway stores it as cancelled, but it
+ * was never approved and no step ran. A plan cancelled while it ran carries `ended_at`.
+ */
+export const stoppedBeforeApproval = (plan: Plan): boolean =>
+    plan.state === 'cancelled' && !plan.ended_at && plan.steps.every((s) => s.state === 'open');
