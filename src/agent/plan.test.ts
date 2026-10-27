@@ -491,14 +491,39 @@ describe('the time texts', () => {
         });
         expect(stepTimeLine(running, now)).toBe('Runtime 11 min 20 s · ~12 min left');
         const unknown = step({ state: 'waiting', started_at: '2026-10-16T12:00:00.000Z' });
-        expect(stepTimeLine(unknown, now)).toBe('Runtime 11 min 20 s · time left unknown');
+        expect(stepTimeLine(unknown, now)).toBe('Runtime 11 min 20 s');
         expect(stepTimeLine(step({ state: 'running' }), now)).toBe('');
     });
 
     it('the one line above it is the platform message, else the waiting sentence', () => {
         expect(stepMessage(step({ progress_msg: 'Epoch 5/10 · loss 0.142' }))).toBe('Epoch 5/10 · loss 0.142');
-        expect(stepMessage(step({ state: 'waiting' }))).toBe('Waiting for the platform · no progress reported');
+        expect(stepMessage(step({ state: 'waiting' }))).toBe('Waiting for the platform');
         expect(stepMessage(step({ state: 'running' }))).toBe('');
+    });
+
+    it('a waiting step names who does what, by the kind of the job (issue #245)', () => {
+        const waiting = (over: Partial<PlanStep> = {}) => step({ state: 'waiting', ...over });
+        const build = waiting({ method: 'POST', path: '/train/containers', tool: 'create_training' });
+        expect(stepMessage(build, 'platform_task')).toBe('The platform is building the training image');
+        expect(stepMessage(waiting({ tool: 'build_inference_image' }), 'image_build')).toBe(
+            'The platform is building the inference image',
+        );
+        expect(stepMessage(waiting(), 'training_run')).toBe('The platform is starting the training');
+        expect(stepMessage(waiting(), 'edge_deployment')).toBe(
+            'The edge device is pulling and starting the container',
+        );
+        // a platform task that is no build, and any other kind, fall back to the kind in words
+        expect(stepMessage(waiting({ tool: 'start_training' }), 'platform_task')).toBe(
+            'Waiting for the platform job (platform_task)',
+        );
+        expect(stepMessage(waiting(), 'notebook_run')).toBe('Waiting for the platform job (notebook_run)');
+    });
+
+    it('the platform line wins over the waiting sentence, and no text says "unknown"', () => {
+        const s = step({ state: 'waiting', progress_msg: 'Building the image (step 3/9)' });
+        expect(stepMessage(s, 'platform_task')).toBe('Building the image (step 3/9)');
+        for (const kind of [undefined, 'platform_task', 'image_build', 'training_run', 'edge_deployment', 'x'])
+            expect(stepMessage(step({ state: 'waiting' }), kind)).not.toMatch(/unknown/i);
     });
 });
 

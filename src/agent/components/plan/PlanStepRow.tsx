@@ -42,6 +42,7 @@ import {
     waitingFor,
 } from '../../planDetail';
 import { AGENT_NOTE_LABEL } from '../../planText';
+import { isSearchStep, searchSummaryRows } from '../../stepSearch';
 import { redactSecrets } from '../../stepDetail';
 import type { AssessCheck } from '../../types';
 import EffectChip from '../EffectChip';
@@ -50,7 +51,9 @@ import UploadFiles from '../UploadFiles';
 import { agentColors, MONO } from '../tokens';
 import StepActivity from './StepActivity';
 import StepArgsTable from './StepArgsTable';
+import StepHistory from './StepHistory';
 import StepLive from './StepLive';
+import StepSearch from './StepSearch';
 
 /** The text that stands for a step that the plan's approval covers or not. */
 export const COVERED_TEXT = "Covered by the plan's approval";
@@ -138,6 +141,9 @@ export default function PlanStepRow({
     const check = stepCheck(step, plan, checks);
     const note = agentNote(step);
     const live = phase === 'running' || phase === 'paused';
+    const searchStep = isSearchStep(step);
+    // before the start the search step shows its summary as a table, so the plain detail lines would say it twice
+    const searchTable = searchStep && !step.search_id && searchSummaryRows(step).length > 0;
     const showAttempts = (step.max_attempts ?? 0) > 1 || (step.attempts ?? 0) > 1;
     const outputs = step.outputs ?? [];
     const createdHref = step.created_id
@@ -251,7 +257,7 @@ export default function PlanStepRow({
                     data-testid="agent-plan-step-body"
                     sx={{ px: 2, pb: 2, display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}
                 >
-                    {main.details.length > 0 && <SummaryDetails details={main.details} />}
+                    {main.details.length > 0 && !searchTable && <SummaryDetails details={main.details} />}
                     {step.summary_run && step.summary && (
                         <ProposedSummary summary={step.summary} label="As approved" testId="agent-plan-step-approved" />
                     )}
@@ -265,6 +271,8 @@ export default function PlanStepRow({
                         />
                     )}
                     {live && <StepLive plan={plan} step={step} job={job} now={now} working={working} compact={compact} />}
+                    <StepHistory job={job} step={step} now={now} />
+                    {searchStep && <StepSearch step={step} chatId={plan.chat_id || chatId} />}
                     <Box sx={{ display: 'grid', gridTemplateColumns: `${labelCol} minmax(0,1fr)`, columnGap: 1.5, rowGap: 0.5 }}>
                         {wait && <Field label="Waiting for">{wait}</Field>}
                         <Field label="Tool" mono>

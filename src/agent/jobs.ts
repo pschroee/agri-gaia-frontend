@@ -16,6 +16,9 @@ import { AGENT_BASE } from './login';
 import { eventsUrl } from './api';
 import type { EpochFigures, PlanStep, WatchOutput } from './plan';
 
+/** One phase of a job's history (gateway issue K3). */
+export type JobHistoryEntry = { at: string; text: string; percent?: number };
+
 /** One observed platform job, as the gateway stores and sends it (gateway `store.WatchJob`). */
 export type WatchJob = {
     id: string;
@@ -43,6 +46,11 @@ export type WatchJob = {
     outputs?: WatchOutput[];
     /** The last epoch a training job reported (gateway issue #221). */
     last_epoch?: EpochFigures;
+    /**
+     * The phases the job went through, oldest first (gateway issue K3): when each began, its words and, where the
+     * platform knew it, the percent. The last entry is the phase the job is in; absent on a gateway without history.
+     */
+    history?: JobHistoryEntry[];
     /** Reading calls that failed in a row (D2.3). */
     fail_reads?: number;
     started_at?: string;
