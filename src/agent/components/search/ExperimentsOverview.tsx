@@ -142,12 +142,12 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
         },
     ];
 
+    // Widths and thresholds of #241: at 694 px (1 024 with the side nav open) Status, Run and Progress remain.
     const columns: OverviewColumn<RunRow>[] = [
         { id: 'state', label: 'Status', width: 130, sortable: true, render: (r) => <RunStateCell state={r.state} /> },
         {
             id: 'title',
             label: 'Run',
-            minWidth: 300,
             sortable: true,
             render: (r) => (
                 <Box sx={{ minWidth: 0 }}>
@@ -183,6 +183,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
             id: 'best',
             label: 'Best value',
             width: 110,
+            hideBelow: 760,
             align: 'right',
             render: (r) => {
                 const best = bestValue(r);
@@ -201,11 +202,12 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
                 );
             },
         },
-        { id: 'started', label: 'Started', width: 110, sortable: true, defaultOrder: 'desc', render: (r, n) => <Typography noWrap sx={{ fontSize: 14 }}>{startedText(r.started_at, n)}</Typography> },
+        { id: 'started', label: 'Started', width: 110, hideBelow: 1100, sortable: true, defaultOrder: 'desc', render: (r, n) => <Typography noWrap sx={{ fontSize: 14 }}>{startedText(r.started_at, n)}</Typography> },
         {
             id: 'duration',
             label: 'Duration',
             width: 110,
+            hideBelow: 1000,
             align: 'right',
             sortable: true,
             defaultOrder: 'desc',
@@ -215,6 +217,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
             id: 'chat',
             label: 'Chat',
             width: 160,
+            hideBelow: 900,
             sortable: true,
             render: (r) => (
                 <Link
@@ -254,7 +257,7 @@ export default function ExperimentsOverview({ onOpenRun, onOpenChat }: Props) {
     );
 
     return (
-        <Box data-testid="experiments-overview" sx={{ display: 'grid', gap: 2 }}>
+        <Box data-testid="experiments-overview" sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)' }}>
             {planDialog}
             <OverviewFilterBar
                 period={state.period}

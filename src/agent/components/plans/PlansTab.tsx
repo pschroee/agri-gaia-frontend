@@ -81,10 +81,10 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
     const rows = overview.page?.plans ?? [];
     const openedPlan = rows.find((p) => p.id === opened);
 
+    // Widths and thresholds of #241: at 694 px (1 024 with the side nav open) Plan, Status, Progress and Current step remain.
     const columns: OverviewColumn<PlanListItem>[] = [
         {
             id: 'plan',
-            minWidth: 200,
             label: (
                 <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                     Plan
@@ -160,7 +160,6 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'step',
             label: 'Current step',
-            minWidth: 220,
             render: (p) => {
                 const c = currentStepCell(p, pending);
                 return (
@@ -181,7 +180,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
             id: 'started',
             label: 'Started',
             width: 120,
-            hideBelow: 'xl',
+            hideBelow: 1240,
             render: (p) => {
                 const at = planStart(p);
                 return at === undefined ? (
@@ -197,6 +196,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
             id: 'duration',
             label: 'Duration',
             width: 110,
+            hideBelow: 940,
             render: (p) => (
                 <Typography sx={line({ fontSize: 13, fontVariantNumeric: 'tabular-nums' })}>
                     {durationCell(p, now)}
@@ -207,7 +207,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
             id: 'budget',
             label: 'Budget',
             width: 150,
-            hideBelow: 'lg',
+            hideBelow: 1100,
             render: (p) => {
                 const b = budgetCell(p, now);
                 if (!b) return '–';
@@ -231,6 +231,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
             id: 'chat',
             label: 'Chat',
             width: 150,
+            hideBelow: 800,
             render: (p) => {
                 const title = p.chat_title?.trim() || chatTitle(chats.find((c) => c.id === p.chat_id));
                 return (
@@ -274,7 +275,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
     const running = overview.page?.running ?? 0;
 
     return (
-        <Box data-testid="plans-tab" sx={{ display: 'grid', gap: 2 }}>
+        <Box data-testid="plans-tab" sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'minmax(0, 1fr)' }}>
             <OverviewFilterBar
                 selects={[
                     {

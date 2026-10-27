@@ -6,7 +6,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import OverviewTable, { nextSort } from './OverviewTable';
+import OverviewTable, { hideSx, nextSort } from './OverviewTable';
 import type { OverviewColumn, OverviewTableProps } from './OverviewTable';
 
 afterEach(cleanup);
@@ -65,6 +65,17 @@ function setup(over: Partial<OverviewTableProps<Row>> = {}, onChat = vi.fn()) {
 }
 
 describe('OverviewTable', () => {
+    it('hides a column below its width as a container query', () => {
+        expect(hideSx({ hideBelow: 800 })).toEqual({ '@container overview (width < 800px)': { display: 'none' } });
+        expect(hideSx({})).toEqual({});
+    });
+
+    it('renders the table in a scroll container named overview', () => {
+        setup();
+        const scroll = screen.getByTestId('overview-table-scroll');
+        expect(within(scroll).getByRole('table')).toBeTruthy();
+    });
+
     it('turns a sorted header around and starts a new column with its default order', () => {
         expect(nextSort(undefined, { id: 'name', label: '', render: () => null })).toEqual({ by: 'name', order: 'asc' });
         expect(nextSort({ by: 'name', order: 'asc' }, { id: 'name', label: '', render: () => null })).toEqual({ by: 'name', order: 'desc' });

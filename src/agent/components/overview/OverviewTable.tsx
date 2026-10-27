@@ -29,8 +29,8 @@ export type OverviewColumn<R> = {
     width?: number | string;
     minWidth?: number;
     align?: 'left' | 'right';
-    /** Hidden below this width (MUI breakpoint); always shown when not given. */
-    hideBelow?: 'md' | 'lg' | 'xl';
+    /** Hidden while the table is narrower than this (px, inner width of the table container); always shown when not given. */
+    hideBelow?: number;
     sortable?: boolean;
     /** Order of the first click on the header; `asc` if not given. */
     defaultOrder?: 'asc' | 'desc';
@@ -70,16 +70,20 @@ export function nextSort<R>(current: OverviewSort, col: OverviewColumn<R>): Over
     return { by: col.id, order: col.defaultOrder ?? 'asc' };
 }
 
-/** The style that hides a column below its breakpoint. */
-const hideSx = (c: { hideBelow?: 'md' | 'lg' | 'xl' }) =>
-    c.hideBelow ? { display: { xs: 'none', [c.hideBelow]: 'table-cell' } } : {};
+/** The style that hides a column while its table container is narrower than `hideBelow` px (container query). */
+export const hideSx = (c: { hideBelow?: number }) =>
+    c.hideBelow ? { [`@container overview (width < ${c.hideBelow}px)`]: { display: 'none' } } : {};
 
 const TONE_STYLE = {
     active: { borderLeft: `3px solid ${agentColors.green}` },
     attention: { borderLeft: `3px solid ${agentColors.amber}` },
 } as const;
 
-/** The table of an overview: sortable header, clickable rows, pages, loading, error and empty state. */
+/**
+ * The table of an overview: sortable header, clickable rows, pages, loading, error and empty state. Columns give way by
+ * the width of the table itself (container query, `hideBelow`), not by the viewport, because the side nav and the agent
+ * panel change the space at the same viewport (#241).
+ */
 export default function OverviewTable<R>(p: OverviewTableProps<R>) {
     const testId = p.testId ?? 'overview-table';
     const key = (e: KeyboardEvent, r: R) => {
@@ -118,8 +122,11 @@ export default function OverviewTable<R>(p: OverviewTableProps<R>) {
     if (p.rows.length === 0 && p.total === 0) return <>{p.empty}</>;
     return (
         <Paper variant="outlined" data-testid={testId}>
-            <TableContainer sx={{ overflowX: 'auto' }}>
-                <Table size="medium" aria-label={p.ariaLabel} sx={{ tableLayout: 'fixed', minWidth: 1100 }}>
+            <TableContainer
+                data-testid="overview-table-scroll"
+                sx={{ overflowX: 'auto', containerType: 'inline-size', containerName: 'overview' }}
+            >
+                <Table size="medium" aria-label={p.ariaLabel} sx={{ tableLayout: 'fixed', minWidth: 600 }}>
                     <TableHead>
                         <TableRow>
                             {p.columns.map((c) => (
