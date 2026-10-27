@@ -183,7 +183,37 @@ export function currentStepCell(
     const title = `Step ${step.idx} · ${stepTitle(step)}`.trim();
     const line = stepSubline(p, step, stepPhase(p, step), undefined);
     const waiting = stepAwaitingUser(p, pending)?.idx === step.idx;
+    // a step the gateway only observes says what it waits for (issue #250), not the bare "Running"
+    if (step.state === 'waiting' && line.text === 'Running') line.text = 'Waiting for the platform job';
     return { title, sub: line.text, tone: waiting && line.tone === 'muted' ? 'amber' : line.tone };
+}
+
+/** What the status cell shows: a symbol (spinner while the plan goes on) and one whole word; never shortened. */
+export type PlanStatusView = { icon: 'spinner' | 'attention' | 'paused' | 'done' | 'failed' | 'stopped'; label: string };
+
+export function planStatusView(p: Plan, pending: ReadonlySet<string>): PlanStatusView {
+    switch (p.state) {
+        case 'proposed':
+            return p.approving ? { icon: 'spinner', label: 'Running' } : { icon: 'attention', label: 'Needs approval' };
+        case 'approved':
+            return stepAwaitingUser(p, pending)
+                ? { icon: 'attention', label: 'Needs approval' }
+                : { icon: 'spinner', label: 'Running' };
+        case 'paused':
+            return { icon: 'paused', label: 'Paused' };
+        case 'completed':
+            return { icon: 'done', label: 'Completed' };
+        case 'failed':
+            return { icon: 'failed', label: 'Failed' };
+        case 'cancelled':
+            return { icon: 'stopped', label: 'Cancelled' };
+        case 'rejected':
+            return { icon: 'stopped', label: 'Rejected' };
+        case 'superseded':
+            return { icon: 'stopped', label: 'Replaced' };
+        default:
+            return { icon: 'stopped', label: 'Expired' };
+    }
 }
 
 /** The row's marker: green while the plan goes on, amber while it waits for the user. */

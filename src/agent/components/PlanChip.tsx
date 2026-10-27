@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The plan of a chat in the status row of the header (issue #221): a ring of the steps done and "Plan 3/10"; a click
-// opens the plan dialog (or, in the panel, the plan view). It replaces the plan indicator and the plan button, which
+// opens the plan dialog (page and panel alike, issue #250); the ring moves while a step runs. It replaces the plan indicator and the plan button, which
 // meant the same plan. Shown as long as the chat has plans.
 
 import useMediaQuery from '@mui/material/useMediaQuery';
@@ -14,16 +14,33 @@ import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import { doneSteps } from '../plan';
 import type { Plan } from '../plan';
 import { headerPlan, planTone } from '../planButton';
-import { indicatorTooltip } from '../planText';
+import { indicatorTooltip, planActive, runningStepTooltip } from '../planText';
 import HeaderStatusButton, { TONE_COLOR } from './HeaderStatusButton';
 import { agentColors } from './tokens';
 
 /** The ring of the steps done: the context ring's geometry, the stroke in the colour of the tone. */
-function PlanRing({ ratio, color }: { ratio: number; color: string }) {
+function PlanRing({ ratio, color, active }: { ratio: number; color: string; active?: boolean }) {
     const r = 7;
     const c = 2 * Math.PI * r;
     return (
-        <Box component="svg" viewBox="0 0 18 18" aria-hidden sx={{ width: 18, height: 18, display: 'block' }}>
+        <Box component="svg" viewBox="0 0 18 18" aria-hidden sx={{
+                width: 18,
+                height: 18,
+                display: 'block',
+                '@keyframes agentPlanSpin': { to: { transform: 'rotate(360deg)' } },
+                '& .agent-plan-ring-active': {
+                    transformOrigin: '9px 9px',
+                    animation: 'agentPlanSpin 1.4s linear infinite',
+                },
+                '@media (prefers-reduced-motion: reduce)': {
+                    '& .agent-plan-ring-active': {
+                        animation: 'none',
+                        strokeDasharray: '2 3',
+                        strokeOpacity: 0.7,
+                    },
+                },
+            }}
+        >
             <circle cx="9" cy="9" r={r} fill="none" strokeWidth="2.5" stroke="#e0e0e0" />
             {ratio > 0 && (
                 <circle
@@ -36,6 +53,22 @@ function PlanRing({ ratio, color }: { ratio: number; color: string }) {
                     stroke={color}
                     strokeDasharray={`${c * Math.max(ratio, 0.02)} ${c}`}
                     transform="rotate(-90 9 9)"
+                />
+            )}
+            {active && (
+                // a short arc circling over the ring while a step runs; reduced motion: no circling, a dashed ring
+                <circle
+                    className="agent-plan-ring-active"
+                    data-testid="agent-plan-ring-active"
+                    cx="9"
+                    cy="9"
+                    r={r}
+                    fill="none"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    stroke={color}
+                    strokeOpacity={0.5}
+                    strokeDasharray={`${c * 0.2} ${c * 0.8}`}
                 />
             )}
         </Box>
@@ -71,10 +104,10 @@ export default function PlanChip({
         ) : plan.state === 'failed' ? (
             <ErrorOutlineIcon aria-hidden sx={{ fontSize: 18, color: agentColors.red }} />
         ) : (
-            <PlanRing ratio={total > 0 ? done / total : 0} color={color} />
+            <PlanRing ratio={total > 0 ? done / total : 0} color={color} active={planActive(plan)} />
         );
     const label = compact || narrow ? `${done}/${total}` : `Plan ${done}/${total}`;
-    const tooltip = indicatorTooltip(plan, pending);
+    const tooltip = runningStepTooltip(plan, now) ?? indicatorTooltip(plan, pending);
     return (
         <HeaderStatusButton
             icon={icon}

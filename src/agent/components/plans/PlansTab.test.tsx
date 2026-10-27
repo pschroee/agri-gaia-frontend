@@ -250,4 +250,22 @@ describe('PlansTab', () => {
         expect(onOpenChat).toHaveBeenCalledWith('c2');
         expect(screen.queryByTestId('agent-plan-dialog')).toBeNull();
     });
+
+    it('shows the status as symbol and whole word, a waiting plan as Running (issue #250)', () => {
+        mount();
+        const [running, done] = screen.getAllByTestId('overview-row');
+        expect(within(running).getByTestId('agent-plan-state').textContent).toBe('Running');
+        expect(within(done).getByTestId('agent-plan-state').textContent).toBe('Completed');
+        // the wait is named in the second line of "Current step"
+        expect(within(running).getByText('Epoch 3 of 10 · val_accuracy 0.912 · loss 0.231')).toBeTruthy();
+    });
+
+    it('gives the chat title two lines and the whole title as tooltip (issue #250)', () => {
+        mount();
+        const chat = within(screen.getAllByTestId('overview-row')[0]).getByRole('button', {
+            name: 'Open chat Flower classifier',
+        });
+        // two lines, the whole title as tooltip
+        expect(chat.getAttribute('title')).toBe('Flower classifier');
+    });
 });

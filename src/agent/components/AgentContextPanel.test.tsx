@@ -3,7 +3,7 @@
 //
 // SPDX-License-Identifier: MIT
 
-// The context panel's plan chip (issue #221): the chip opens the plan view over the chat, "Back to chat" closes it, the
+// The context panel's plan chip (issue #221): the chip opens the large plan dialog (issue #250), the
 // chat stays mounted underneath, and another chat closes the view.
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -95,27 +95,25 @@ const draw = () =>
     );
 
 describe('the plan chip in the panel header', () => {
-    it('opens the plan view over the chat and closes it again, the chat stays mounted', () => {
+    it('opens the same large plan dialog as the agent page, the chat stays mounted', () => {
         draw();
-        expect(screen.queryByTestId('agent-plan-panel')).toBeNull();
+        expect(screen.queryByTestId('agent-plan-dialog')).toBeNull();
         fireEvent.click(screen.getByTestId('agent-plan-chip'));
-        expect(screen.getByTestId('agent-plan-panel')).toBeTruthy();
-        expect(screen.getByTestId('chat-view')).toBeTruthy();
-        fireEvent.click(screen.getByRole('button', { name: 'Back to chat' }));
+        expect(screen.getByTestId('agent-plan-dialog')).toBeTruthy();
         expect(screen.queryByTestId('agent-plan-panel')).toBeNull();
         expect(screen.getByTestId('chat-view')).toBeTruthy();
     });
 
-    it('another chat closes the view', () => {
+    it('another chat closes the dialog', () => {
         const { rerender } = draw();
         fireEvent.click(screen.getByTestId('agent-plan-chip'));
-        expect(screen.getByTestId('agent-plan-panel')).toBeTruthy();
+        expect(screen.getByTestId('agent-plan-dialog')).toBeTruthy();
         state.selected = 'c2';
         rerender(
             <MemoryRouter>
                 <AgentContextPanel />
             </MemoryRouter>,
         );
-        expect(screen.queryByTestId('agent-plan-panel')).toBeNull();
+        expect(screen.queryByTestId('agent-plan-dialog')).toBeNull();
     });
 });
