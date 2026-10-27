@@ -16,6 +16,8 @@ import {
     checkSubtitle,
     classRows,
     compareRows,
+    confusionView,
+    sampleTip,
     deploymentRows,
     fmt2,
     fmtDiff,
@@ -678,5 +680,61 @@ describe('the card of a check', () => {
         expect(section(view, 'mode')).toMatchObject({ text: 'Statistics only, no image review', icon: 'stats' });
         expect(section(view, 'progress')?.percent).toBeNull();
         expect(section(view, 'progress')?.left).toBe('');
+    });
+});
+
+describe('the confusion matrix of a check (#249)', () => {
+    it('counts rows as true and columns as predicted class, with the share of the row', () => {
+        const v = confusionView({ '3': { '3': 9, '7': 1 }, '7': { '3': 2, '7': 3 } })!;
+        expect(v.classes).toEqual(['3', '7']);
+        expect(v.folded).toBe(false);
+        expect(v.rows[0]).toMatchObject({ name: '3', total: 10 });
+        expect(v.rows[0].cells).toEqual([
+            { count: 9, share: 0.9, diagonal: true },
+            { count: 1, share: 0.1, diagonal: false },
+        ]);
+        expect(v.rows[1].cells[0]).toMatchObject({ count: 2, share: 0.4, diagonal: false });
+        expect(v.rows[1].cells[1]).toMatchObject({ count: 3, share: 0.6, diagonal: true });
+    });
+
+    it('reads a cell the gateway left out as 0 and takes classes from the per-class map too', () => {
+        const perClass = { '3': { precision: 1, recall: 1, f1: 1, support: 4 }, '5': { precision: null, recall: 0, f1: 0, support: 0 } };
+        const v = confusionView({ '3': { '3': 4 } }, perClass)!;
+        expect(v.classes).toEqual(['3', '5']);
+        expect(v.rows[1]).toMatchObject({ name: '5', total: 0 });
+        expect(v.rows[1].cells.map((c) => c.count)).toEqual([0, 0]);
+        expect(v.rows[1].cells.every((c) => c.share === 0)).toBe(true);
+    });
+
+    it('starts folded from 11 classes on, not at 10', () => {
+        const make = (n: number) =>
+            Object.fromEntries(Array.from({ length: n }, (_, i) => [`c${String(i).padStart(2, '0')}`, { [`c${String(i).padStart(2, '0')}`]: 3 }]));
+        expect(confusionView(make(10))!.folded).toBe(false);
+        expect(confusionView(make(10))!.classes).toHaveLength(10);
+        expect(confusionView(make(11))!.folded).toBe(true);
+    });
+
+    it('has no matrix without confusion (an old report) or without any count', () => {
+        expect(confusionView(undefined)).toBeUndefined();
+        expect(confusionView({})).toBeUndefined();
+        expect(confusionView({ '3': { '3': 0 } })).toBeUndefined();
+    });
+
+    it('puts the matrix after the per-class table, and only when the report has it', () => {
+        const old = checkCard(trainingCheck(), undefined, Date.now());
+        expect(section(old, 'confusion')).toBeUndefined();
+        expect(section(old, 'table')).toBeDefined();
+        const c = trainingCheck();
+        (c.report!.figures as TrainingFigures).confusion = { '3': { '3': 20, '7': 1 }, '7': { '3': 5, '7': 4 } };
+        const view = checkCard(c, undefined, Date.now());
+        const kinds = view.sections.map((x) => x.kind);
+        expect(kinds.indexOf('confusion')).toBe(kinds.indexOf('table') + 1);
+    });
+
+    it('explains the held-back sets in a tooltip of the sample line', () => {
+        expect(sampleTip('holdout')).toBe('Images the split held back; never used in training');
+        expect(sampleTip('validation')).toBe('Images the split held back; never used in training');
+        expect(sampleTip('synthetic')).toBeUndefined();
+        expect(section(checkCard(trainingCheck(), undefined, Date.now()), 'sample')?.tip).toBe('Images the split held back; never used in training');
     });
 });

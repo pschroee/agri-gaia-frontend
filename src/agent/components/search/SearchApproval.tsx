@@ -51,7 +51,7 @@ import {
     waitingText,
 } from '../../searchApproval';
 import type { SearchApprovalData } from '../../searchApproval';
-import { compactNumber, goalSign, metricWords, directionText, minutesText, specText } from '../../searchView';
+import { compactNumber, goalSign, goalText, metricWords, minutesText, specText } from '../../searchView';
 import type { Approval } from '../../types';
 import { useNow } from '../../useNow';
 import ApprovalFooter from '../ApprovalFooter';
@@ -101,7 +101,7 @@ function Terms({ d }: { d: SearchApprovalData }) {
     return (
         <>
             <Section title="Goal">
-                <Typography sx={{ fontSize: 13 }}>{`${words.label} · ${directionText(d.objective)}`}</Typography>
+                <Typography sx={{ fontSize: 13 }}>{goalText(d.objective, d.path)}</Typography>
             </Section>
             <Section title="Search space">
                 <Box sx={{ overflowX: 'auto' }}>

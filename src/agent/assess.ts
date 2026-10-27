@@ -27,6 +27,7 @@ import type {
     BaselineFigures,
     BasicFigures,
     ClassFigures,
+    ConfusionCounts,
     DeploymentFigures,
     ModelCheck,
     NamedRef,
@@ -216,6 +217,11 @@ export function sampleText(set: string | undefined, n: number): string {
     }
 }
 
+/** What the tooltip of the sample line explains: the two "validation" sets are not the template's validation split. */
+export function sampleTip(set: string | undefined): string | undefined {
+    return set === 'validation' || set === 'holdout' ? 'Images the split held back; never used in training' : undefined;
+}
+
 /**
  * The lines under the sample of a check card: while the check compares rounds it says so, and the gateway's own
  * note follows verbatim (D6) — the card never formulates anything about the measurement.
@@ -300,6 +306,50 @@ export function classRows(perClass: Record<string, ClassFigures> | undefined): C
         const c = (perClass ?? {})[name];
         return { name, precision: c.precision, recall: c.recall, f1: c.f1, support: c.support, below: c.below ?? [] };
     });
+}
+
+/** The number of classes from which the confusion matrix starts folded. */
+export const CONFUSION_FOLD_AT = 11;
+
+/** One cell of the confusion matrix: the count, the share of its true class and whether it is on the diagonal. */
+export type ConfusionCell = { count: number; share: number; diagonal: boolean };
+
+/** One row of the matrix: the true class, its number of images and one cell per predicted class. */
+export type ConfusionRow = { name: string; total: number; cells: ConfusionCell[] };
+
+/** The matrix as the card draws it. */
+export type ConfusionView = { classes: string[]; rows: ConfusionRow[]; folded: boolean };
+
+/**
+ * The confusion matrix of a report: rows are the true classes, columns the predicted ones, both in the order of the
+ * per-class table (by name). A cell the gateway left out is 0; the share is the count over its row's total. Without
+ * `confusion` (a report from before the gateway sent it) or without any count there is no matrix.
+ */
+export function confusionView(
+    confusion: ConfusionCounts | undefined,
+    perClass?: Record<string, ClassFigures>,
+): ConfusionView | undefined {
+    if (!confusion) return undefined;
+    const names = new Set<string>(Object.keys(perClass ?? {}));
+    for (const [t, row] of Object.entries(confusion)) {
+        names.add(t);
+        for (const p of Object.keys(row ?? {})) names.add(p);
+    }
+    const classes = [...names].sort();
+    const count = (t: string, p: string) => {
+        const v = confusion[t]?.[p];
+        return typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+    };
+    const rows = classes.map((t) => {
+        const total = classes.reduce((n, p) => n + count(t, p), 0);
+        return {
+            name: t,
+            total,
+            cells: classes.map((p) => ({ count: count(t, p), share: total > 0 ? count(t, p) / total : 0, diagonal: t === p })),
+        };
+    });
+    if (!rows.some((r) => r.total > 0)) return undefined;
+    return { classes, rows, folded: classes.length >= CONFUSION_FOLD_AT };
 }
 
 /** The majority baseline in one line: `0.50 (always “3”) · p = 0.00014` (design M60). */
@@ -745,7 +795,7 @@ export type ImageRow = {
 /** One section of a card, in the order the design fixes. */
 export type Section =
     | { kind: 'verdict'; view: VerdictView; header: string }
-    | { kind: 'sample'; text: string; sub?: string; captions?: string[]; icon?: 'image' | 'send' }
+    | { kind: 'sample'; text: string; tip?: string; sub?: string; captions?: string[]; icon?: 'image' | 'send' }
     | { kind: 'mode'; text: string; icon: 'stats' | 'image'; reason?: string }
     | { kind: 'basic'; items: BasicCheck[] }
     | { kind: 'progress'; percent: number | null; left: string; right: string }
@@ -753,6 +803,7 @@ export type Section =
     | { kind: 'round'; text: string; done: number; total: number }
     | { kind: 'warn'; text: string }
     | TableSection
+    | { kind: 'confusion'; view: ConfusionView }
     | { kind: 'kv'; rows: KvRow[]; boldLabels?: string[] }
     | { kind: 'list'; title: string; items: (string | { id: string; text: string })[] }
     | { kind: 'images'; title: string; rows: ImageRow[]; more?: string }
@@ -890,6 +941,7 @@ export function checkCard(check: AssessCheck, watch: WatchJob | undefined, now: 
             sections.push({
                 kind: 'sample',
                 text: sampleText(report.set, report.measured_images),
+                tip: sampleTip(report.set),
                 // the image review stands next to the sample, the gateway's captions below it (D9, D6)
                 sub: deployment ? undefined : checkImageReviewLine(report),
                 captions: captions.length ? captions : undefined,
@@ -950,6 +1002,8 @@ export function checkCard(check: AssessCheck, watch: WatchJob | undefined, now: 
                     ],
                     rows: rows.map((r) => classCells(r, true)),
                 });
+            const matrix = confusionView(f?.confusion, f?.per_class);
+            if (matrix) sections.push({ kind: 'confusion', view: matrix });
             // with a previous check the before/after table replaces the two overall figures (design E16)
             const metrics = metricRows(f, !f?.previous);
             if (metrics.length) sections.push({ kind: 'kv', rows: metrics });

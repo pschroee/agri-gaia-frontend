@@ -1101,6 +1101,9 @@ export type ClassFigures = {
     below?: string[];
 };
 
+/** Confusion counts as the gateway sends them: true class, then predicted class, then the number of images. Zero cells may be left out. */
+export type ConfusionCounts = Record<string, Record<string, number>>;
+
 /** The figures over the whole measured set, with both values present (`assess.OverallFigures`). */
 export type OverallFigures = { accuracy: number; macro_f1: number };
 
@@ -1142,6 +1145,8 @@ export type TrainingFigures = {
     seen_datasets?: NamedRef[];
     measured_images: number;
     per_class: Record<string, ClassFigures>;
+    /** Confusion counts: true class -> predicted class -> images. Missing in reports from before the gateway sent it. */
+    confusion?: ConfusionCounts;
     overall: OverallFigures;
     baseline: BaselineFigures;
     seen_sample: SeenSample;
@@ -1200,6 +1205,7 @@ export type OwnModelFigures = {
     seen_datasets?: NamedRef[];
     measured_images: number;
     per_class: Record<string, ClassFigures>;
+    confusion?: ConfusionCounts;
     overall: OverallFigures;
     baseline: BaselineFigures;
     seen_sample: SeenSample;

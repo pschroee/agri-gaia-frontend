@@ -39,6 +39,15 @@ export const metricWords = (o: SearchObjective | undefined): MetricWords => METR
 
 export const directionText = (o: SearchObjective | undefined): string => (o?.mode === 'min' ? 'lower is better' : 'higher is better');
 
+/** What the validation of a platform-template search is: the template's own split, not the check's held-back images. */
+export const TEMPLATE_VALIDATION = "template's validation split of the training dataset";
+
+/** The goal line of a search card or approval: the metric, what it is measured on (template path), the direction. */
+export function goalText(o: SearchObjective | undefined, path?: string): string {
+    const mid = path === 'notebook' ? '' : ` · ${TEMPLATE_VALIDATION}`;
+    return `${metricWords(o).label}${mid} · ${directionText(o)}`;
+}
+
 /** The label of the target field of the budget dialog: "Val. accuracy at least", "Val. loss at most". */
 export function targetFieldLabel(o: SearchObjective | undefined): string {
     const short = metricWords(o).short;

@@ -14,6 +14,7 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import StarIcon from '@mui/icons-material/Star';
 
 import { mergeSeries, useTrialDetail } from '../../experiments';
 import type { ExperimentsState, Search, Trial } from '../../experiments';
@@ -95,7 +96,7 @@ export default function TrialDetail({ chatId, trial, search, state }: Props) {
                     {line && <span>· {line}</span>}
                 </Box>
                 <Box sx={{ flex: 1 }} />
-                {winner && <Chip size="small" color="primary" label="Winner" />}
+                {winner && <Chip size="small" variant="outlined" icon={<StarIcon />} label="Winner" />}
             </Box>
             {live && typeof pct === 'number' && (
                 <Box sx={{ mt: 1.5 }}>

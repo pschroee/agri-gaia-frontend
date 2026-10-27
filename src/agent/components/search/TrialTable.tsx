@@ -4,7 +4,7 @@
 
 // The table of the trials (gateway issue #168, design c1/c2/c3): one column per parameter of the search space (the
 // real names, G9), the score of the saved model with its epoch as a tooltip (A1), the best trial tinted with a star,
-// the winner as a chip, the selected row with a bar on the left. The table scrolls sideways and keeps ★ and # in
+// the winner as that star (no chip), the selected row with a bar on the left. The table scrolls sideways and keeps ★ and # in
 // place (A11, G18); the settings every trial shares stand in a line above it (G19); rows are reachable by keyboard.
 
 import { KeyboardEvent, useState } from 'react';
@@ -146,7 +146,9 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                                 }}
                             >
                                 <TableCell className="sticky" sx={stickyStar}>
-                                    {r.best && <StarIcon fontSize="small" color="primary" titleAccess="Best so far" />}
+                                    {(r.best || r.winner) && (
+                                        <StarIcon fontSize="small" color="primary" titleAccess={ended && r.winner ? 'Winner' : 'Best so far'} />
+                                    )}
                                 </TableCell>
                                 <TableCell className="sticky" sx={stickyIdx}>
                                     {r.label}
@@ -171,7 +173,6 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                                 <TableCell sx={{ whiteSpace: 'nowrap' }}>{durationText(t.duration_s)}</TableCell>
                                 <TableCell sx={{ whiteSpace: 'nowrap' }}>
                                     <StateCell view={view} />
-                                    {r.winner && <Chip size="small" color="primary" label="Winner" sx={{ ml: 1, height: 20 }} />}
                                 </TableCell>
                                 <TableCell sx={{ maxWidth: 140 }}>
                                     <Typography noWrap sx={{ fontSize: 12, fontStyle: 'italic', color: 'text.secondary' }} title={t.note}>
