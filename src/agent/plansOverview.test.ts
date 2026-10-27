@@ -192,6 +192,10 @@ describe('current step', () => {
     it('says how a plan that is over ended', () => {
         expect(currentStepCell(plan({ state: 'completed' }), NONE).title).toBe('All steps done');
         expect(currentStepCell(plan({ state: 'cancelled' }), NONE).title).toBe('Cancelled at step 2');
+        // B24: stopped while the approval card was open – never approved, nothing ran, no ended_at.
+        const stopped = plan({ state: 'cancelled', steps: [step(1), step(2)] });
+        expect(currentStepCell(stopped, NONE).title).toBe('Stopped before approval');
+        expect(planStatusView(stopped, NONE).label).toBe('Cancelled');
         expect(currentStepCell(plan({ state: 'rejected' }), NONE).title).toBe('Rejected');
         expect(currentStepCell(plan({ state: 'expired' }), NONE).title).toBe('Expired before approval');
         expect(currentStepCell(plan({ state: 'superseded' }), NONE).title).toBe('Replaced by a newer plan');

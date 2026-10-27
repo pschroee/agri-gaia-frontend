@@ -17,6 +17,7 @@ import {
     stepMessage,
     stepPhase,
     stepTitle,
+    stoppedBeforeApproval,
 } from './plan';
 import type { Plan } from './plan';
 import { stepSubline } from './planDetail';
@@ -170,7 +171,7 @@ export function currentStepCell(
         case 'completed':
             return none('All steps done');
         case 'cancelled':
-            return none(`Cancelled at step ${currentStepIndex(p)}`);
+            return none(stoppedBeforeApproval(p) ? 'Stopped before approval' : `Cancelled at step ${currentStepIndex(p)}`);
         case 'rejected':
             return none('Rejected');
         case 'expired':

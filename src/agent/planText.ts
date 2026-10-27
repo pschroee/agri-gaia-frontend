@@ -22,6 +22,7 @@ import {
     Plan,
     PlanStep,
     StepRef,
+    stoppedBeforeApproval,
 } from './plan';
 
 /** Why the gateway paused a plan: the user's own pause, an abort, a lost login, a budget or a restart. */
@@ -175,6 +176,10 @@ export function completedText(plan: Plan): string {
  * stopped them, and nothing pretends otherwise.
  */
 export function cancelledText(plan: Plan): string {
+    if (stoppedBeforeApproval(plan)) {
+        const at = clock(plan.decided_at);
+        return `Stopped by you${at ? ` at ${at}` : ''} before the approval. Nothing ran.`;
+    }
     const at = clock(plan.ended_at);
     const when = at ? ` at ${at}` : '';
     return `Cancelled by you${when}. Running platform jobs were not stopped.`;
@@ -475,6 +480,7 @@ export function indicatorTooltip(plan: Plan, pending: ReadonlySet<string>): stri
         case 'completed':
             return `Plan completed · ${n} of ${n} steps${tail}`;
         case 'cancelled':
+            if (stoppedBeforeApproval(plan)) return `Plan stopped before the approval${tail}`;
             return `Plan cancelled at step ${i} of ${n}${tail}`;
         case 'proposed':
             return plan.approving
