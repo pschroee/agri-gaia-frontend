@@ -10,7 +10,6 @@
 import { KeyboardEvent, useState } from 'react';
 
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import IconButton from '@mui/material/IconButton';
 import Menu from '@mui/material/Menu';
