@@ -82,6 +82,8 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
     const cols = spaceColumns(search);
     const fixed = search ? fixedSettings(search) : '';
     const ended = search?.state === 'ended';
+    // after the end the star marks the winner alone (#249); a best trial that did not win keeps only its tint
+    const hasWinner = ended && typeof search?.winner_idx === 'number';
     const words = metricWords(search?.objective);
     const [menu, setMenu] = useState<{ el: HTMLElement; row: TrialRow }>();
     const key = (e: KeyboardEvent, t: Trial) => {
@@ -145,7 +147,7 @@ export default function TrialTable({ search, group, selectedId, stopping, showWa
                                 }}
                             >
                                 <TableCell className="sticky" sx={stickyStar}>
-                                    {(r.best || r.winner) && (
+                                    {(hasWinner ? r.winner : r.best || r.winner) && (
                                         <StarIcon fontSize="small" color="primary" titleAccess={ended && r.winner ? 'Winner' : 'Best so far'} />
                                     )}
                                 </TableCell>

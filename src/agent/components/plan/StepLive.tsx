@@ -10,7 +10,7 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 
 import type { WatchJob } from '../../jobs';
-import { stepMessage, stepPhase, stepRuntime, stepTimeLine } from '../../plan';
+import { stepJobKind, stepMessage, stepPhase, stepRuntime, stepTimeLine } from '../../plan';
 import type { Plan, PlanStep } from '../../plan';
 import { epochLine, metricPairs, withJob } from '../../planDetail';
 import { logTail } from '../../planText';
@@ -41,7 +41,7 @@ export default function StepLive({
     const phase = stepPhase(plan, live, working);
     const paused = phase === 'paused';
     const percent = typeof live.progress === 'number' ? live.progress : undefined;
-    const message = stepMessage(live, job?.kind);
+    const message = stepMessage(live, job?.kind ?? stepJobKind(live));
     const timeLine = stepTimeLine(live, now);
     const runtime = stepRuntime(live, now);
     const detail =

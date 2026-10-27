@@ -388,11 +388,12 @@ export function endInfo(reason: string | undefined): EndInfo {
  * `approval` is the approval's state; `grant` the grant it started (missing for a rejected or expired request).
  */
 export function decidedStateText(
-    approval: { state: 'pending' | 'approved' | 'rejected' | 'expired'; decided_at?: string },
+    approval: { state: 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled'; decided_at?: string },
     grant?: Pick<InternetGrant, 'kind' | 'state' | 'started_at' | 'expires_at' | 'ended_at' | 'ended_reason'>,
 ): string {
     if (approval.state === 'rejected') return `rejected ${clock(approval.decided_at)}`.trim();
     if (approval.state === 'expired') return 'no decision in time';
+    if (approval.state === 'cancelled') return 'cancelled before a decision';
     if (approval.state === 'pending') return 'waiting for your approval';
     const started = clock(grant?.started_at ?? approval.decided_at);
     if (grant && grant.state === 'ended') {

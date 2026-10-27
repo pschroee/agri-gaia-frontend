@@ -6,7 +6,7 @@
 // The context panel's plan chip (issue #221): the chip opens the large plan dialog (issue #250), the
 // chat stays mounted underneath, and another chat closes the view.
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -104,7 +104,7 @@ describe('the plan chip in the panel header', () => {
         expect(screen.getByTestId('chat-view')).toBeTruthy();
     });
 
-    it('another chat closes the dialog', () => {
+    it('another chat closes the dialog', async () => {
         const { rerender } = draw();
         fireEvent.click(screen.getByTestId('agent-plan-chip'));
         expect(screen.getByTestId('agent-plan-dialog')).toBeTruthy();
@@ -114,6 +114,7 @@ describe('the plan chip in the panel header', () => {
                 <AgentContextPanel />
             </MemoryRouter>,
         );
-        expect(screen.queryByTestId('agent-plan-dialog')).toBeNull();
+        // the dialog leaves with its exit transition
+        await waitFor(() => expect(screen.queryByTestId('agent-plan-dialog')).toBeNull());
     });
 });

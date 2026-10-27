@@ -278,7 +278,11 @@ export type Approval = {
     size: number;
     sha256: string;
     content_type: string;
-    state: 'pending' | 'approved' | 'rejected' | 'expired';
+    /**
+     * `cancelled` (gateway issue #251): the call that waited for the decision was stopped (pi aborted it) before anyone
+     * decided; the card is gone and nothing ran.
+     */
+    state: 'pending' | 'approved' | 'rejected' | 'expired' | 'cancelled';
     created_at: string;
     decided_at?: string;
     preview?: string;

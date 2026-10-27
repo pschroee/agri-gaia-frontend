@@ -40,6 +40,7 @@ import {
     PlanStep,
     stepCount,
     stepMain,
+    stepJobKind,
     stepMessage,
     stepPhase,
     stepRefLink,
@@ -513,9 +514,11 @@ describe('the time texts', () => {
             'The edge device is pulling and starting the container',
         );
         // a platform task that is no build, and any other kind, fall back to the kind in words
-        expect(stepMessage(waiting({ tool: 'start_training' }), 'platform_task')).toBe(
+        expect(stepMessage(waiting({ tool: 'start_training' }), 'platform_task')).toBe('The platform is starting the training');
+        expect(stepMessage(waiting({ tool: 'annotation_task' }), 'platform_task')).toBe(
             'Waiting for the platform job (platform_task)',
         );
+        expect(stepMessage(waiting({ tool: 'propose_search' }))).toBe('The training search runs its trials');
         expect(stepMessage(waiting(), 'notebook_run')).toBe('Waiting for the platform job (notebook_run)');
     });
 
@@ -728,5 +731,17 @@ describe('stepRefs (#177)', () => {
     it('links datasets and models, not training containers', () => {
         expect(stepRefLink({ step: 1, resource: 'dataset', id: '66' })).toBe('/data?dataset=66');
         expect(stepRefLink({ step: 1, resource: 'training', id: '4' })).toBeUndefined();
+    });
+});
+
+describe('stepJobKind', () => {
+    const st = (over: Partial<PlanStep>) => ({ idx: 1, method: 'POST', path: '/x', effect: 'compute', covered: true, state: 'waiting', ...over }) as PlanStep;
+    it('reads the watched kind from the step (issue #245, Plans table)', () => {
+        expect(stepJobKind(st({ tool: 'create_training', path: '/train/containers' }))).toBe('platform_task');
+        expect(stepJobKind(st({ tool: 'start_training', path: '/train/containers/7/run' }))).toBe('platform_task');
+        expect(stepJobKind(st({ tool: 'build_inference_image', path: '/container-images/build' }))).toBe('image_build');
+        expect(stepJobKind(st({ path: '/container-images/build' }))).toBe('image_build');
+        expect(stepJobKind(st({ tool: 'start_deployment', path: '/container-deployments/3/deploy' }))).toBe('edge_deployment');
+        expect(stepJobKind(st({ tool: 'update_model', path: '/models/3', method: 'PATCH' }))).toBeUndefined();
     });
 });

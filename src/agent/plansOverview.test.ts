@@ -263,6 +263,19 @@ describe('planStatusView (issue #250)', () => {
             ],
         });
         expect(planStatusView(waiting, none).label).toBe('Running');
-        expect(currentStepCell(waiting, none).sub).toBe('Waiting for the platform job');
+        // the same words as the step's card (issue #245): without a known job only the bare wait
+        expect(currentStepCell(waiting, none).sub).toBe('Waiting for the platform');
+        const build = p({
+            steps: [
+                { idx: 1, tool: 'create_training', method: 'POST', path: '/train/containers', effect: 'compute', covered: true, state: 'waiting' } as PlanStep,
+            ],
+        });
+        expect(currentStepCell(build, none).sub).toBe('The platform is building the training image');
+        const deploy = p({
+            steps: [
+                { idx: 1, tool: 'start_deployment', method: 'POST', path: '/container-deployments/4/deploy', effect: 'compute', covered: true, state: 'waiting' } as PlanStep,
+            ],
+        });
+        expect(currentStepCell(deploy, none).sub).toBe('The edge device is pulling and starting the container');
     });
 });

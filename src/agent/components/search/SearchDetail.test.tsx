@@ -108,7 +108,8 @@ describe('SearchDetail', () => {
         const s = makeSearch({ state: 'ended', end_reason: 'budget_runs', winner_idx: 2, ended_at: '2026-10-20T11:17:00Z' });
         mount(s, { trials: trials().slice(0, 3) });
         const table = screen.getByTestId('trial-table');
-        expect(within(table).queryByText('Winner')).toBeNull();
+        // no chip (the star's SVG title also reads "Winner", so look for a chip label only)
+        expect(within(table).queryByText('Winner', { selector: '.MuiChip-label' })).toBeNull();
         expect(within(table).getAllByTitle('Winner')).toHaveLength(1);
         expect(within(table).queryByTitle('Best so far')).toBeNull();
     });

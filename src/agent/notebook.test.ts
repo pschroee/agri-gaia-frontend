@@ -194,6 +194,12 @@ describe('the texts of an approval', () => {
         expect(approvalDecision({ state: 'expired' }, undefined).suffix).toBe(
             ' · no decision within the time limit, not run',
         );
+        // gateway issue #251: the waiting call was stopped before a decision
+        expect(approvalDecision({ state: 'cancelled' }, 30)).toMatchObject({
+            label: 'Cancelled',
+            suffix: ' · the call stopped before a decision, not run',
+            tone: 'muted',
+        });
     });
 
     it('computes the deadline of an approval from its creation and the gateway timeout', () => {

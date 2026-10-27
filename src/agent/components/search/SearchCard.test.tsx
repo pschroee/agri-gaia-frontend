@@ -209,7 +209,9 @@ describe('a search that minimises the loss (G7)', () => {
     it('says lower is better and the goal with ≤', () => {
         const s = mockLossSearch();
         render1(s, [mockTrial(1, { search_id: 's2', score: 0.52 }), mockTrial(2, { search_id: 's2', score: 0.44 })]);
-        expect(screen.getByText('Validation loss · lower is better · platform template')).toBeTruthy();
+        expect(
+            screen.getByText("Validation loss · template's validation split of the training dataset · lower is better · platform template"),
+        ).toBeTruthy();
         expect(screen.getByText('best 0.440 · goal ≤ 0.4')).toBeTruthy();
     });
 });

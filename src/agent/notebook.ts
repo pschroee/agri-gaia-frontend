@@ -247,6 +247,9 @@ export function approvalDecision(
             return { label: 'Approved', suffix: '', tone: 'ok', at: approval.decided_at };
         case 'rejected':
             return { label: 'Rejected', suffix: ' · not run', tone: 'error', at: approval.decided_at };
+        case 'cancelled':
+            // the waiting call was stopped before a decision (gateway issue #251)
+            return { label: 'Cancelled', suffix: ' · the call stopped before a decision, not run', tone: 'muted', at: approval.decided_at };
         default:
             return {
                 label: 'Expired',
