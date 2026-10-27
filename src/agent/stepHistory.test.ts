@@ -102,4 +102,17 @@ describe('historyRows', () => {
         expect(rows).toHaveLength(1);
         expect(rows[0].when).toBe('');
     });
+
+    it('reads "Train Container #N created." as the last phase: a build from the cache leaves nothing pending (B27)', () => {
+        const rows = historyRows(
+            job({
+                message: 'Train Container #179 created.',
+                history: [{ at: '2026-10-27T10:19:50.000Z', text: 'Train Container #179 created.' }],
+            }),
+            NOW,
+            { trainingBuild: true },
+        );
+        expect(rows.map((r) => r.state)).toEqual(['running']);
+        expect(rows[0].text).toBe('Train Container #179 created.');
+    });
 });
