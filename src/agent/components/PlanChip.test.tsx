@@ -99,4 +99,30 @@ describe('PlanChip', () => {
         fireEvent.click(chip());
         expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }));
     });
+
+    it('moves the ring only while a step runs or waits (issue #250)', () => {
+        const active = (p: Plan) => {
+            const { unmount } = render(<PlanChip plans={[p]} pending={none} onOpen={vi.fn()} />);
+            const on = screen.queryByTestId('agent-plan-ring-active') !== null;
+            unmount();
+            return on;
+        };
+        expect(active(plan())).toBe(true);
+        expect(
+            active(plan({ steps: [step({ idx: 1, state: 'done' }), step({ idx: 2, state: 'waiting' })] })),
+        ).toBe(true);
+        expect(active(plan({ state: 'proposed', approving: true }))).toBe(true);
+        expect(active(plan({ state: 'proposed' }))).toBe(false);
+        expect(active(plan({ state: 'paused' }))).toBe(false);
+        expect(active(plan({ steps: [step({ idx: 1, state: 'done' }), step({ idx: 2 })] }))).toBe(false);
+    });
+
+    it('names the running step in the tooltip', () => {
+        const started = new Date(Date.now() - 4 * 60000 - 5000).toISOString();
+        const p = plan({
+            steps: [step({ idx: 1, state: 'done' }), step({ idx: 2, state: 'running', step_started_at: started })],
+        });
+        render(<PlanChip plans={[p]} pending={none} onOpen={vi.fn()} />);
+        expect(chip().getAttribute('aria-label')).toMatch(/^Step 2\/2 running: .* · 4 min$/);
+    });
 });

@@ -14,6 +14,7 @@ import {
     applyPlanEvent,
     budgetCell,
     currentStepCell,
+    planStatusView,
     durationCell,
     plansQuery,
     planEnd,
@@ -237,5 +238,31 @@ describe('applyPlanEvent', () => {
         const r = applyPlanEvent(page([plan({ id: 'a' })]), plan({ id: 'new' }));
         expect(r.reload).toBe(true);
         expect(r.page.plans).toHaveLength(1);
+    });
+});
+
+describe('planStatusView (issue #250)', () => {
+    const none: ReadonlySet<string> = new Set();
+    const p = (over: Partial<Plan>): Plan =>
+        ({ id: 'p', chat_id: 'c', via: 'cli', mode: 'autonomous', created_at: '2026-10-27T10:00:00Z', steps: [], state: 'approved', ...over }) as Plan;
+
+    it('has one whole word per state', () => {
+        expect(planStatusView(p({}), none)).toEqual({ icon: 'spinner', label: 'Running' });
+        expect(planStatusView(p({ state: 'proposed' }), none)).toEqual({ icon: 'attention', label: 'Needs approval' });
+        expect(planStatusView(p({ state: 'proposed', approving: true }), none).label).toBe('Running');
+        expect(planStatusView(p({ state: 'paused' }), none).label).toBe('Paused');
+        expect(planStatusView(p({ state: 'completed' }), none).label).toBe('Completed');
+        expect(planStatusView(p({ state: 'failed' }), none).label).toBe('Failed');
+        expect(planStatusView(p({ state: 'cancelled' }), none).label).toBe('Cancelled');
+    });
+
+    it('shows a plan that waits for the platform as Running and names the wait in the current step', () => {
+        const waiting = p({
+            steps: [
+                { idx: 1, method: 'POST', path: '/x', effect: 'write', covered: true, state: 'waiting' } as PlanStep,
+            ],
+        });
+        expect(planStatusView(waiting, none).label).toBe('Running');
+        expect(currentStepCell(waiting, none).sub).toBe('Waiting for the platform job');
     });
 });

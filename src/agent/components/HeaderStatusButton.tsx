@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // One calm button for the status row of the chat header (issue #221): plan, to-dos and context share it. 28 px high,
-// 13 px text, an 18 px symbol, no dot, no pulse, no frame; the state shows only in the colour of symbol and text.
+// 13 px text, an 18 px symbol, no dot, no frame (a symbol may move while something runs, issue #250); the state shows only in the colour of symbol and text.
 
 import { MouseEvent, ReactNode, Ref } from 'react';
 

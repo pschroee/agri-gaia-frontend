@@ -17,6 +17,7 @@ import {
     currentStepIndex,
     doneSteps,
     durationText,
+    stepMain,
     isAutonomous,
     Plan,
     PlanStep,
@@ -405,6 +406,24 @@ export function indicatorWord(plan: Plan, pending: ReadonlySet<string>): string 
 export function indicatorLabel(plan: Plan, variant: 'panel' | 'page' | 'mobile'): string {
     const n = `${doneSteps(plan)}/${plan.steps.length}`;
     return variant === 'mobile' ? n : `Plan ${n}`;
+}
+
+/** Whether a step of the plan runs or waits for the platform, or the plan is being approved: the ring moves (issue #250). */
+export const planActive = (plan: Plan): boolean =>
+    (plan.state === 'proposed' && !!plan.approving) ||
+    (plan.state === 'approved' && plan.steps.some((s) => s.state === 'running' || s.state === 'waiting'));
+
+/** "Step 3/3 running: Create a training container · 4 min" while a step runs; undefined otherwise. */
+export function runningStepTooltip(plan: Plan, now: number): string | undefined {
+    if (plan.state !== 'approved') return undefined;
+    const step = plan.steps.find((s) => s.state === 'running' || s.state === 'waiting');
+    if (!step) return undefined;
+    const since = Date.parse(step.step_started_at ?? '');
+    const mins = Number.isNaN(since) ? 0 : Math.floor((now - since) / 60000);
+    const time = mins >= 1 ? durationText(mins * 60000) : '';
+    const minutes = time ? ` · ${time}` : '';
+    const word = step.state === 'waiting' ? 'waiting' : 'running';
+    return `Step ${step.idx}/${plan.steps.length} ${word}: ${stepMain(step).head}${minutes}`;
 }
 
 /** The tooltip and aria-label of the plan indicator (L18), with the design's closing invitation. */

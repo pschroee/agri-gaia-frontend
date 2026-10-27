@@ -25,7 +25,7 @@ import ChatSelector from './ChatSelector';
 import ChatView from './ChatView';
 import { ContextMeter } from './ContextMeter';
 import PlanChip from './PlanChip';
-import PlanPanelView from './plan/PlanPanelView';
+import PlanDialog from './plan/PlanDialog';
 import TaskButton from './TaskButton';
 import SearchIndicator from './search/SearchIndicator';
 import RunStateChip from './RunStateChip';
@@ -64,12 +64,12 @@ export default function AgentContextPanel() {
     // live through updateChat of the open ChatView
     const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
     const selectedState = runStateOf(selected);
-    // the plans of the open chat; the chip opens the plan view over the chat (issue #221)
+    // the plans of the open chat; the chip opens the same large dialog as the agent page (issue #250)
     const plans = selected ? planLists[selected.id] ?? [] : [];
     const pendingIds = pendingIdsOf(pendingApprovals);
-    const [planView, setPlanView] = useState<string | undefined>();
-    // another chat closes the view
-    useEffect(() => setPlanView(undefined), [selected?.id]);
+    const [planOpen, setPlanOpen] = useState(false);
+    // another chat closes the dialog
+    useEffect(() => setPlanOpen(false), [selected?.id]);
 
     return (
         <Drawer
@@ -131,8 +131,8 @@ export default function AgentContextPanel() {
                                 plans={plans}
                                 pending={pendingIds}
                                 compact={!!chipOf(searchLists[selected.id])}
-                                open={!!planView}
-                                onOpen={(p) => setPlanView(p.id)}
+                                open={planOpen}
+                                onOpen={() => setPlanOpen(true)}
                             />
                             <SearchIndicator book={searchLists[selected.id]} variant="panel" chatId={selected.id} />
                             <TaskButton tasks={taskLists[selected.id]} />
@@ -188,15 +188,6 @@ export default function AgentContextPanel() {
                     <SignInNotice />
                 ) : (
                     <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-                        {selected && planView && (
-                            <PlanPanelView
-                                chatId={selected.id}
-                                plans={plans}
-                                planId={planView}
-                                pending={pendingIds}
-                                onBack={() => setPlanView(undefined)}
-                            />
-                        )}
                         {selectedChatId ? (
                             <ChatView key={selectedChatId} chatId={selectedChatId} dense header={<ChatSelector />} />
                         ) : (
@@ -213,6 +204,15 @@ export default function AgentContextPanel() {
                     </Box>
                 )}
             </AgentDropZone>
+            {selected && (
+                <PlanDialog
+                    open={planOpen}
+                    onClose={() => setPlanOpen(false)}
+                    chatId={selected.id}
+                    plans={plans}
+                    pending={pendingIds}
+                />
+            )}
         </Drawer>
     );
 }

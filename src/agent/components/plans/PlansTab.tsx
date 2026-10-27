@@ -21,7 +21,6 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useAgent } from '../../AgentContext';
 import { chatTitle, formatRelativeDay } from '../../format';
 import { agentTitle, pendingIdsOf, stepCount } from '../../plan';
-import type { Plan } from '../../plan';
 import {
     MODE_OPTIONS,
     PLANS_EMPTY,
@@ -41,7 +40,7 @@ import type { PlanListItem } from '../../plansOverview';
 import { useNow } from '../../useNow';
 import { usePlanOverview } from '../../usePlanOverview';
 import PlanDialog from '../plan/PlanDialog';
-import { StateChip } from '../PlanCard';
+import PlanStatusCell from './PlanStatusCell';
 import OverviewFilterBar from '../overview/OverviewFilterBar';
 import OverviewTable, { PAGE_SIZES } from '../overview/OverviewTable';
 import type { OverviewColumn } from '../overview/OverviewTable';
@@ -110,12 +109,13 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'status',
             label: 'Status',
-            width: 160,
+            // wide enough for "Needs approval" with its symbol (issue #250)
+            width: 150,
             render: (p) => {
                 const note = statusNote(p, pending);
                 return (
                     <Box sx={{ minWidth: 0 }}>
-                        <StateChip plan={p as Plan} layout="page" pending={pending} />
+                        <PlanStatusCell plan={p} pending={pending} />
                         {note && (
                             <Typography
                                 title={note.text}
@@ -207,7 +207,8 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
             id: 'budget',
             label: 'Budget',
             width: 150,
-            hideBelow: 1100,
+            // the budget is in the dialog; the chat column gets the room first (issue #250)
+            hideBelow: 1600,
             render: (p) => {
                 const b = budgetCell(p, now);
                 if (!b) return '–';
@@ -230,7 +231,7 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'chat',
             label: 'Chat',
-            width: 150,
+            width: 200,
             hideBelow: 800,
             render: (p) => {
                 const title = p.chat_title?.trim() || chatTitle(chats.find((c) => c.id === p.chat_id));
@@ -246,7 +247,16 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
                             onOpenChat(p.chat_id);
                         }}
                         onKeyDown={(e) => e.stopPropagation()}
-                        sx={line({ fontSize: 13.5, maxWidth: '100%', textAlign: 'left', display: 'block' })}
+                        sx={{
+                            fontSize: 13.5,
+                            maxWidth: '100%',
+                            textAlign: 'left',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
+                        }}
                     >
                         {title}
                     </Link>
