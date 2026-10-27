@@ -60,7 +60,10 @@ export function historyRows(
     now: number,
     opts: { trainingBuild?: boolean } = {},
 ): HistoryRow[] {
-    const history = (job?.history ?? []).filter((e) => e && typeof e.text === 'string' && e.text.trim() !== '');
+    // the gateway writes the end of a job as an entry of its own, often with the words of the last one (B27)
+    const history = (job?.history ?? [])
+        .filter((e) => e && typeof e.text === 'string' && e.text.trim() !== '')
+        .filter((e, i, all) => i === 0 || e.text.trim() !== all[i - 1].text.trim());
     if (!job || history.length === 0) return [];
     const running = job.state === JOB_RUNNING;
     const rows: HistoryRow[] = history.map((e, i) => {
