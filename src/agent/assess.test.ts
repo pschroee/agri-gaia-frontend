@@ -316,6 +316,35 @@ describe('the figures of a check', () => {
         expect(value('Model check')).toBe('usable (24 held-out images, accuracy 0.92)');
     });
 
+    it('names no inference server in the rows of a deployment check', () => {
+        const tensor = (shape: number[]) => ({ inputs: [{ name: 'input', shape, type: 'FP32' }], outputs: [] });
+        const base = {
+            deployment: { id: 7, name: 'd' },
+            device: { name: 'sim-edge-01', simulated: true },
+            image: 'agent-test/mnist-ovms:v1-ovms',
+            model: { id: 3, name: 'mnist_demo' },
+            ready: true,
+            requests: 6,
+            max_abs_diff: 0.0000031,
+            argmax_same: 6,
+            roundtrip_ms: { median: 182, max: 240 },
+            model_check: null,
+        };
+        const same = deploymentRows({
+            ...base,
+            io: { same: true, triton: tensor([1, 3, 64, 64]), platform: tensor([1, 3, 64, 64]), file: tensor([1, 3, 64, 64]) },
+        } as DeploymentFigures);
+        expect(JSON.stringify(same)).not.toMatch(/triton/i);
+        const differs = deploymentRows({
+            ...base,
+            io: { same: false, triton: tensor([1, 3, 64, 64]), platform: tensor([1, 3, 32, 32]), file: tensor([1, 3, 64, 64]) },
+        } as DeploymentFigures);
+        expect(JSON.stringify(differs)).not.toMatch(/triton/i);
+        expect(differs.find((r) => r.label === 'Inputs')?.value).toBe(
+            'device [1, 3, 64, 64] · platform [1, 3, 32, 32] · model file [1, 3, 64, 64]',
+        );
+    });
+
     it('shows the share of the scale and the ties of a deployment check', () => {
         const base = {
             deployment: { id: 7, name: 'd' },

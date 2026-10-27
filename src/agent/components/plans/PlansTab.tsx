@@ -131,7 +131,8 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'progress',
             label: 'Progress',
-            width: 120,
+            // the figure never gives way, the bar does (#235)
+            width: 150,
             render: (p) => {
                 const g = progressOf(p);
                 return (
@@ -141,10 +142,16 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
                             value={g.value}
                             color={progressColor(p)}
                             aria-label={`${g.done} of ${g.total} steps done`}
-                            sx={{ width: 70, height: 6, borderRadius: 3, flex: 'none' }}
+                            sx={{ flex: '1 1 auto', minWidth: 40, maxWidth: 70, height: 6, borderRadius: 3 }}
                         />
                         <Typography
-                            sx={{ fontSize: 13, fontVariantNumeric: 'tabular-nums' }}
+                            data-testid="plan-progress-text"
+                            sx={{
+                                fontSize: 13,
+                                fontVariantNumeric: 'tabular-nums',
+                                flex: 'none',
+                                whiteSpace: 'nowrap',
+                            }}
                         >{`${g.done}/${g.total}`}</Typography>
                     </Box>
                 );

@@ -147,6 +147,22 @@ describe('PlansTab', () => {
         expect(r.getByRole('button', { name: 'Open chat Flower classifier' })).toBeTruthy();
     });
 
+    it('shows the whole progress figure of a ten-step plan', () => {
+        const ten: PlanListItem = {
+            ...completed,
+            id: 'p-ten',
+            steps: Array.from({ length: 10 }, (_, i) => step(i + 1, { state: 'done' })),
+        };
+        setOverview({ plans: [ten] });
+        mount();
+        const text = screen.getByTestId('plan-progress-text');
+        expect(text.textContent).toBe('10/10');
+        const css = getComputedStyle(text);
+        expect(css.whiteSpace).toBe('nowrap');
+        expect(css.flex).toMatch(/^(none|0 0 auto)/);
+        expect(screen.getByRole('progressbar', { name: '10 of 10 steps done' })).toBeTruthy();
+    });
+
     it('keeps the order the gateway delivered and shows the running count', () => {
         mount();
         const ids = screen.getAllByTestId('overview-row').map((r) => r.getAttribute('data-plan-id'));
