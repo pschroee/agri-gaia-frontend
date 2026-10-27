@@ -360,16 +360,16 @@ export function deploymentRows(fig: DeploymentFigures | undefined): KvRow[] {
     const io = fig.io;
     if (io) {
         const sources: [string, TensorInfo[]][] = [
-            ['Triton', io.triton?.inputs],
+            ['device', io.triton?.inputs],
             ['platform', io.platform?.inputs],
             ['model file', io.file?.inputs],
         ];
-        if (io.same) rows.push({ label: 'Inputs and outputs', value: 'same in Triton, platform and model file' });
+        if (io.same) rows.push({ label: 'Inputs and outputs', value: 'same on the device, in the platform and in the model file' });
         else {
             const ins = ioRow('Inputs', sources);
             if (ins) rows.push(ins);
             const outs = ioRow('Outputs', [
-                ['Triton', io.triton?.outputs],
+                ['device', io.triton?.outputs],
                 ['platform', io.platform?.outputs],
                 ['model file', io.file?.outputs],
             ]);
