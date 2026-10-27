@@ -35,6 +35,12 @@ export function phasesOf(kind: string | undefined, trainingBuild: boolean): stri
  * phase: the words up to the first " · " (as the gateway's `store.PhaseKey` cuts them).
  */
 const phaseKey = (text: string): string =>
+    // the backend ends a training build with "Train Container #N created.", the words of its last phase (B27)
+    /^train container #\d+ created/i.test(text.trim())
+        ? 'creating the training container'
+        : phaseText(text);
+
+const phaseText = (text: string): string =>
     text
         .split(' · ')[0]
         .replace(/\s*\([^)]*\)\s*$/, '')
