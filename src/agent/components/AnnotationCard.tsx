@@ -61,6 +61,7 @@ import type { CardView, Cell, CheckItem, HintIcon, ImageRow, KvRow, Seg, Section
 import { cardStateOf, jobCard, midTrunc, runCard } from '../annotation';
 import type { AnnotationItem } from '../annotation';
 import { useNow } from '../useNow';
+import ConfusionMatrix from './ConfusionMatrix';
 import { MidEllipsisText } from './EllipsisText';
 import EffectChip from './EffectChip';
 import { ErrorBlock } from './PlanCard';
@@ -391,9 +392,17 @@ function SectionView({ section, layout, title }: { section: Section; layout: 'pa
                         ) : (
                             <PhotoLibraryOutlinedIcon sx={{ fontSize: 20, color: 'action.active' }} />
                         )}
-                        <Typography variant="subtitle1" sx={{ fontSize: 14, fontWeight: 500 }}>
-                            {section.text}
-                        </Typography>
+                        {section.tip ? (
+                            <Tooltip title={section.tip}>
+                                <Typography variant="subtitle1" tabIndex={0} sx={{ fontSize: 14, fontWeight: 500 }}>
+                                    {section.text}
+                                </Typography>
+                            </Tooltip>
+                        ) : (
+                            <Typography variant="subtitle1" sx={{ fontSize: 14, fontWeight: 500 }}>
+                                {section.text}
+                            </Typography>
+                        )}
                         {section.sub && (
                             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
                                 {section.sub}
@@ -527,6 +536,8 @@ function SectionView({ section, layout, title }: { section: Section; layout: 'pa
             );
         case 'table':
             return <TableBlock section={section} />;
+        case 'confusion':
+            return <ConfusionMatrix view={section.view} />;
         case 'kv':
             return <KvBlock rows={section.rows} boldLabels={section.boldLabels} />;
         case 'list':

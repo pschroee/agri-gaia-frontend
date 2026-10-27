@@ -38,7 +38,7 @@ describe('the proposal', () => {
         render(<SearchApproval approval={approval()} data={mockProposal()} layout="page" />);
         expect(screen.getByRole('heading', { name: 'Start a training search' })).toBeTruthy();
         expect(screen.getByText('Compute')).toBeTruthy();
-        expect(screen.getByText('Validation accuracy · higher is better')).toBeTruthy();
+        expect(screen.getByText("Validation accuracy · template's validation split of the training dataset · higher is better")).toBeTruthy();
         expect(screen.getByRole('table', { name: 'Search space' })).toBeTruthy();
         expect(screen.getByText('learning_rate')).toBeTruthy();
         expect(screen.getByText('1e-4 … 1e-2')).toBeTruthy();

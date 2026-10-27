@@ -31,7 +31,7 @@ import { logTailLines } from '../../searchView';
 import {
     bestTrialOf,
     budgetMeters,
-    directionText,
+    goalText,
     durationText,
     endText,
     epochPercent,
@@ -411,7 +411,7 @@ export default function SearchCard({ search, env }: { search: Search; env: Searc
                 </Box>
             )}
             <Typography sx={{ fontSize: 12, color: 'text.secondary', mt: -0.75 }}>
-                {`${words.label} · ${directionText(o)} · ${wayLabel(search)}`}
+                {`${goalText(o, search.path)} · ${wayLabel(search)}`}
             </Typography>
             <Meters meters={meters} />
             {view.state === 'running' && open && <RunningTrial search={search} trial={open} list={list} env={env} now={now} />}

@@ -104,6 +104,15 @@ describe('SearchDetail', () => {
         expect(within(final).getByTestId('search-export')).toBeTruthy();
     });
 
+    it('marks the winner only with the star of the table, not with a chip (#249)', () => {
+        const s = makeSearch({ state: 'ended', end_reason: 'budget_runs', winner_idx: 2, ended_at: '2026-10-20T11:17:00Z' });
+        mount(s, { trials: trials().slice(0, 3) });
+        const table = screen.getByTestId('trial-table');
+        expect(within(table).queryByText('Winner')).toBeNull();
+        expect(within(table).getAllByTitle('Winner')).toHaveLength(1);
+        expect(within(table).queryByTitle('Best so far')).toBeNull();
+    });
+
     it('says the final test is pending when the check is not there yet', () => {
         const s = makeSearch({ state: 'ended', end_reason: 'patience', winner_idx: 2, holdout: { available: true, final_state: 'pending', images: 92 } });
         mount(s, { trials: trials().slice(0, 3) });

@@ -52,7 +52,7 @@ describe('a running search', () => {
         expect(screen.getByRole('region', { name: 'Training search tf-flowers' })).toBeTruthy();
         expect(screen.getByText('Training search · tf-flowers')).toBeTruthy();
         expect(screen.getAllByText('Running').length).toBeGreaterThan(0);
-        expect(screen.getByText('Validation accuracy · higher is better · platform template')).toBeTruthy();
+        expect(screen.getByText("Validation accuracy · template's validation split of the training dataset · higher is better · platform template")).toBeTruthy();
         expect(screen.getByText('3 of 6 · trial 4 running')).toBeTruthy();
         expect(screen.getByText('1 h 12 min of 3 h')).toBeTruthy();
         expect(screen.getByText('best 0.86 · goal ≥ 0.9')).toBeTruthy();
