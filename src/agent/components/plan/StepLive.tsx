@@ -10,7 +10,7 @@ import LinearProgress from '@mui/material/LinearProgress';
 import Typography from '@mui/material/Typography';
 
 import type { WatchJob } from '../../jobs';
-import { stepMessage, stepPhase, stepRuntime, stepTimeLine } from '../../plan';
+import { stepJobKind, stepMessage, stepPhase, stepRuntime, stepTimeLine } from '../../plan';
 import type { Plan, PlanStep } from '../../plan';
 import { epochLine, metricPairs, withJob } from '../../planDetail';
 import { logTail } from '../../planText';
@@ -41,11 +41,13 @@ export default function StepLive({
     const phase = stepPhase(plan, live, working);
     const paused = phase === 'paused';
     const percent = typeof live.progress === 'number' ? live.progress : undefined;
-    const message = stepMessage(live, job?.kind);
+    const message = stepMessage(live, job?.kind ?? stepJobKind(live));
     const timeLine = stepTimeLine(live, now);
     const runtime = stepRuntime(live, now);
+    // with a history the current phase stands there (issue #245); the line under the bar keeps only the times
+    const lead = (job?.history?.length ?? 0) > 0 ? '' : message;
     const detail =
-        live.state === 'waiting' && !live.started_at ? message : [message, timeLine].filter((s) => s !== '').join(' · ');
+        live.state === 'waiting' && !live.started_at ? lead : [lead, timeLine].filter((s) => s !== '').join(' · ');
     const epoch = live.last_epoch;
     const epochHead = epoch ? epochLine({ ...epoch, values: {} }) : '';
     const metrics = metricPairs(epoch, 4);

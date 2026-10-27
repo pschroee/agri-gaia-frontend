@@ -334,6 +334,13 @@ export const AGENT_NOTE_LABEL = "Agent's note – not verified";
 export const WAITING_INFO =
     'The training runs on the platform. The agent is idle while it waits and uses no turns or model cost.';
 
+/**
+ * The info banner while a search step of the plan runs (issue #244/#245): the agent is not idle, it is woken after
+ * each trial to declare the next one.
+ */
+export const SEARCH_WAITING_INFO =
+    'The training search runs on the platform. The agent is woken after each trial to choose the next one, inside the approved space.';
+
 /** The collapsed log switch (design). */
 export const LOG_SWITCH = 'Log · last 20 lines';
 

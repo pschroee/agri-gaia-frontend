@@ -92,7 +92,8 @@ describe('SearchDetail', () => {
         h.checks = [{ check_id: 'k1', state: 'done', report: { verdict: 'usable', measured_images: 92, figures: { overall: { accuracy: 0.88 } } } }];
         mount(s, { trials: trials().slice(0, 3) });
         const final = screen.getByTestId('search-final');
-        expect(within(final).getByText('Winner')).toBeTruthy();
+        expect(within(final).getByText('Winner · Trial 2')).toBeTruthy();
+        expect(within(final).queryByText('Winner', { selector: '.MuiChip-label' })).toBeNull();
         expect(within(final).getByText('0.86')).toBeTruthy();
         expect(screen.getAllByTestId('search-test-result')).toHaveLength(1);
         expect(screen.getByTestId('search-test-result').textContent).toContain('0.88');
@@ -108,7 +109,8 @@ describe('SearchDetail', () => {
         const s = makeSearch({ state: 'ended', end_reason: 'budget_runs', winner_idx: 2, ended_at: '2026-10-20T11:17:00Z' });
         mount(s, { trials: trials().slice(0, 3) });
         const table = screen.getByTestId('trial-table');
-        expect(within(table).queryByText('Winner')).toBeNull();
+        // no chip (the star's SVG title also reads "Winner", so look for a chip label only)
+        expect(within(table).queryByText('Winner', { selector: '.MuiChip-label' })).toBeNull();
         expect(within(table).getAllByTitle('Winner')).toHaveLength(1);
         expect(within(table).queryByTitle('Best so far')).toBeNull();
     });

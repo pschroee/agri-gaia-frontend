@@ -225,9 +225,9 @@ export function FinalResult({ chatId, search, trials, check }: FinalProps) {
                     <Box sx={{ display: 'flex', alignItems: 'center', columnGap: 1, flexWrap: 'wrap' }}>
                         <StarIcon fontSize="small" color="primary" />
                         <Typography sx={{ fontWeight: 500 }}>
-                            {winner ? `Trial ${shown.idx}` : `Best finished trial: trial ${shown.idx}`}
+                            {/* the star says it: one mark for the winner, no chip beside it (#249) */}
+                            {winner ? `Winner · Trial ${shown.idx}` : `Best finished trial: trial ${shown.idx}`}
                         </Typography>
-                        {winner && <Chip size="small" color="primary" label="Winner" />}
                     </Box>
                     <Typography sx={{ fontFamily: MONO, fontSize: 12, mt: 0.5, overflowWrap: 'anywhere' }}>
                         {paramsLine(shown.params, Object.keys(search.space ?? {}))}

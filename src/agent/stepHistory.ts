@@ -30,9 +30,13 @@ export function phasesOf(kind: string | undefined, trainingBuild: boolean): stri
     return [];
 }
 
-/** "Building the image (step 3/9)" and "Building the image" name the same phase. */
+/**
+ * "Building the image · step 3/9 · RUN pip …", "Building the image (step 3/9)" and "Building the image" name the same
+ * phase: the words up to the first " · " (as the gateway's `store.PhaseKey` cuts them).
+ */
 const phaseKey = (text: string): string =>
     text
+        .split(' · ')[0]
         .replace(/\s*\([^)]*\)\s*$/, '')
         .replace(/[….]+$/, '')
         .trim()
@@ -55,9 +59,12 @@ export function historyRows(
     const running = job.state === JOB_RUNNING;
     const rows: HistoryRow[] = history.map((e, i) => {
         const current = running && i === history.length - 1;
+        // the entry keeps the words the phase began with; the current phase reads the job's latest line instead
+        const live = (job.message ?? '').trim();
+        const text = current && live && phaseKey(live) === phaseKey(e.text) ? live : e.text;
         const t = atMs(e);
         const when = Number.isNaN(t) ? '' : current ? durationText(now - t) : clockSeconds(t);
-        return { text: e.text, state: current ? 'running' : 'done', when, ...(typeof e.percent === 'number' ? { percent: e.percent } : {}) };
+        return { text, state: current ? 'running' : 'done', when, ...(typeof e.percent === 'number' ? { percent: e.percent } : {}) };
     });
     if (running) {
         const seen = new Set(history.map((e) => phaseKey(e.text)));

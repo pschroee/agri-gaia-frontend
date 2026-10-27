@@ -20,7 +20,11 @@ import type { PlanStep } from '../../plan';
 import { searchProgressLine, searchSummaryRows } from '../../stepSearch';
 import { scrollToSearchCard } from '../search/SearchIndicator';
 
-export default function StepSearch({ step, chatId }: { step: PlanStep; chatId: string }) {
+/**
+ * `labelWidth`: the width of the label column in px, the facts grid of the step's label column plus its gap, so that
+ * the values of both stand in one line.
+ */
+export default function StepSearch({ step, chatId, labelWidth = 108 }: { step: PlanStep; chatId: string; labelWidth?: number }) {
     const inRouter = useInRouterContext();
     const agent = useAgentOptional();
     const searchId = step.search_id;
@@ -34,7 +38,7 @@ export default function StepSearch({ step, chatId }: { step: PlanStep; chatId: s
                     <TableBody>
                         {rows.map((r, i) => (
                             <TableRow key={`${i}:${r.label}`}>
-                                <TableCell sx={{ width: 96, color: 'text.secondary' }}>{r.label}</TableCell>
+                                <TableCell sx={{ width: labelWidth, color: 'text.secondary' }}>{r.label}</TableCell>
                                 <TableCell sx={{ overflowWrap: 'anywhere' }}>{r.value}</TableCell>
                             </TableRow>
                         ))}

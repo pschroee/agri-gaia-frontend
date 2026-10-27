@@ -13,6 +13,8 @@ import {
     doneSteps,
     durationText,
     pendingStepOf,
+    stepJobKind,
+    stepMessage,
     stepPhase,
     stepTitle,
 } from './plan';
@@ -183,8 +185,9 @@ export function currentStepCell(
     const title = `Step ${step.idx} · ${stepTitle(step)}`.trim();
     const line = stepSubline(p, step, stepPhase(p, step), undefined);
     const waiting = stepAwaitingUser(p, pending)?.idx === step.idx;
-    // a step the gateway only observes says what it waits for (issue #250), not the bare "Running"
-    if (step.state === 'waiting' && line.text === 'Running') line.text = 'Waiting for the platform job';
+    // a step the gateway only observes says what it waits for (issue #250), not the bare "Running", in the words of
+    // the step's card (issue #245)
+    if (step.state === 'waiting' && line.text === 'Running') line.text = stepMessage(step, stepJobKind(step));
     return { title, sub: line.text, tone: waiting && line.tone === 'muted' ? 'amber' : line.tone };
 }
 

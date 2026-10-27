@@ -352,6 +352,8 @@ export function decidedTone(approval: Pick<Approval, 'state'>, grant?: Pick<Inte
     if (approval.state === 'rejected') return { icon: <CloseIcon sx={{ ...s, color: 'error.main' }} aria-hidden />, color: 'error.main' };
     if (approval.state === 'expired')
         return { icon: <HourglassEmptyIcon sx={{ ...s, color: WARNING_AREA_COLOR }} aria-hidden />, color: WARNING_TEXT_COLOR };
+    if (approval.state === 'cancelled')
+        return { icon: <TimerOffIcon sx={{ ...s, color: 'text.disabled' }} aria-hidden />, color: 'text.secondary' };
     if (grant?.state === 'ended') {
         const grey = { ...s, color: 'text.disabled' };
         switch (endInfo(grant.ended_reason).icon) {

@@ -619,15 +619,35 @@ export function isBuildStep(step: PlanStep): boolean {
     return step.method === 'POST' && /^\/train\/containers\/?$/.test(step.path ?? '');
 }
 
+/** Does the step start a training run (the gateway watches its task, then the run)? */
+const isTrainingStart = (step: PlanStep): boolean =>
+    step.tool === 'start_training' || (step.method === 'POST' && /^\/train\/containers\/[^/]+\/run\/?$/.test(step.path ?? ''));
+
+/**
+ * The kind of job the gateway watches for a step, read from the step alone: for views without the chat's jobs (the
+ * Plans table) and for a dialog whose job is not loaded yet, so that both say the same as the step's card.
+ */
+export function stepJobKind(step: PlanStep): string | undefined {
+    const tool = step.tool ?? '';
+    const path = step.path ?? '';
+    if (tool === 'build_inference_image' || (step.method === 'POST' && /^\/container-images\/build\/?$/.test(path))) return 'image_build';
+    if (isBuildStep(step) || isTrainingStart(step)) return 'platform_task';
+    if (tool === 'start_deployment' || /\/container-deployments\/[^/]+\/deploy\/?$/.test(path)) return 'edge_deployment';
+    return undefined;
+}
+
 /**
  * What a waiting step says in plain words when the platform reports nothing (issue #245): who is doing what, by the
  * kind of the observed job. A build is told apart by the step, since the gateway watches it as a platform task.
  */
 export function waitingText(step: PlanStep, kind?: string): string {
+    if (step.tool === 'propose_search') return 'The training search runs its trials';
     if (kind === 'image_build') return 'The platform is building the inference image';
     if (kind === 'training_run') return 'The platform is starting the training';
     if (kind === 'edge_deployment') return 'The edge device is pulling and starting the container';
     if (kind === 'platform_task' && isBuildStep(step)) return 'The platform is building the training image';
+    // the start of a training is first watched as the task the start answers with
+    if (kind === 'platform_task' && isTrainingStart(step)) return 'The platform is starting the training';
     if (kind) return `Waiting for the platform job (${kind})`;
     return 'Waiting for the platform';
 }

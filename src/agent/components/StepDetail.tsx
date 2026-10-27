@@ -193,6 +193,9 @@ function ApprovalLine({ approval, standalone }: { approval: Approval; standalone
             text = `Rejected by you${when ? ` at ${when}` : ''}`;
             color = agentColors.red;
             break;
+        case 'cancelled':
+            text = `Cancelled: the call stopped before a decision${when ? ` at ${when}` : ''}`;
+            break;
         default:
             text = 'Approval expired';
     }

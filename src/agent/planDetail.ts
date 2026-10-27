@@ -286,6 +286,7 @@ export function waitingFor(
     if (step.state === 'done' || step.state === 'failed' || step.state === 'skipped') return undefined;
     if (plan.state === 'cancelled' || plan.state === 'failed') return undefined;
     if (step.parked_approval && pending.has(step.parked_approval)) return 'Your approval of this step in the chat';
+    if (step.state === 'waiting' && step.tool === 'propose_search') return 'The training search to end';
     if (step.state === 'waiting') return JOB_WAIT[job?.kind ?? ''] ?? GENERIC_JOB;
     if (step.state === 'running') return undefined;
     if (plan.state === 'paused') {

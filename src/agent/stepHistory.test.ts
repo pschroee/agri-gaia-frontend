@@ -30,6 +30,26 @@ describe('phasesOf', () => {
 });
 
 describe('historyRows', () => {
+    it('reads the backend build phase "· step n/m · cmd" as one phase and shows the latest line (#247 wording)', () => {
+        const rows = historyRows(
+            job({
+                message: 'Building the image · step 5/9 · RUN pip install -r requirements.txt',
+                history: [
+                    { at: '2026-10-27T10:00:00.000Z', text: 'Preparing the build' },
+                    { at: '2026-10-27T10:02:00.000Z', text: 'Building the image · step 1/9 · FROM python:3.10' },
+                ],
+            }),
+            NOW,
+            { trainingBuild: true },
+        );
+        expect(rows.map((r) => [r.text, r.state])).toEqual([
+            ['Preparing the build', 'done'],
+            ['Building the image · step 5/9 · RUN pip install -r requirements.txt', 'running'],
+            ['Pushing the image to the registry', 'pending'],
+            ['Creating the training container', 'pending'],
+        ]);
+    });
+
     it('has no rows without history', () => {
         expect(historyRows(undefined, NOW)).toEqual([]);
         expect(historyRows(job(), NOW)).toEqual([]);

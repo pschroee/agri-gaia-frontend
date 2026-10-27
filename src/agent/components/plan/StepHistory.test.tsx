@@ -56,7 +56,7 @@ describe('StepHistory', () => {
         expect(rows.map((r) => r.getAttribute('data-state'))).toEqual(['done', 'running', 'pending', 'pending']);
         expect(within(rows[0]).getByText('Preparing the build')).toBeTruthy();
         expect(within(rows[1]).getByText('18 min')).toBeTruthy();
-        expect(within(rows[1]).getByRole('progressbar')).toBeTruthy();
+        expect(within(rows[1]).getByRole('progressbar', { hidden: true })).toBeTruthy();
         expect(within(rows[3]).getByText('Creating the training container')).toBeTruthy();
         // a phase to come has no time
         expect(within(rows[2]).queryByTestId('agent-plan-history-when')).toBeNull();

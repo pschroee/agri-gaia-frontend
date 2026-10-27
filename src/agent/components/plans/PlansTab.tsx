@@ -119,7 +119,17 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
                         {note && (
                             <Typography
                                 title={note.text}
-                                sx={line({ fontSize: 12, mt: 0.25, color: NOTE_COLOR[note.tone] })}
+                                sx={{
+                                    // the note wraps to a second line instead of being cut (issue #250)
+                                    fontSize: 12,
+                                    mt: 0.25,
+                                    color: NOTE_COLOR[note.tone],
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                    overflowWrap: 'anywhere',
+                                }}
                             >
                                 {note.text}
                             </Typography>
@@ -195,7 +205,8 @@ export default function PlansTab({ onOpenChat }: { onOpenChat: (chatId: string) 
         {
             id: 'duration',
             label: 'Duration',
-            width: 110,
+            // "waiting 50 min" in one line
+            width: 124,
             hideBelow: 940,
             render: (p) => (
                 <Typography sx={line({ fontSize: 13, fontVariantNumeric: 'tabular-nums' })}>

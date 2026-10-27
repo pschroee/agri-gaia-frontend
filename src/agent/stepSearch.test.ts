@@ -19,19 +19,32 @@ const step = (over: Partial<PlanStep> = {}): PlanStep => ({
     ...over,
 });
 
+// the wording of the gateway's describer (platform/summary_search.go, issue #244)
 const SUMMARY =
-    'Training search on the training container of step 2: lr 1e-4..1e-2 log; batch_size 16|32|64; ' +
-    'up to 6 trials, 30 compute minutes, objective val_acc (stop at >= 0.97); ' +
-    'trials run without asking inside this space';
+    'Training search on the training container of step 2: batch_size one of 16, 32, 64, lr 0.0001 to 0.01 (log); ' +
+    'up to 6 trials, 30 compute minutes, objective val_acc (stop at ≥ 0.97); ' +
+    'trials run without asking inside this space\n' +
+    'The training container of the best trial becomes the object of this step; its model takeover and final test are covered by the search.';
 
 describe('searchSummaryRows', () => {
     it('reads parameters, budget, goal and note from the gateway summary', () => {
         expect(searchSummaryRows(step({ summary: SUMMARY }))).toEqual([
-            { label: 'Parameter', value: 'lr · 1e-4..1e-2 log' },
-            { label: 'Parameter', value: 'batch_size · 16|32|64' },
+            { label: 'Parameter', value: 'batch_size · one of 16, 32, 64' },
+            { label: 'Parameter', value: 'lr · 0.0001 to 0.01 (log)' },
             { label: 'Budget', value: 'up to 6 trials, 30 compute minutes' },
-            { label: 'Goal', value: 'val_acc (stop at >= 0.97)' },
+            { label: 'Goal', value: 'val_acc (stop at ≥ 0.97)' },
             { label: 'Note', value: 'Trials run without asking inside this space' },
+            {
+                label: 'Note',
+                value: 'The training container of the best trial becomes the object of this step; its model takeover and final test are covered by the search.',
+            },
+        ]);
+    });
+
+    it('reads a search without a space and without a time budget', () => {
+        expect(searchSummaryRows(step({ summary: 'Training search on training container 97; up to 3 trials, objective val_acc' }))).toEqual([
+            { label: 'Budget', value: 'up to 3 trials' },
+            { label: 'Goal', value: 'val_acc' },
         ]);
     });
 
