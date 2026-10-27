@@ -636,6 +636,12 @@ export function stepJobKind(step: PlanStep): string | undefined {
     return undefined;
 }
 
+/** The job kind the plan banner names for a waiting step: a training start counts as the training itself (#256). */
+export function bannerJobKind(step: PlanStep): string | undefined {
+    if (isTrainingStart(step) && !isBuildStep(step)) return 'training_run';
+    return stepJobKind(step);
+}
+
 /**
  * What a waiting step says in plain words when the platform reports nothing (issue #245): who is doing what, by the
  * kind of the observed job. A build is told apart by the step, since the gateway watches it as a platform task.

@@ -330,9 +330,28 @@ export function waitingForApproval(createdAt: string | undefined, now: number): 
 export const AGENT_TITLE_LABEL = "Agent's title – not verified";
 export const AGENT_NOTE_LABEL = "Agent's note – not verified";
 
-/** The info banner of a plan that waits for the platform (design). */
-export const WAITING_INFO =
-    'The training runs on the platform. The agent is idle while it waits and uses no turns or model cost.';
+/** The idle note every waiting banner ends with (design). */
+export const IDLE_NOTE = 'The agent is idle while it waits and uses no turns or model cost.';
+
+/**
+ * The info banner of a plan that waits for the platform (design, issue #256): what the platform does is told by the
+ * kind of the job (wording as `waitingText`), followed by the idle note.
+ */
+export function waitingInfo(kind?: string): string {
+    const what =
+        kind === 'platform_task'
+            ? 'The platform is building the training image.'
+            : kind === 'training_run'
+              ? 'The training runs on the platform.'
+              : kind === 'image_build'
+                ? 'The platform is building the inference image.'
+                : kind === 'edge_deployment'
+                  ? 'The edge device is pulling and starting the container.'
+                  : kind === 'assessment'
+                    ? 'The gateway is checking the model.'
+                    : 'The platform is working on this step.';
+    return `${what} ${IDLE_NOTE}`;
+}
 
 /**
  * The info banner while a search step of the plan runs (issue #244/#245): the agent is not idle, it is woken after

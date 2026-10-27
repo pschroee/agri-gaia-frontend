@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import type { Plan, PlanStep } from './plan';
 import {
     budgetRowsOf,
+    waitingInfo,
     cancelConfirmText,
     cancelledText,
     completedText,
@@ -379,5 +380,20 @@ describe('why a step asks again (gateway #219)', () => {
         expect(of(asks(4), asks(9))).toBe('Steps 4 and 9 ask you again on their own');
         expect(of(asks(1), asks(4), asks(9))).toBe('Steps 1, 4 and 9 ask you again on their own');
         expect(of(asks(1, 'done'), asks(2))).toBe('Step 2 asks you again on its own');
+    });
+});
+
+describe('waitingInfo (issue #256)', () => {
+    const idle = 'The agent is idle while it waits and uses no turns or model cost.';
+    it('names the job of each kind, then the idle note', () => {
+        expect(waitingInfo('platform_task')).toBe(`The platform is building the training image. ${idle}`);
+        expect(waitingInfo('training_run')).toBe(`The training runs on the platform. ${idle}`);
+        expect(waitingInfo('image_build')).toBe(`The platform is building the inference image. ${idle}`);
+        expect(waitingInfo('edge_deployment')).toBe(`The edge device is pulling and starting the container. ${idle}`);
+        expect(waitingInfo('assessment')).toBe(`The gateway is checking the model. ${idle}`);
+    });
+    it('falls back to a general sentence for an unknown or missing kind', () => {
+        expect(waitingInfo()).toBe(`The platform is working on this step. ${idle}`);
+        expect(waitingInfo('something_else')).toBe(`The platform is working on this step. ${idle}`);
     });
 });
