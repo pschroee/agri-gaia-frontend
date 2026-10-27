@@ -115,4 +115,20 @@ describe('historyRows', () => {
         expect(rows.map((r) => r.state)).toEqual(['running']);
         expect(rows[0].text).toBe('Train Container #179 created.');
     });
+
+    it('shows an entry that repeats the one before only once, with the earlier time (B27)', () => {
+        const rows = historyRows(
+            job({
+                state: 'done',
+                history: [
+                    { at: '2026-10-27T10:19:27.000Z', text: 'Train Container #179 created.' },
+                    { at: '2026-10-27T10:19:42.000Z', text: 'Train Container #179 created.' },
+                ],
+            }),
+            NOW,
+            { trainingBuild: true },
+        );
+        expect(rows).toHaveLength(1);
+        expect(rows[0].state).toBe('done');
+    });
 });
