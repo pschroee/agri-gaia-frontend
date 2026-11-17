@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // Preview of a file of the chat (issue #74): a click on a file card opens this dialog. Images, PDFs (in an iframe),
-// CSV/TSV as a table, text, JSON and Markdown as plain text. Security: HTML and SVG are never rendered, only shown as
+// CSV/TSV as a table, text and JSON as plain text, Markdown rendered with a switch to the source. Security: HTML and SVG are never rendered, only shown as
 // source; text is always inserted as text, never as markup. The gateway decides the kind from the bytes (inline=1).
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -15,6 +15,8 @@ import Dialog from '@mui/material/Dialog';
 import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import IconButton from '@mui/material/IconButton';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -30,9 +32,10 @@ import DownloadIcon from '@mui/icons-material/Download';
 import { artifactUrl } from '../api';
 import { parseDelimited } from '../csv';
 import { fileMeta, fileTypeOf } from '../files';
-import { inlineUrl, previewOf } from '../filePreview';
+import { inlineUrl, isMarkdownName, previewOf } from '../filePreview';
 import type { ArtifactKind } from '../types';
 import { FileTypeIcon } from './Attachments';
+import Markdown from './Markdown';
 
 /** Longest text read for a preview (bytes); longer files show their beginning. */
 const MAX_BYTES = 1024 * 1024;
@@ -203,29 +206,60 @@ function prettyText(name: string, text: string): string {
 
 function TextBodyView({ src, name }: { src: string; name: string }) {
     const loaded = useLoadedText(src, true);
+    // Markdown opens rendered, with a switch to the source (issue #264)
+    const markdown = isMarkdownName(name);
+    const [mode, setMode] = useState<'rendered' | 'source'>('rendered');
     if (loaded.status === 'loading' || loaded.status === 'idle') return <CircularProgress aria-label="Loading" sx={{ display: 'block', mx: 'auto', my: 3 }} />;
     if (loaded.status === 'error') return <Notice>Could not load the preview.</Notice>;
+    const rendered = markdown && mode === 'rendered';
     return (
         <>
-            {/* Text as text: React escapes it; nothing here is rendered as markup. */}
-            <Box
-                component="pre"
-                data-testid="agent-file-preview-text"
-                sx={{
-                    m: 0,
-                    p: 2,
-                    maxHeight: '70vh',
-                    overflow: 'auto',
-                    whiteSpace: 'pre-wrap',
-                    wordBreak: 'break-word',
-                    fontFamily: 'monospace',
-                    fontSize: 13,
-                    bgcolor: 'action.hover',
-                    borderRadius: 1,
-                }}
-            >
-                {prettyText(name, loaded.text)}
-            </Box>
+            {markdown && (
+                <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    value={mode}
+                    onChange={(_, next: 'rendered' | 'source' | null) => {
+                        if (next) setMode(next);
+                    }}
+                    aria-label="View"
+                    data-testid="agent-file-preview-mode"
+                    sx={{ mb: 1 }}
+                >
+                    <ToggleButton value="rendered" sx={{ textTransform: 'none' }}>
+                        Rendered
+                    </ToggleButton>
+                    <ToggleButton value="source" sx={{ textTransform: 'none' }}>
+                        Source
+                    </ToggleButton>
+                </ToggleButtonGroup>
+            )}
+            {rendered ? (
+                // The renderer builds React elements, never HTML strings; without `images` local images stay a note.
+                <Box data-testid="agent-file-preview-markdown" sx={{ maxHeight: '70vh', overflow: 'auto' }}>
+                    <Markdown text={loaded.text} />
+                </Box>
+            ) : (
+                /* Text as text: React escapes it; nothing here is rendered as markup. */
+                <Box
+                    component="pre"
+                    data-testid="agent-file-preview-text"
+                    sx={{
+                        m: 0,
+                        p: 2,
+                        maxHeight: '70vh',
+                        overflow: 'auto',
+                        whiteSpace: 'pre-wrap',
+                        wordBreak: 'break-word',
+                        fontFamily: 'monospace',
+                        fontSize: 13,
+                        bgcolor: 'action.hover',
+                        borderRadius: 1,
+                    }}
+                >
+                    {prettyText(name, loaded.text)}
+                </Box>
+            )}
             {loaded.truncated && <Typography sx={captionSx}>Only the first 1 MB is shown.</Typography>}
         </>
     );
