@@ -65,22 +65,29 @@ type Props = {
     since?: number;
     /** Framed chip (panel header, chat header) instead of plain text (lists); its waiting label is shorter. */
     framed?: boolean;
+    /** Only dot and timer; the word moves to the tooltip and the aria-label (crowded headers, issue #261). */
+    dense?: boolean;
 };
 
 /**
  * State of a chat with its timer, for the chat list, the chat selector, the panel header and the chat header of
  * /ai-agent. Renders nothing for a ready chat (issue #35): only working, waiting for approval and loading show.
  */
-export default function RunStateChip({ state, since, framed = false }: Props) {
+export default function RunStateChip({ state, since, framed = false, dense = false }: Props) {
+    const now = useNow(dense && since !== undefined, 1000);
     const label = runStateText(state, framed ? 'header' : 'list');
     if (!state || !label) return null;
     const color = RUN_STATE_COLOR[state];
     const running = isRunning(state);
+    const showTimer = running && since !== undefined;
+    const ariaLabel = dense ? (showTimer ? `${label} · ${formatElapsed(now - since)}` : label) : undefined;
     return (
         <Tooltip title={RUN_STATE_HINT[state]}>
             <Box
                 component="span"
                 data-run-state={state}
+                data-dense={dense ? 'true' : undefined}
+                aria-label={ariaLabel}
                 sx={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -103,12 +110,14 @@ export default function RunStateChip({ state, since, framed = false }: Props) {
                 }}
             >
                 <RunStateIcon state={state} size={framed ? 8 : 7} />
-                <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {label}
-                </Box>
-                {running && since !== undefined && (
+                {!dense && (
+                    <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {label}
+                    </Box>
+                )}
+                {showTimer && (
                     <Box component="span" sx={{ flex: 'none', display: 'inline-flex', gap: 0.6 }}>
-                        <span>·</span>
+                        {!dense && <span>·</span>}
                         <Elapsed since={since} />
                     </Box>
                 )}

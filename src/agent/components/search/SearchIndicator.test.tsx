@@ -34,4 +34,19 @@ describe('the chip in the header', () => {
         expect(screen.getByText('Running · 3 of 6 runs · best 0.86 (trial 2)')).toBeTruthy();
         expect(screen.getByText('1 search')).toBeTruthy();
     });
+
+    it('carries the panel text in a span that is cut with an ellipsis (issue #261)', () => {
+        render(<SearchIndicator book={{ searches: [mockSearch()], trials: mockTrials() }} variant="panel" />);
+        const text = screen.getByTestId('agent-search-indicator-text');
+        expect(text.textContent).toBe('Search 3/6 · 0.86');
+        const style = getComputedStyle(text);
+        expect(style.overflow).toBe('hidden');
+        expect(style.textOverflow).toBe('ellipsis');
+        expect(style.whiteSpace).toBe('nowrap');
+    });
+
+    it('keeps the page text without the extra span', () => {
+        render(<SearchIndicator book={{ searches: [mockSearch()], trials: mockTrials() }} variant="page" />);
+        expect(screen.queryByTestId('agent-search-indicator-text')).toBeNull();
+    });
 });

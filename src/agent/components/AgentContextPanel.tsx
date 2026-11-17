@@ -64,6 +64,8 @@ export default function AgentContextPanel() {
     // live through updateChat of the open ChatView
     const selected = status === 'ready' ? chats.find((c) => c.id === selectedChatId) : undefined;
     const selectedState = runStateOf(selected);
+    // same condition as the compact plan chip: a running search fills the header, so the state shows only dot and timer
+    const crowded = !!chipOf(searchLists[selected?.id ?? '']);
     // the plans of the open chat; the chip opens the same large dialog as the agent page (issue #250)
     const plans = selected ? planLists[selected.id] ?? [] : [];
     const pendingIds = pendingIdsOf(pendingApprovals);
@@ -120,17 +122,32 @@ export default function AgentContextPanel() {
                     {runStateText(selectedState, 'header') && (
                         <Box
                             data-testid="agent-panel-state"
-                            sx={{ flex: '0 1 auto', minWidth: 0, display: 'inline-flex' }}
+                            sx={{
+                                flex: crowded ? 'none' : '0 1 auto',
+                                minWidth: 0,
+                                display: 'inline-flex',
+                                // last safeguard: the chip never paints over its neighbours (issue #261)
+                                overflow: 'hidden',
+                            }}
                         >
-                            <RunStateChip state={selectedState} since={runSince(selected)} framed />
+                            <RunStateChip state={selectedState} since={runSince(selected)} framed dense={crowded} />
                         </Box>
                     )}
                     {selected && (
-                        <Box sx={{ ml: 'auto', flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 0.25 }}>
+                        <Box
+                            sx={{
+                                ml: 'auto',
+                                flex: '0 1 auto',
+                                minWidth: 0,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 0.25,
+                            }}
+                        >
                             <PlanChip
                                 plans={plans}
                                 pending={pendingIds}
-                                compact={!!chipOf(searchLists[selected.id])}
+                                compact={crowded}
                                 open={planOpen}
                                 onOpen={() => setPlanOpen(true)}
                             />
