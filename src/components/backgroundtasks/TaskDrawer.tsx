@@ -26,6 +26,17 @@ import { footerTooltip, useFailedSeen } from './failedSeen';
 const taskHeight = 60;
 const minDrawerHeight = 500;
 
+// Space the paper leaves free above it: platform AppBar (64 px), the gap below (`bottom: 30`) and some air (issue #262).
+const appBarHeight = 64;
+const drawerBottomGap = 30;
+const drawerAir = 8;
+
+/** Paper height: grows with the tasks, but never reaches under the AppBar; the list scrolls inside (issue #262). */
+export function drawerPaperHeight(taskCount: number): string {
+    const wanted = Math.max(taskCount * taskHeight + 62, minDrawerHeight);
+    return `min(${wanted}px, calc(100% - ${appBarHeight}px - ${drawerBottomGap}px - ${drawerAir}px))`;
+}
+
 const createDrawerTheme = (taskCount: number) =>
     createTheme({
         components: {
@@ -43,7 +54,7 @@ const createDrawerTheme = (taskCount: number) =>
                 styleOverrides: {
                     paper: {
                         position: 'absolute',
-                        height: Math.max(taskCount * taskHeight + 62, minDrawerHeight),
+                        height: drawerPaperHeight(taskCount),
                         borderColor: '#79ab2b',
                         borderStyle: 'solid',
                         borderTopWidth: 3,
@@ -54,7 +65,7 @@ const createDrawerTheme = (taskCount: number) =>
                         width: 800,
                         left: 'auto',
                         right: 30,
-                        bottom: 30,
+                        bottom: drawerBottomGap,
                         borderTopLeftRadius: 8,
                         borderTopRightRadius: 8,
                     },
@@ -138,7 +149,10 @@ export default function () {
                     keepMounted: true,
                 }}
             >
-                <Box sx={{ px: 2, py: 1 }}>
+                <Box
+                    data-testid="task-drawer-content"
+                    sx={{ px: 2, py: 1, height: '100%', overflowY: 'auto', boxSizing: 'border-box' }}
+                >
                     {openedTask ? (
                         <TaskDetailsView task={openedTask} onClose={onTaskDetailsClose} />
                     ) : (
