@@ -29,7 +29,7 @@ export type SearchApprovalData = {
     base?: SearchBase;
     /** The notebook way: the data of a notebook run (entry, files with SHA-256 and text, datasets, limits). */
     code?: NotebookApprovalData;
-    holdout: { available: boolean; eval_dataset?: NamedObject; images?: number };
+    holdout: { available: boolean; eval_dataset?: NamedObject; images?: number; holdout_images?: number };
     autonomy: { max_auto_turns: number };
     note?: string;
 };
@@ -122,6 +122,10 @@ export function holdoutText(h: SearchApprovalData['holdout']): string {
     const ds = h.eval_dataset;
     const n = h.images ?? ds?.images;
     const of = ds ? ` of ${ds.name ? `${ds.name} (#${ds.id})` : `#${ds.id}`}` : '';
+    // The final test measures the hold-out part only; the rest of the kept-back images compares the rounds (#260).
+    if (h.holdout_images) {
+        return `Held-back test set: ${h.holdout_images} held-out images${n ? ` (of ${n} kept back)` : ''}${of}. Used once, for the winner only, when the search ends.`;
+    }
     return `Held-back test set: ${n ? `${n} images` : 'images'}${of}. Used once, for the winner only, when the search ends.`;
 }
 

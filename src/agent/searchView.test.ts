@@ -139,6 +139,20 @@ describe('the end and the final test', () => {
         const s = mockSearch({ state: 'ended', end_reason: 'budget_runs', winner_idx: 2 });
         expect(testView({ ...s, holdout: { available: true, images: 92, final_state: 'pending' } }, done)?.kind).toBe('pending');
         expect(testView({ ...s, holdout: { available: false, final_state: 'none' } }, done)?.kind).toBe('none');
+        // #260: the pending text names the hold-out images; without them it says what is known about the old split
+        const pending = (holdout: ReturnType<typeof mockSearch>['holdout']) => testView({ ...s, holdout }, done);
+        expect(pending({ available: true, images: 90, holdout_images: 60, final_state: 'pending' })).toMatchObject({
+            kind: 'pending',
+            text: expect.stringMatching(/runs once for trial \d+ on 60 held-out images \(of 90 kept back\)$/),
+        });
+        expect(pending({ available: true, images: 90, final_state: 'pending' })).toMatchObject({
+            kind: 'pending',
+            text: expect.stringMatching(/on the held-out part of 90 kept-back images$/),
+        });
+        expect(pending({ available: true, final_state: 'pending' })).toMatchObject({
+            kind: 'pending',
+            text: expect.stringMatching(/runs once for trial \d+$/),
+        });
         expect(testView({ ...s, holdout: { available: true, final_state: 'pending' } }, [])).toEqual({ kind: 'none', text: 'No finished trial – no final test.' });
         expect(testView(mockSearch(), done)).toBeUndefined();
         // the result the gateway copied into the search is used while the check is not loaded

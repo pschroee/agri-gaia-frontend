@@ -547,10 +547,10 @@ export function testView(search: Search, trials: Trial[], check?: AssessCheck): 
         return res ? { kind: 'measured', ...res } : { kind: 'running', text: 'Final test running' };
     }
     const n = ho.images ?? ho.eval_dataset?.images;
-    return {
-        kind: 'pending',
-        text: `Final test pending · runs once for trial ${winner.idx}${n ? ` on ${n} held-back images` : ''}`,
-    };
+    const h = ho.holdout_images;
+    // The final test measures the hold-out part only (#260); without it (an old split) say what is known.
+    const on = h ? ` on ${h} held-out images${n ? ` (of ${n} kept back)` : ''}` : n ? ` on the held-out part of ${n} kept-back images` : '';
+    return { kind: 'pending', text: `Final test pending · runs once for trial ${winner.idx}${on}` };
 }
 
 // ---------------------------------------------------------------------------------------------------------------

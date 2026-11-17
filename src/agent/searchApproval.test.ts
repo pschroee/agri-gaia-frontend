@@ -41,6 +41,16 @@ describe('the approval of a proposal', () => {
         expect(waitingText('2026-10-20T09:59:00Z', now)).toBe('Waiting for you · about to expire');
     });
 
+    it('names the held-out images of the final test next to all kept-back ones (#260)', () => {
+        const h = mockProposal().holdout;
+        // all three cases: both numbers, only the total (an old split), neither
+        expect(holdoutText({ ...h, images: 90, holdout_images: 60 })).toBe(
+            'Held-back test set: 60 held-out images (of 90 kept back) of tf-flowers-mini (#58). Used once, for the winner only, when the search ends.',
+        );
+        expect(holdoutText({ ...h, images: 90, holdout_images: undefined })).toContain('90 images of tf-flowers-mini (#58)');
+        expect(holdoutText({ available: true })).toBe('Held-back test set: images. Used once, for the winner only, when the search ends.');
+    });
+
     it('lists the fixed settings and the test set', () => {
         expect(fixedSummary({ optimizer: 'AdamW', scheduler: 'ReduceLROnPlateau', weight_decay: 0.01 })).toBe(
             'Fixed settings · 3 (optimizer AdamW, scheduler ReduceLROnPlateau, …)',
