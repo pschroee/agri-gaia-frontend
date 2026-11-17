@@ -97,7 +97,7 @@ describe('SearchDetail', () => {
         expect(within(final).getByText('0.86')).toBeTruthy();
         expect(screen.getAllByTestId('search-test-result')).toHaveLength(1);
         expect(screen.getByTestId('search-test-result').textContent).toContain('0.88');
-        expect(screen.getByTestId('search-test-result').textContent).toContain('92 held-back images of tf-flowers-mini (#58)');
+        expect(screen.getByTestId('search-test-result').textContent).toContain('92 held-out images of tf-flowers-mini (#58)');
         expect(within(final).getByText('usable')).toBeTruthy();
         expect(screen.getByTestId('search-end-text').textContent).toContain('budget used up');
         // the Epoch column is gone after the end, and the export is in the final block
@@ -119,6 +119,15 @@ describe('SearchDetail', () => {
         const s = makeSearch({ state: 'ended', end_reason: 'patience', winner_idx: 2, holdout: { available: true, final_state: 'pending', images: 92 } });
         mount(s, { trials: trials().slice(0, 3) });
         expect(screen.getByTestId('search-test-text').textContent).toContain('Final test pending');
+    });
+
+    it('names the held-out images of the final test, and the old split without them (#260)', () => {
+        const s = makeSearch({ state: 'ended', end_reason: 'patience', winner_idx: 2, holdout: { available: true, final_state: 'pending', images: 90, holdout_images: 60 } });
+        const { unmount } = mount(s, { trials: trials().slice(0, 3) });
+        expect(screen.getByTestId('search-test-text').textContent).toContain('on 60 held-out images (of 90 kept back)');
+        unmount();
+        mount({ ...s, holdout: { available: true, final_state: 'pending', images: 90 } }, { trials: trials().slice(0, 3) });
+        expect(screen.getByTestId('search-test-text').textContent).toContain('on the held-out part of 90 kept-back images');
     });
 
     it('lets a val_loss search say validation loss, with 3 decimals, lower is better (G7)', () => {

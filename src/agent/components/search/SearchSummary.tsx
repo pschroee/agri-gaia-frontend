@@ -177,7 +177,7 @@ function ResultRow({ label, children }: { label: string; children: ReactNode }) 
 export function TestLine({ view, search }: { view: TestView; search: Search }) {
     if (view.kind === 'measured') {
         const set = search.holdout?.eval_dataset;
-        const images = view.images ?? search.holdout?.images ?? set?.images;
+        const images = view.images ?? search.holdout?.holdout_images ?? search.holdout?.images ?? set?.images;
         return (
             <Box data-testid="search-test-result" sx={{ display: 'flex', alignItems: 'baseline', columnGap: 0.75, flexWrap: 'wrap' }}>
                 <VerifiedOutlinedIcon fontSize="small" color="success" sx={{ alignSelf: 'center' }} />
@@ -185,7 +185,7 @@ export function TestLine({ view, search }: { view: TestView; search: Search }) {
                     {typeof view.accuracy === 'number' ? view.accuracy.toFixed(2) : '–'}
                 </Typography>
                 <Typography component="span" variant="body2" color="text.secondary">
-                    · measured once{images ? ` on ${images} held-back images` : ''}
+                    · measured once{images ? ` on ${images} held-out images` : ''}
                     {set?.name ? ` of ${set.name}${set.id ? ` (#${set.id})` : ''}` : ''} · measured by the gateway
                 </Typography>
             </Box>

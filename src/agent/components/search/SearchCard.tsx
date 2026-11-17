@@ -326,7 +326,7 @@ export function TestLine({ test }: { test: NonNullable<ReturnType<typeof testVie
                 <VerifiedOutlinedIcon sx={{ fontSize: 18, color: 'success.main' }} aria-hidden />
                 <Typography sx={{ flex: 1, minWidth: 180, fontSize: 13 }}>
                     <b style={{ fontWeight: 500 }}>{`Test accuracy ${scoreText(test.accuracy)}`}</b>
-                    {`${test.images ? ` on ${test.images} held-back images` : ''} · measured by the gateway`}
+                    {`${test.images ? ` on ${test.images} held-out images` : ''} · measured by the gateway`}
                 </Typography>
                 {test.verdict && (
                     <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', height: 22, px: 1, border: 1, borderColor: test.verdict === 'usable' ? 'success.main' : 'warning.main', borderRadius: 11, fontSize: 12, color: test.verdict === 'usable' ? 'success.dark' : 'warning.dark' }}>

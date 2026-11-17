@@ -63,7 +63,10 @@ export type SearchBase = {
 export type SearchHoldout = {
     available: boolean;
     eval_dataset?: NamedObject;
+    /** All images the split kept back (hold-out plus validation part). */
     images?: number;
+    /** The hold-out part of them, the images the final test measures; absent for a split stored before it was recorded. */
+    holdout_images?: number;
     /** '' not yet, pending (a winner and a held-back set), started (the final test runs), none (no test). */
     final_state?: '' | 'pending' | 'started' | 'none';
     /** The result check of the final test (assessments route). */
