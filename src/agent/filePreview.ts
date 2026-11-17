@@ -14,12 +14,18 @@ export type FilePreviewKind = 'image' | 'pdf' | 'table' | 'text' | 'none';
 const KINDS: readonly string[] = ['image', 'pdf', 'table', 'text', 'none'];
 const IMAGE_EXT = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp']);
 const TEXT_EXT = new Set([
-    'txt', 'md', 'json', 'jsonl', 'log', 'yaml', 'yml', 'xml', 'py', 'ts', 'js', 'sh', 'ipynb', 'html', 'htm', 'svg',
+    'txt', 'md', 'markdown', 'json', 'jsonl', 'log', 'yaml', 'yml', 'xml', 'py', 'ts', 'js', 'sh', 'ipynb', 'html', 'htm', 'svg',
 ]);
 
 function extensionOf(name: string): string {
     const dot = name.lastIndexOf('.');
     return dot < 0 ? '' : name.slice(dot + 1).toLowerCase();
+}
+
+/** Is the file Markdown by its name (`md`, `markdown`)? The preview then offers a rendered view (issue #264). */
+export function isMarkdownName(name: string): boolean {
+    const ext = extensionOf(name);
+    return ext === 'md' || ext === 'markdown';
 }
 
 /** Preview kind of a file: the gateway's `preview`, else the extension as a fallback. */

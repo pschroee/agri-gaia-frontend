@@ -60,9 +60,27 @@ export default function SearchIndicator({ book, variant, chatId }: { book: Searc
                 aria-label={chip.aria}
                 onClick={() => setOpen(true)}
                 startIcon={<Mark kind={chip.kind} />}
-                sx={{ flex: 'none', textTransform: 'none', whiteSpace: 'nowrap', bgcolor: open ? 'action.selected' : undefined, minWidth: 0, px: 1 }}
+                sx={{
+                    // in the panel header the search text gives way (ellipsis) before anything overlaps (issue #261)
+                    flex: panel ? '0 1 auto' : 'none',
+                    textTransform: 'none',
+                    whiteSpace: 'nowrap',
+                    bgcolor: open ? 'action.selected' : undefined,
+                    minWidth: 0,
+                    px: 1,
+                }}
             >
-                {panel ? chip.short : chip.label}
+                {panel ? (
+                    <Box
+                        component="span"
+                        data-testid="agent-search-indicator-text"
+                        sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                    >
+                        {chip.short}
+                    </Box>
+                ) : (
+                    chip.label
+                )}
             </Button>
             <Popover
                 open={open}

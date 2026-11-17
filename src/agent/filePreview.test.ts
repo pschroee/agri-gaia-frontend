@@ -4,7 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { inlineUrl, previewOf } from './filePreview';
+import { inlineUrl, isMarkdownName, previewOf } from './filePreview';
 
 describe('previewOf', () => {
     it('trusts the gateway when it sends a kind', () => {
@@ -45,5 +45,23 @@ describe('inlineUrl', () => {
         const url = inlineUrl('c1', 'a b.png', 'output');
         expect(url).toContain('/artifacts/a%20b.png?kind=output');
         expect(url.endsWith('&inline=1')).toBe(true);
+    });
+});
+
+describe('isMarkdownName', () => {
+    it('recognises Markdown by the extension, in any case', () => {
+        expect(isMarkdownName('MODEL_CARD.md')).toBe(true);
+        expect(isMarkdownName('x.MARKDOWN')).toBe(true);
+        expect(isMarkdownName('notes.markdown')).toBe(true);
+    });
+
+    it('leaves other files alone', () => {
+        expect(isMarkdownName('x.txt')).toBe(false);
+        expect(isMarkdownName('md')).toBe(false);
+        expect(isMarkdownName('x.md.json')).toBe(false);
+    });
+
+    it('previews .markdown as text', () => {
+        expect(previewOf({ name: 'a.markdown' })).toBe('text');
     });
 });

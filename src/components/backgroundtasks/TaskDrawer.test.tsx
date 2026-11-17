@@ -21,7 +21,7 @@ vi.mock('./TasksTabs', () => ({
 }));
 vi.mock('./TaskDetailsView', () => ({ default: () => null }));
 
-import TaskDrawer from './TaskDrawer';
+import TaskDrawer, { drawerPaperHeight } from './TaskDrawer';
 
 beforeEach(() => {
     localStorage.clear();
@@ -84,5 +84,27 @@ describe('TaskDrawer failures (#228)', () => {
         expect(screen.getByText(/0 Tasks running$/)).toBeTruthy();
         expect(tabsProps.last?.firstOpenTab).toBe(1);
         expect(JSON.parse(localStorage.getItem('tasksFailedSeen') ?? '{}').ids).toEqual([1, 3]);
+    });
+});
+
+describe('TaskDrawer height (#262)', () => {
+    it('keeps the minimum for few tasks', () => {
+        expect(drawerPaperHeight(3)).toContain('500px');
+    });
+
+    it('grows with many tasks but is capped below the app bar', () => {
+        const h = drawerPaperHeight(40);
+        expect(h).toContain('2462px');
+        expect(h).toContain('calc(100% - 64px - 30px - 8px)');
+        expect(h.startsWith('min(')).toBe(true);
+    });
+
+    it('scrolls the content inside the drawer', () => {
+        tasksList = Array.from({ length: 40 }, (_, i) => t(i + 1, 'completed'));
+        render(<TaskDrawer />);
+        const content = screen.getByTestId('task-drawer-content');
+        const style = getComputedStyle(content);
+        expect(style.overflowY).toBe('auto');
+        expect(style.height).toBe('100%');
     });
 });

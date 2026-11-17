@@ -12,8 +12,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { agentApi } from '../api';
 import type { Plan } from '../plan';
+import { mockSearch } from '../searchMock';
 
-const state = vi.hoisted(() => ({ selected: 'c1' as string }));
+const state = vi.hoisted(() => ({
+    selected: 'c1' as string,
+    // the search book of c1 (issue #261): empty = no search chip in the header
+    searches: [] as unknown[],
+}));
 
 vi.mock('../AgentContext', () => ({
     useAgent: () => ({
@@ -24,7 +29,7 @@ vi.mock('../AgentContext', () => ({
         selectChat: () => undefined,
         chatsLoaded: true,
         chats: [
-            { id: 'c1', title: 'One' },
+            { id: 'c1', title: 'One', running: true, running_since: '2026-10-26T15:50:00.000Z' },
             { id: 'c2', title: 'Two' },
         ],
         compacting: {},
@@ -46,7 +51,7 @@ vi.mock('../AgentContext', () => ({
                 } as Plan,
             ],
         },
-        searchLists: {},
+        searchLists: state.searches.length ? { c1: { searches: state.searches, trials: [] } } : {},
         pendingApprovals: [],
     }),
     useAgentOptional: () => undefined,
@@ -56,7 +61,9 @@ vi.mock('./ChatSelector', () => ({ default: () => <div /> }));
 vi.mock('./ContextMeter', () => ({ ContextMeter: () => <div /> }));
 vi.mock('./TaskButton', () => ({ default: () => <div /> }));
 vi.mock('./search/SearchIndicator', () => ({ default: () => <div /> }));
-vi.mock('./RunStateChip', () => ({ default: () => <div /> }));
+vi.mock('./RunStateChip', () => ({
+    default: ({ dense }: { dense?: boolean }) => <div data-testid="run-state-chip" data-dense={String(!!dense)} />,
+}));
 vi.mock('./AgentDropZone', () => ({ default: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }));
 vi.mock('./SignInNotice', () => ({ default: () => <div /> }));
 
@@ -64,6 +71,7 @@ import AgentContextPanel from './AgentContextPanel';
 
 beforeEach(() => {
     state.selected = 'c1';
+    state.searches = [];
     vi.stubGlobal(
         'EventSource',
         class {
@@ -116,5 +124,24 @@ describe('the plan chip in the panel header', () => {
         );
         // the dialog leaves with its exit transition
         await waitFor(() => expect(screen.queryByTestId('agent-plan-dialog')).toBeNull());
+    });
+});
+
+describe('the run state in the panel header (issue #261)', () => {
+    it('shows the word and the timer without a search', () => {
+        draw();
+        expect(screen.getByTestId('run-state-chip').getAttribute('data-dense')).toBe('false');
+    });
+
+    it('shows only dot and timer while a search fills the header', () => {
+        state.searches = [mockSearch()];
+        draw();
+        expect(screen.getByTestId('run-state-chip').getAttribute('data-dense')).toBe('true');
+    });
+
+    it('clips the state box so that it never paints over the plan chip', () => {
+        draw();
+        const box = screen.getByTestId('agent-panel-state');
+        expect(getComputedStyle(box).overflow).toBe('hidden');
     });
 });
